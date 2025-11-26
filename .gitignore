@@ -49,6 +49,7 @@ yarn-error.log*
 web/public/*.js
 web/public/*.js.map
 !web/public/whirlpool.min.map.js
+web/public/*
 
 # Environment
 .env
