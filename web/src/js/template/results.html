@@ -1,0 +1,104 @@
+<style>
+/* Override Bootstrap table CSS variables for highlighted rows */
+.table tbody tr.highlighted-row {
+  --bs-table-bg: #ffeaa7 !important;
+  background-color: #ffeaa7 !important;
+}
+
+.table tbody tr.highlighted-row td {
+  background-color: #ffeaa7 !important;
+}
+
+.table .highlighted-column {
+  --bs-table-bg: #81ecec !important;
+  background-color: #81ecec !important;
+}
+
+.table tbody tr.highlighted-row .highlighted-column {
+  --bs-table-bg: #fdcb6e !important;
+  background-color: #fdcb6e !important;
+}
+
+tbody td {
+  cursor: pointer;
+}
+</style>
+
+{{#if error}}
+<div class="alert alert-danger">
+  {{error}}
+</div>
+{{/if}}
+
+<!-- controls -->
+<div class="mb-3">
+  <div class="row">
+    <div class="col-md-6">
+      <input type="text" class="form-control form-control-sm search-filter" placeholder="Search results... (3+ characters to filter)" value="{{searchTerm}}">
+    </div>
+    <div class="col-md-2">
+      <small class="text-muted filter-status"></small>
+    </div>
+    <div class="d-flex justify-content-end gap-3 col-md-4" style="float:right;">
+      <div data-component="delete_button"></div>
+      <div>
+        <button type="button" class="btn btn-sm btn-outline-secondary {{refresh_class}} refresh-results">
+          Refresh
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- {{#if run_logs}} -->
+<!-- table -->
+<div class="table-responsive">
+  <table class="table table-striped table-hover table-sm">
+    <thead class="table-dark">
+      <tr>
+        <th style="width: 50px;">
+          <input type="checkbox" class="form-check-input select-all" title="Select all">
+        </th>
+        {{#visibleColumns}}
+        <th class="sortable-header position-relative" data-column="{{name}}">
+          <div class="d-flex align-items-center justify-content-between">
+            <span class="column-name">{{displayName}}</span>
+            <div class="d-flex align-items-center">
+              <span class="sort-indicator">{{sortIndicator}}</span>
+              {{#unless isImportant}}
+              <button type="button" class="btn btn-sm btn-link text-light hide-column p-0 ms-1" title="Hide column">
+                ×
+              </button>
+              {{/unless}}
+            </div>
+          </div>
+        </th>
+        {{/visibleColumns}}
+      </tr>
+    </thead>
+    <tbody>
+      {{#run_logs}}
+      <tr>
+        <td>
+          <input type="checkbox" class="form-check-input row-select" data-bucket-name="{{bucket_name}}">
+        </td>
+        {{#../visibleColumns}}
+        <td data-column="{{name}}">
+          <small {{#if isImportant}}style="font-weight:bold;"{{/if}} class="result-cell bucket-cell">
+            {{#if @first}}
+            <a href="{{../__grafana_url}}" target="_blank" class="text-primary">{{lookup .. name}}</a>
+            {{else}}
+            {{lookup .. name}}
+            {{/if}}
+          </small>
+        </td>
+        {{/../visibleColumns}}
+      </tr>
+      {{/run_logs}}
+    </tbody>
+  </table>
+</div>
+
+<div data-component="hidden_columns"></div>
+
+<!-- {{/if}} -->

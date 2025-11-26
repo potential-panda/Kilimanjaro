@@ -1,0 +1,15 @@
+{{#if hasHiddenColumns}}
+<div class="mt-3 mb-3">
+  <h6>Hidden Columns:</h6>
+  <div class="d-flex flex-wrap gap-2">
+    {{#hiddenColumns}}
+    <div class="badge bg-secondary d-flex align-items-center">
+      <span class="column-name" data-original="{{.}}">{{.}}</span>
+      <button type="button" class="btn btn-sm btn-link text-light show-column p-0 ms-1" data-column="{{.}}" title="Show column">
+        +
+      </button>
+    </div>
+    {{/hiddenColumns}}
+  </div>
+</div>
+{{/if}}

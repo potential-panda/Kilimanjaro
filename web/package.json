@@ -1,0 +1,27 @@
+{
+  "name": "panda-cc",
+  "version": "1.0.0",
+  "description": "Kilimanjaro Web UI",
+  "scripts": {
+    "start": "webpack-dev-server --mode development --open --config webpack.dev.js",
+    "build": "webpack --mode production --config webpack.prod.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.16.0",
+    "@babel/preset-env": "^7.16.0",
+    "babel-loader": "^8.2.3",
+    "clean-webpack-plugin": "^4.0.0",
+    "css-loader": "^6.5.1",
+    "handlebars": "^4.7.7",
+    "handlebars-loader": "^1.7.1",
+    "html-webpack-plugin": "^5.5.0",
+    "jquery": "^3.6.0",
+    "style-loader": "^3.3.1",
+    "terser-webpack-plugin": "^5.2.5",
+    "uuidjs": "^4.2.9",
+    "webpack": "^5.64.0",
+    "webpack-cli": "^4.9.1",
+    "webpack-dev-server": "^4.5.0",
+    "webpack-merge": "^5.8.0"
+  }
+}

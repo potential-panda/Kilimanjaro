@@ -1,0 +1,5 @@
+potential-panda-core @ git+ssh://git@github.com/potential-panda/potential-panda-core.git@main
+Flask==3.1.0
+Flask-CORS==5.0.0
+httpx==0.28.1
+schedule==1.2.2

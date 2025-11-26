@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# Git
+.git/
+.gitignore
+
+# IDEs
+.vscode/
+.idea/
+
+# Documentation
+*.md
+!README.md
+
+# Node.js
+node_modules/
+web/src/
+web/webpack.*.js
+web/package*.json
+
+# Tests
+test/
+tests/
+
+# CI/CD
+.github/
+
+# Development
+.env
