@@ -129,13 +129,6 @@ W.component('results', {
       direction: 'desc',
     };
     this.searchTerm = '';
-
-    this.app.data.on('results', () => {
-      this.load();
-    });
-    this.app.data.on('hiddenColumns', () => {
-      this.load();
-    });
   },
 
   getData: function(cb) {
@@ -185,7 +178,7 @@ W.component('results', {
 
     // Manual refresh handler
     $container.find('.refresh-results').on('click', () => {
-      this.app.data.refresh('results');
+      this.load();
     });
 
     filterTable(this.searchTerm, $container);
