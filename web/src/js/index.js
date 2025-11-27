@@ -27,5 +27,5 @@ W.switch('pages', {
 
 app.data.register('jobs', client.fetchJobs);
 app.data.register('results', client.fetchResults);
-app.data.register('hiddenColumns', hiddenColumns.fetch.bind(hiddenColumns));
+app.data.register('hiddenColumns', hiddenColumns.fetch);
 app.start(document.body);

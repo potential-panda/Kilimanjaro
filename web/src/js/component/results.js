@@ -132,58 +132,54 @@ W.component('results', {
 
     // Listen for data updates from other components
     this.app.data.on('results', (data, source) => {
-      // Only reload if the event came from another component
-      if (source !== this) {
-        this.load();
-      }
+      this.load();
     }, this);
 
     this.app.data.on('hiddenColumns', (data, source) => {
-      // Only reload if the event came from another component
-      if (source !== this) {
-        this.load();
-      }
+      this.load();
     }, this);
+
+    this.app.data.fetch(['results', 'hiddenColumns']);
   },
 
   getData: function(cb) {
-    this.app.data.fetch(['results', 'hiddenColumns'], ({results, hiddenColumns}) => {
-      if (!results) {
-        cb({
-          results: [],
-          visibleColumns: [],
-        });
-        return;
-      }
-
-      var run_logs = results.results;
-
-      const allColumns = new Set();
-      run_logs.forEach(log => {
-        Object.keys(log).forEach(key => allColumns.add(key));
-      });
-      const visibleColumns = Array.from(allColumns).sort().filter(col =>
-        !hiddenColumns.includes(col) && !col.startsWith('__')
-      );
-      const columns = visibleColumns.map((col) => {
-        return {
-          name: col,
-          displayName: col.replace(/_/g, ' '),
-          isImportant: importantColumns.has(col),
-          sortIndicator: (col === this.sortOption.col) ? (this.sortOption.direction === 'asc' ? '↑' : '↓') : '',
-        };
-      });
-
-
-      if (run_logs.length > 0) {
-        run_logs = sortData(run_logs, this.sortOption.col, this.sortOption.direction);
-      }
-
+    const results = this.app.data.get('results');
+    if (!results) {
       cb({
-        run_logs: run_logs,
-        visibleColumns: columns,
-        searchTerm: this.searchTerm,
+        results: [],
+        visibleColumns: [],
       });
+      return;
+    }
+
+    var run_logs = results.results;
+    const allColumns = new Set();
+    run_logs.forEach(log => {
+      Object.keys(log).forEach(key => allColumns.add(key));
+    });
+
+    const hColumns = this.app.data.get('hiddenColumns');
+    const visibleColumns = Array.from(allColumns).sort().filter(col =>
+      !hColumns.includes(col) && !col.startsWith('__')
+    );
+    const columns = visibleColumns.map((col) => {
+      return {
+        name: col,
+        displayName: col.replace(/_/g, ' '),
+        isImportant: importantColumns.has(col),
+        sortIndicator: (col === this.sortOption.col) ? (this.sortOption.direction === 'asc' ? '↑' : '↓') : '',
+      };
+    });
+
+
+    if (run_logs.length > 0) {
+      run_logs = sortData(run_logs, this.sortOption.col, this.sortOption.direction);
+    }
+
+    cb({
+      run_logs: run_logs,
+      visibleColumns: columns,
+      searchTerm: this.searchTerm,
     });
   },
 
@@ -193,7 +189,7 @@ W.component('results', {
 
     // Manual refresh handler
     $container.find('.refresh-results').on('click', () => {
-      this.load();
+      this.app.data.fetch('results');
     });
 
     filterTable(this.searchTerm, $container);
@@ -237,7 +233,7 @@ W.component('results', {
       ev.stopPropagation(); // Prevent sort trigger
       const column = $(ev.target).closest('th').data('column');
       hiddenColumns.add(column);
-      this.load();
+      this.app.data.fetch('hiddenColumns');
     });
 
 

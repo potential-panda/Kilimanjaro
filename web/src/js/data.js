@@ -181,34 +181,35 @@ export class Client {
 }
 
 
-export class HiddenColumns {
-  get() {
+
+
+function _load() {
     const stored = localStorage.getItem('kilimanjaro_hidden_columns');
     return stored ? JSON.parse(stored) : [];
-  }
+}
 
-  _set(columns) {
+function _save(columns) {
     localStorage.setItem('kilimanjaro_hidden_columns', JSON.stringify(columns));
+}
+
+export class HiddenColumns {
+  fetch(cb) {
+    cb(_load());
   }
 
   add(column) {
-    const columns = this.get();
+    const columns = _load();
     if (columns.includes(column)) {
       return;
     }
     columns.push(column);
-    this._set(columns);
+    _save(columns);
   }
 
   remove(column) {
-    var columns = this.get();
+    var columns = _load();
     columns = columns.filter(col => col !== column);
-    this._set(columns);
-  }
-
-  fetch(cb) {
-    const data = this.get();
-    cb(data);
+    _save(columns);
   }
 }
 

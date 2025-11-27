@@ -4,8 +4,10 @@ require('dotenv').config();
 const webpackTerser = require('terser-webpack-plugin');
 const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 const distDir = './public';
+const whirlpoolDist = path.resolve(__dirname, 'src/static/whirlpool.min.js');
 
 module.exports = {
   entry: [
@@ -25,6 +27,14 @@ module.exports = {
     }),
     new webpack.DefinePlugin({
       'process.env.API_URL': JSON.stringify(process.env.API_URL || 'http://localhost:8766'),
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: whirlpoolDist,
+          to: path.resolve(__dirname, distDir, 'whirlpool.min.js'),
+        },
+      ],
     }),
   ],
   optimization: {
