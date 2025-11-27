@@ -14,7 +14,6 @@ from typing import Any, Dict, Optional
 
 import httpx
 import schedule
-
 from potpanda.boot import sys_env
 from potpanda.boot.env import Env
 from potpanda.boot.env_name import EnvName
@@ -31,7 +30,7 @@ JOB_ACQUISITION_INTERVAL = 12  # seconds
 PROGRESS_CHECK_INTERVAL = 600  # seconds
 API_BASE_URL = "http://localhost:8766"
 BACKTEST_ENV = EnvName.QIN_TENGFEI
-PANDA_SRC_PATH = Path(__file__).parent.parent.parent.parent.resolve()
+BACKTEST_WORK_DIR = "/panda/potential-panda/potential-panda-k2/src"
 
 
 def _resolve_backtest_env(job_data: Dict[str, Any]) -> EnvName:
@@ -48,7 +47,7 @@ def create_cmd(job_data, env_name: EnvName):
     optimize = job_data.get("optimize", False)
     retest = job_data.get("retest", False)
 
-    cmd = ["python", "a.py", "backtest", "--env", env_name.name, "--from-dt", from_dt]
+    cmd = ["python", "-m", "k2.a", "backtest", "--env", env_name.name, "--from-dt", from_dt]
     if to_dt:
         cmd.extend(["--to-dt", to_dt])
     if variant:
@@ -66,6 +65,7 @@ class Config:
     api_base_url: str = API_BASE_URL
     job_acquisition_interval: int = JOB_ACQUISITION_INTERVAL
     progress_check_interval: int = PROGRESS_CHECK_INTERVAL
+    backtest_work_dir: str = BACKTEST_WORK_DIR
 
 
 class KilimanjaroAgent:
@@ -97,7 +97,7 @@ class KilimanjaroAgent:
                 "config": f"bot.{strategy_name}.config.Config",
                 "param_grid": "builtins.dict",
                 "params": "builtins.dict",
-                "strategy": "boot.profile.StrategyProfile",
+                "strategy": "potpanda.boot.profile.StrategyProfile",
                 "features": "builtins.dict",
             },
             "name": env_name.name,
@@ -171,7 +171,7 @@ class KilimanjaroAgent:
             self.backtest_process = subprocess.Popen(
                 cmd,
                 env=shell_env,
-                cwd=PANDA_SRC_PATH,
+                cwd=self.config.backtest_work_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
