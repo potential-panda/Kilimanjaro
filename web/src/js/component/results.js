@@ -129,6 +129,21 @@ W.component('results', {
       direction: 'desc',
     };
     this.searchTerm = '';
+
+    // Listen for data updates from other components
+    this.app.data.on('results', (data, source) => {
+      // Only reload if the event came from another component
+      if (source !== this) {
+        this.load();
+      }
+    }, this);
+
+    this.app.data.on('hiddenColumns', (data, source) => {
+      // Only reload if the event came from another component
+      if (source !== this) {
+        this.load();
+      }
+    }, this);
   },
 
   getData: function(cb) {

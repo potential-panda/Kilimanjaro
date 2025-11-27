@@ -28,7 +28,8 @@ W.component('delete_button', {
       if (this.selectedResults.length > 0) {
         client.deleteResults(this.selectedResults, () => {
           this.selectedResults = [];
-          this.app.data.refresh('results');
+          // Emit event to notify results component to reload
+          this.app.data.emit('results', null, this);
         });
       }
     });

@@ -22,7 +22,8 @@ W.component('hidden_columns', {
       if (column) {
         this.accessor.remove(column);
         this.load();
-        this.app.data.refresh('hiddenColumns');
+        // Emit event to notify results component to reload
+        this.app.data.emit('hiddenColumns', this.accessor.get(), this);
       }
     });
     cb();
