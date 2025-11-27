@@ -1,8 +1,10 @@
 // API configuration
+// Uses environment variable API_URL set at build time, defaults to localhost
+const API_BASE_URL = process.env.API_URL || 'http://localhost:8766';
+
 export const API_CONFIG = {
-  // Default API root URL - change to "http://localhost:8766/" for development
-  ROOT: "http://localhost:8766/",
-  // ROOT: "/",
+  // API root URL - configured via process.env.API_URL at build time
+  ROOT: API_BASE_URL.endsWith('/') ? API_BASE_URL : `${API_BASE_URL}/`,
   a: "1"
 };
 
