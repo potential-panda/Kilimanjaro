@@ -1,5 +1,6 @@
 // API client for Kilimanjaro backend
-const API_BASE_URL = 'http://localhost:8766';
+// API base URL - defaults to localhost for development
+const API_BASE_URL = process.env.API_URL || 'http://localhost:8766';
 
 export const api = {
   async fetchJobs(cb) {

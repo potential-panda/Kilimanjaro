@@ -1,5 +1,6 @@
 const path = require('path');
 const webpack = require('webpack');
+require('dotenv').config();
 const webpackTerser = require('terser-webpack-plugin');
 const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
@@ -21,6 +22,9 @@ module.exports = {
     new webpack.ProvidePlugin({
       $: 'jquery',
       jQuery: 'jquery'
+    }),
+    new webpack.DefinePlugin({
+      'process.env.API_URL': JSON.stringify(process.env.API_URL || 'http://localhost:8766'),
     }),
   ],
   optimization: {

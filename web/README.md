@@ -28,11 +28,28 @@ This is the web interface for the Kilimanjaro remote backtesting system.
 
 ## Usage
 
-1. **Setup**: Copy files to a web server directory with whirlpool.min.js
-2. **API**: Ensure Kilimanjaro API is running on localhost:8766
-3. **Navigate**:
-   - `/#list` or `/` - View jobs
+### Development Setup
+
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Configure API URL** (optional):
+   - Copy `.env.example` to `.env`
+   - Set `API_URL` if your API is not on localhost:8766
+   - Example: `API_URL=https://api.yourdomain.com`
+
+3. **Build the application**:
+   ```bash
+   npm run build    # Production build
+   npm start        # Development server with hot reload
+   ```
+
+4. **Navigate**:
+   - `/#jobs` - View active jobs (default page)
    - `/#new` - Create new job
+   - `/#results` - View completed backtest results
 
 ## Dependencies
 
@@ -42,9 +59,21 @@ This is the web interface for the Kilimanjaro remote backtesting system.
 
 ## API Integration
 
+The web UI connects to the Kilimanjaro API backend. By default, it uses `http://localhost:8766`, but this can be overridden using the `API_URL` environment variable.
+
+### Environment Variables
+
+- `API_URL` - API base URL (default: `http://localhost:8766`)
+  - Set this in `.env` file before building
+  - Example: `API_URL=https://backtest-api.example.com`
+
+### API Endpoints
+
 - `POST /job/new` - Create job
 - `GET /job/list` - List jobs
 - `GET /job/{id}` - Get job details
 - `DELETE /job/delete/{id}` - Delete job
+- `GET /result/list` - List completed results
+- `DELETE /result/{bucket_name}` - Delete result
 
 All components handle API errors gracefully with user-friendly messages.
