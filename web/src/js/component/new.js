@@ -56,133 +56,63 @@ function getFormData($container) {
   return data;
 }
 
-W.component('new', {
-  init: function() {
-    // Check if there's cloned job data in sessionStorage
-    const clonedJobDataStr = sessionStorage.getItem('cloneJobData');
-    if (clonedJobDataStr) {
-      try {
-        // Load cloned job data
-        const clonedJobData = JSON.parse(clonedJobDataStr);
-        sessionStorage.removeItem('cloneJobData'); // Clear after reading
-        this.initializeWithClonedData(clonedJobData);
-        return;
-      } catch (error) {
-        console.error('Error loading cloned job data:', error);
-        sessionStorage.removeItem('cloneJobData'); // Clear bad data
-        // Fall through to default initialization
-      }
-    }
+function initializeWithDefaults(component) {
+  // Get yesterday's date in YYYY-MM-DD format
+  const today = new Date();
+  const fromDay = new Date();
+  const toDay = new Date();
+  fromDay.setDate(today.getDate() - 8);
+  toDay.setDate(today.getDate() - 1);
+  const fromDt = fromDay.toISOString().split('T')[0];
+  const toDt = toDay.toISOString().split('T')[0];
 
-    // Normal initialization with defaults
-    this.initializeWithDefaults();
-  },
+  const strategies = getAvailableStrategies();
+  const defaultStrategy = strategies[0];
+  const strategyTemplate = getStrategyTemplate(defaultStrategy);
 
-  initializeWithDefaults: function() {
-    // Get yesterday's date in YYYY-MM-DD format
-    const today = new Date();
-    const fromDay = new Date();
-    const toDay = new Date();
-    fromDay.setDate(today.getDate() - 8);
-    toDay.setDate(today.getDate() - 1);
-    const fromDt = fromDay.toISOString().split('T')[0];
-    const toDt = toDay.toISOString().split('T')[0];
+  component.data = {
+    strategy_name: defaultStrategy,
+    variant: strategyTemplate.variant,
+    from_dt: fromDt,
+    to_dt: toDt,
+    optimize: true,
+    retest: false,
+    config: strategyTemplate.config,
+    param_grid: strategyTemplate.param_grid,
+    available_strategies: strategies
+  };
 
-    const strategies = getAvailableStrategies();
-    const defaultStrategy = strategies[0];
-    const strategyTemplate = getStrategyTemplate(defaultStrategy);
+  // Initialize jobData to be synced with the form
+  const config = strategyTemplate.config.reduce((acc, configItem) => {
+    acc[configItem.name] = configItem.default_value;
+    return acc;
+  }, {});
+  config.params = {};
 
-    this.data = {
-      strategy_name: defaultStrategy,
-      variant: strategyTemplate.variant,
-      from_dt: fromDt,
-      to_dt: toDt,
-      optimize: true,
-      retest: false,
-      config: strategyTemplate.config,
-      param_grid: strategyTemplate.param_grid,
-      available_strategies: strategies
-    };
-
-    // Initialize jobData to be synced with the form
-    const config = strategyTemplate.config.reduce((acc, configItem) => {
-      acc[configItem.name] = configItem.default_value;
-      return acc;
-    }, {});
-    config.params = {};
-
-    this.jobData = {
-      strategy_name: defaultStrategy,
-      variant: strategyTemplate.variant,
-      from_dt: fromDt,
-      to_dt: toDt,
-      optimize: true,
-      retest: false,
-      config: config,
-      param_grid: strategyTemplate.param_grid.map(param => ({
-        name: param.name,
-        default_value: param.default_value,
-        values: param.values.split(',').map(v => v.trim()),
-        factor: parseInt(param.factor) || 1000
-      }))
-    };
-  },
-
-  initializeWithClonedData: function(jobData) {
-    console.log('Initializing with cloned job data:', jobData);
-    const strategies = getAvailableStrategies();
-
-    // Convert config object to array format for template
-    const configArray = [];
-    if (jobData.config && typeof jobData.config === 'object') {
-      for (const [key, value] of Object.entries(jobData.config)) {
-        if (key !== 'params') {
-          configArray.push({
-            name: key,
-            default_value: value,
-            is_select: false
-          });
-        }
-      }
-    }
-
-    // Convert param_grid to template format
-    const paramGridArray = (jobData.param_grid || []).map(param => ({
+  component.jobData = {
+    strategy_name: defaultStrategy,
+    variant: strategyTemplate.variant,
+    from_dt: fromDt,
+    to_dt: toDt,
+    optimize: true,
+    retest: false,
+    config: config,
+    param_grid: strategyTemplate.param_grid.map(param => ({
       name: param.name,
       default_value: param.default_value,
-      values: Array.isArray(param.values) ? param.values.join(', ') : param.values,
-      factor: param.factor || 1000
-    }));
+      values: param.values.split(',').map(v => v.trim()),
+      factor: parseInt(param.factor) || 1000
+    }))
+  };
+}
 
-    this.data = {
-      strategy_name: jobData.strategy_name,
-      variant: jobData.variant,
-      from_dt: jobData.from_dt,
-      to_dt: jobData.to_dt || '',
-      optimize: jobData.optimize !== false,
-      retest: jobData.retest || false,
-      config: configArray,
-      param_grid: paramGridArray,
-      available_strategies: strategies
-    };
+function initializeWithClonedData(component, jobData) {
+  console.log('Initializing with cloned job data:', jobData);
+  const strategies = getAvailableStrategies();
 
-    // Set jobData
-    this.jobData = JSON.parse(JSON.stringify(jobData));
-
-    console.log('Cloned data initialized:', this.data);
-  },
-
-  loadClonedJob: function(jobData) {
-    // Update data with cloned job settings
-    this.data.strategy_name = jobData.strategy_name;
-    this.data.variant = jobData.variant;
-    this.data.from_dt = jobData.from_dt;
-    this.data.to_dt = jobData.to_dt || '';
-    this.data.optimize = jobData.optimize;
-    this.data.retest = jobData.retest;
-
-    // Convert config object to array format for template
-    const configArray = [];
+  // Convert config object to array format for template
+  const configArray = [];
+  if (jobData.config && typeof jobData.config === 'object') {
     for (const [key, value] of Object.entries(jobData.config)) {
       if (key !== 'params') {
         configArray.push({
@@ -192,21 +122,54 @@ W.component('new', {
         });
       }
     }
-    this.data.config = configArray;
+  }
 
-    // Convert param_grid to template format
-    this.data.param_grid = jobData.param_grid.map(param => ({
-      name: param.name,
-      default_value: param.default_value,
-      values: Array.isArray(param.values) ? param.values.join(', ') : param.values,
-      factor: param.factor
-    }));
+  // Convert param_grid to template format
+  const paramGridArray = (jobData.param_grid || []).map(param => ({
+    name: param.name,
+    default_value: param.default_value,
+    values: Array.isArray(param.values) ? param.values.join(', ') : param.values,
+    factor: param.factor || 1000
+  }));
 
-    // Update jobData
-    this.jobData = JSON.parse(JSON.stringify(jobData));
+  component.data = {
+    strategy_name: jobData.strategy_name,
+    variant: jobData.variant,
+    from_dt: jobData.from_dt,
+    to_dt: jobData.to_dt || '',
+    optimize: jobData.optimize !== false,
+    retest: jobData.retest || false,
+    config: configArray,
+    param_grid: paramGridArray,
+    available_strategies: strategies
+  };
 
-    // Reload the component with cloned data
-    this.load();
+  // Set jobData
+  component.jobData = JSON.parse(JSON.stringify(jobData));
+
+  console.log('Cloned data initialized:', component.data);
+}
+
+W.component('new', {
+  init: function() {
+    // Check if there's cloned job data in sessionStorage
+    const clonedJobDataStr = sessionStorage.getItem('cloneJobData');
+    if (clonedJobDataStr) {
+      try {
+        // Load cloned job data
+        const clonedJobData = JSON.parse(clonedJobDataStr);
+        sessionStorage.removeItem('cloneJobData'); // Clear after reading
+        initializeWithClonedData(this, clonedJobData);
+        return;
+      } catch (error) {
+        console.error('Error loading cloned job data:', error);
+        sessionStorage.removeItem('cloneJobData'); // Clear bad data
+        // Fall through to default initialization
+      }
+    }
+
+    // Normal initialization with defaults
+    initializeWithDefaults(this);
   },
 
   getData: function(cb) {
