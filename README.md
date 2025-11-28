@@ -24,8 +24,8 @@ Running backtests on a development server has several challenges:
 
 ## Architecture
 
-- **API Service** (`src/kilimanjaro/api/`): Flask-based REST API for job management
-- **Agent** (`src/kilimanjaro/agent/`): Background service that polls for jobs and executes backtests
+- **API Service** (`kilimanjaro/api.py`): Flask-based REST API for job management
+- **Agent** (`kilimanjaro/agent.py`): Background service that polls for jobs and executes backtests
 - **Web UI** (`web/`): JavaScript frontend built with Whirlpool framework ([see web/README.md](web/README.md))
 
 For detailed feature specification, see [spec.md](spec.md).
@@ -40,129 +40,48 @@ For detailed feature specification, see [spec.md](spec.md).
 
 ## Installation & Development Workflow
 
-This project depends on the [potential-panda-core](https://github.com/potential-panda/potential-panda-core) library via git+ssh. There are two modes of operation:
+This project depends on the qate core library via git+ssh (declared in `pyproject.toml`). Two common setups:
 
-### Mode 1: Production / CI Mode (Default)
+### Local development (editable installs)
 
-This mode is used for production deployments, CI pipelines, and when you only need to work on the app without modifying the core library.
-
-**Installation:**
+Use when you develop Kilimanjaro and core side-by-side.
 
 ```bash
-# 1. Clone the repository
-git clone git@github.com:potential-panda/potential-panda-kilimanjaro.git
-cd potential-panda-kilimanjaro
-
-# 2. Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# 3. Install dependencies (installs core library from GitHub)
-pip install -r requirements.txt
-```
-
-The core library (`potpanda`) is automatically installed from GitHub using the version specified in `requirements.txt`:
-```
-potential-panda-core @ git+ssh://git@github.com/potential-panda/potential-panda-core.git@main
-```
-
-**Requirements:**
-- SSH access to the core repository
-- SSH keys configured for GitHub (`~/.ssh/id_rsa` or `~/.ssh/id_ed25519`)
-- Test SSH access: `ssh -T git@github.com`
-
-**Changing Core Version:**
-
-To use a different branch, tag, or commit, edit `requirements.txt`:
-```
-# Use develop branch
-potential-panda-core @ git+ssh://git@github.com/potential-panda/potential-panda-core.git@develop
-
-# Use specific tag
-potential-panda-core @ git+ssh://git@github.com/potential-panda/potential-panda-core.git@v0.1.7
-
-# Use specific commit
-potential-panda-core @ git+ssh://git@github.com/potential-panda/potential-panda-core.git@abc1234
-```
-
-Then reinstall:
-```bash
-pip install -r requirements.txt --force-reinstall
-```
-
----
-
-### Mode 2: Local Development Mode (Editable Install)
-
-Use this mode when you need to develop both the app and the core library simultaneously. Changes to either repository take effect immediately without commits or reinstalls.
-
-**Setup:**
-
-Both repositories should be in the same parent directory:
-```
-workspace/
-├── potential-panda-core/        # Core library
-└── potential-panda-kilimanjaro/ # This application
-```
-
-**Step-by-Step Instructions:**
-
-```bash
-# 1. Clone both repositories side-by-side
-cd ~/workspace  # or your preferred workspace directory
+cd ~/workspace
 git clone git@github.com:potential-panda/potential-panda-core.git
 git clone git@github.com:potential-panda/potential-panda-kilimanjaro.git
 
-# 2. Set up the application
 cd potential-panda-kilimanjaro
-python -m venv .venv
-source .venv/bin/activate
-
-# 3. Install all dependencies (including core from GitHub)
-pip install -r requirements.txt
-
-# 4. Override with local editable install
-pip install -e ../potential-panda-core
+# activate your env (e.g., pyenv local panda-313 or python -m venv .venv && source .venv/bin/activate)
+pip install -e ../potential-panda-core   # qate core, editable
+pip install -e . --no-deps               # kilimanjaro app, editable
 ```
 
-**How It Works:**
-
-- Step 3 installs all dependencies, including `potpanda` from GitHub
-- Step 4 **replaces** the GitHub version with a local editable install
-- Editable install creates a `.egg-link` file in `site-packages` pointing to your local `potential-panda-core/src` directory
-- Any changes to `potential-panda-core/src/potpanda/` take effect immediately—no reinstall needed
-
-**Development Workflow:**
-
+Run from the repo root so imports resolve:
 ```bash
-# Edit core library
-vim ../potential-panda-core/src/potpanda/boot/env.py
-# Changes are immediately available in the app
-
-# Edit application
-vim src/kilimanjaro/api/api.py
-# Changes take effect immediately
-
-# Run the API service
-cd src
-python -m kilimanjaro.api.api
-# Uses your local core library changes
+python -m kilimanjaro.api    # start API
+python -m kilimanjaro.agent  # start agent
 ```
 
-**Verify Editable Install:**
+### Production / CI
 
+Install from the git-pinned dependency:
 ```bash
-pip show potential-panda-core
-# Look for:
-#   Location: /path/to/workspace/potential-panda-core/src
-#   Editable project location: /path/to/workspace/potential-panda-core
+pip install .
 ```
+
+To pin a specific core ref, edit the dependency in `pyproject.toml` (branch/tag/commit) and reinstall.
+
+### Notes
+
+- Keep `kilimanjaro/` as the package root; prefer running with `python -m kilimanjaro.api` or `python -m kilimanjaro.agent`.
+- Verify editable installs with `pip show potential-panda-core` (Location should point to your local repo).
 
 **Important Notes:**
 
 - ⚠️ **Do NOT commit** the editable install state—it's local only
-- ⚠️ **Do NOT modify** `requirements.txt` while in development mode
-- ✅ CI and production always use the git+ssh dependency from `requirements.txt`
+- ⚠️ **Do NOT modify** `pyproject.toml` for ad-hoc local changes; keep dependency pins intentional
+- ✅ CI and production use the git+ssh dependency from `pyproject.toml`
 - ✅ The editable install only affects your local environment
 
 **Publishing Core Changes:**
@@ -182,9 +101,8 @@ git push origin v0.1.7
 
 # 3. Update app dependency (if using tags)
 cd ../potential-panda-kilimanjaro
-# Edit requirements.txt to reference the new tag:
-# potential-panda-core @ git+ssh://git@github.com/potential-panda/potential-panda-core.git@v0.1.7
-git add requirements.txt
+# Edit pyproject.toml dependency to reference the new tag/commit
+git add pyproject.toml
 git commit -m "Update core dependency to v0.1.7"
 git push
 ```
@@ -195,7 +113,7 @@ To remove the editable install and use the GitHub version:
 
 ```bash
 pip uninstall potential-panda-core
-pip install -r requirements.txt
+pip install .
 ```
 
 ---
@@ -204,15 +122,15 @@ pip install -r requirements.txt
 
 | Mode | When to Use | Installation |
 |------|-------------|--------------|
-| **Production/CI** | Production, CI, app-only development | `pip install -r requirements.txt` |
-| **Local Dev** | Developing both app and core | `pip install -r requirements.txt && pip install -e ../potential-panda-core` |
+| **Production/CI** | Production, CI, app-only development | `pip install .` |
+| **Local Dev** | Developing both app and core | `pip install -e ../potential-panda-core && pip install -e . --no-deps` |
 
 | Task | Command |
 |------|---------|
 | Verify editable install | `pip show potential-panda-core \| grep Editable` |
-| Switch to production mode | `pip uninstall potential-panda-core && pip install -r requirements.txt` |
-| Update core from GitHub | `pip install -r requirements.txt --force-reinstall` |
-| Check import source | `python -c "import potpanda; print(potpanda.__file__)"` |
+| Switch to production mode | `pip uninstall potential-panda-core && pip install .` |
+| Update core from GitHub | `pip install . --force-reinstall --no-cache-dir` |
+| Check import source | `python -c "import qate; print(qate.__file__)"` |
 
 ---
 
@@ -223,11 +141,10 @@ The application requires:
 **Environment Directory** (`~/env/KILIMANJARO_API/` and `~/env/KILIMANJARO_AGENT/`):
 ```bash
 # Create API environment
-cd src
-python -m kilimanjaro.api.api --setup
+python -m kilimanjaro.api --setup
 
 # Create Agent environment
-python -m kilimanjaro.agent.agent --setup
+python -m kilimanjaro.agent --setup
 ```
 
 This creates the necessary directory structure for configuration and data storage.
@@ -260,18 +177,13 @@ The API will be available at `http://localhost:8766`
 **API Service:**
 ```bash
 # Run directly with Python module
-cd src
-python -m kilimanjaro.api.api
-
-# Or use the provided script (if available)
-./run_api.sh
+python -m kilimanjaro.api
 ```
 
 **Agent Service:**
 ```bash
 # Run the agent
-cd src
-python -m kilimanjaro.agent.agent
+python -m kilimanjaro.agent
 ```
 
 **Web UI Development:**
@@ -325,21 +237,16 @@ npm run build
 
 ```
 potential-panda-kilimanjaro/
-├── src/
-│   └── kilimanjaro/
-│       ├── api/                    # Flask API backend
-│       │   ├── api.py             # Main API server
-│       │   └── data_access.py     # File-based job storage
-│       ├── agent/                 # Background agent
-│       │   └── agent.py           # Job polling and execution
-│       ├── spec.md                # Feature specification
-│       └── web.md                 # Web UI specification
+├── kilimanjaro/
+│   ├── api.py             # Flask API backend
+│   ├── data_access.py     # File-based job storage
+│   └── agent.py           # Background agent
 ├── web/                           # JavaScript frontend (separate from Python)
 │   ├── src/
 │   ├── public/
 │   ├── package.json
 │   └── webpack.*.js
-├── requirements.txt               # Python dependencies
+├── pyproject.toml                 # Python package/dep config
 ├── Dockerfile                     # Docker image definition
 ├── docker-compose.yml            # Docker orchestration
 └── README.md                     # This file
@@ -349,9 +256,9 @@ potential-panda-kilimanjaro/
 
 This application depends on [potential-panda-core](https://github.com/potential-panda/potential-panda-core), which provides:
 
-- `potpanda.boot.env` - Environment management
-- `potpanda.boot.profile` - Strategy profile configuration
-- `potpanda.boot.run_log` - Run log reading and processing
+- `qate.boot.env` - Environment management
+- `qate.boot.profile` - Strategy profile configuration
+- `qate.boot.run_log` - Run log reading and processing
 
 **Development Modes:**
 
@@ -359,22 +266,12 @@ See the [Installation & Development Workflow](#installation--development-workflo
 - **Production/CI Mode**: Using the core library from GitHub (default)
 - **Local Development Mode**: Using an editable local install for simultaneous app and core development
 
-**Quick setup for local development:**
-```bash
-# Install from GitHub (production mode)
-pip install -r requirements.txt
-
-# OR override with local editable install (development mode)
-pip install -r requirements.txt
-pip install -e ../potential-panda-core
-```
-
 ### Making Changes
 
 **App-Only Changes:**
 1. Create a feature branch
-2. Make your changes to `src/kilimanjaro/`
-3. Test locally: `cd src && python -m kilimanjaro.api.api`
+2. Make your changes to `kilimanjaro/`
+3. Test locally: `python -m kilimanjaro.api`
 4. Submit a pull request
 
 **App + Core Changes:**
@@ -382,19 +279,17 @@ pip install -e ../potential-panda-core
 2. Make changes to both repositories
 3. Test with editable install: `pip install -e ../potential-panda-core`
 4. Commit and push core changes first
-5. Update `requirements.txt` if needed
+5. Update `pyproject.toml` if you need to pin a new core ref
 6. Commit and push app changes
 
 ### Testing
 
 ```bash
 # Run API service
-cd src
-python -m kilimanjaro.api.api
+python -m kilimanjaro.api
 
 # In another terminal, run agent
-cd src
-python -m kilimanjaro.agent.agent
+python -m kilimanjaro.agent
 
 # In another terminal, test endpoints
 curl http://localhost:8766/health
@@ -433,9 +328,8 @@ curl -X POST http://localhost:8766/job/new -H "Content-Type: application/json" -
 
 4. **Set up agent on development server**:
    ```bash
-   cd src
-   python -m kilimanjaro.agent.agent --setup
-   python -m kilimanjaro.agent.agent
+   python -m kilimanjaro.agent --setup
+   python -m kilimanjaro.agent
    ```
 
 ### Environment Variables

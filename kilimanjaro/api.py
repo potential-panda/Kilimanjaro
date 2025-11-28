@@ -5,16 +5,16 @@ from pathlib import Path
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from potpanda.boot import sys_env
-from potpanda.boot.env import Env
-from potpanda.boot.env_name import EnvName
+from qate.env import sys_env
+from qate.env.env import Env
+from qate.env.env_name import EnvName
 
-from .data_access import JobDataAccess
+from kilimanjaro.data_access import JobDataAccess
 
 # Configuration
 PORT = 8766
 JOB_DIR = Path(sys_env.ENV_DIR) / EnvName.KILIMANJARO_API.name / "jobs"
-WWW_DIR = Path(__file__).resolve().parent / ".." / ".." / ".." / "web" / "public"
+WWW_DIR = Path(__file__).resolve().parent.parent / "web" / "public"
 
 
 @dataclass

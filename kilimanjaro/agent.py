@@ -9,18 +9,16 @@ import threading
 import time
 from dataclasses import dataclass
 from logging import getLogger
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
 import schedule
-from potpanda.boot import sys_env
-from potpanda.boot.env import Env
-from potpanda.boot.env_name import EnvName
-from potpanda.boot.profile import StrategyProfile
-from potpanda.boot.run_log import RunLogger
-
-sys.path.append(str(Path(__file__).parent.parent / "api"))
+from qate.boot import sys_env
+from qate.boot.env import Env
+from qate.boot.env_name import EnvName
+from qate.boot.profile import StrategyProfile
+from qate.boot.run_log import RunLogger
+from kilimanjaro.data_access import JobDataAccess
 
 LOG = getLogger(__name__)
 ENV_NAME = EnvName.KILIMANJARO_AGENT
@@ -97,7 +95,7 @@ class KilimanjaroAgent:
                 "config": f"bot.{strategy_name}.config.Config",
                 "param_grid": "builtins.dict",
                 "params": "builtins.dict",
-                "strategy": "potpanda.boot.profile.StrategyProfile",
+                "strategy": "qate.boot.profile.StrategyProfile",
                 "features": "builtins.dict",
             },
             "name": env_name.name,
