@@ -249,7 +249,20 @@ W.component('new', {
         contentType: 'application/json',
         data: JSON.stringify(this.jobData),
         success: function(response) {
-          window.location.hash = '#jobs';
+          // Show success message
+          const $alert = $container.find('.success-alert');
+          const $message = $container.find('.success-message');
+
+          $message.text('Job created successfully!');
+          $alert.removeClass('d-none');
+
+          // Scroll to top to show the alert
+          $container[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+          // Auto-dismiss after 3 seconds
+          setTimeout(() => {
+            $alert.addClass('d-none');
+          }, 3000);
         },
         error: function(xhr) {
           alert('Error creating job: ' + (xhr.responseJSON?.error || 'Unknown error'));
