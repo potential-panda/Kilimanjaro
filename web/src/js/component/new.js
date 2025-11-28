@@ -61,11 +61,17 @@ W.component('new', {
     // Check if there's cloned job data in sessionStorage
     const clonedJobDataStr = sessionStorage.getItem('cloneJobData');
     if (clonedJobDataStr) {
-      // Load cloned job data
-      const clonedJobData = JSON.parse(clonedJobDataStr);
-      sessionStorage.removeItem('cloneJobData'); // Clear after reading
-      this.initializeWithClonedData(clonedJobData);
-      return;
+      try {
+        // Load cloned job data
+        const clonedJobData = JSON.parse(clonedJobDataStr);
+        sessionStorage.removeItem('cloneJobData'); // Clear after reading
+        this.initializeWithClonedData(clonedJobData);
+        return;
+      } catch (error) {
+        console.error('Error loading cloned job data:', error);
+        sessionStorage.removeItem('cloneJobData'); // Clear bad data
+        // Fall through to default initialization
+      }
     }
 
     // Normal initialization with defaults
@@ -123,17 +129,20 @@ W.component('new', {
   },
 
   initializeWithClonedData: function(jobData) {
+    console.log('Initializing with cloned job data:', jobData);
     const strategies = getAvailableStrategies();
 
     // Convert config object to array format for template
     const configArray = [];
-    for (const [key, value] of Object.entries(jobData.config || {})) {
-      if (key !== 'params') {
-        configArray.push({
-          name: key,
-          default_value: value,
-          is_select: false
-        });
+    if (jobData.config && typeof jobData.config === 'object') {
+      for (const [key, value] of Object.entries(jobData.config)) {
+        if (key !== 'params') {
+          configArray.push({
+            name: key,
+            default_value: value,
+            is_select: false
+          });
+        }
       }
     }
 
@@ -142,7 +151,7 @@ W.component('new', {
       name: param.name,
       default_value: param.default_value,
       values: Array.isArray(param.values) ? param.values.join(', ') : param.values,
-      factor: param.factor
+      factor: param.factor || 1000
     }));
 
     this.data = {
@@ -150,8 +159,8 @@ W.component('new', {
       variant: jobData.variant,
       from_dt: jobData.from_dt,
       to_dt: jobData.to_dt || '',
-      optimize: jobData.optimize,
-      retest: jobData.retest,
+      optimize: jobData.optimize !== false,
+      retest: jobData.retest || false,
       config: configArray,
       param_grid: paramGridArray,
       available_strategies: strategies
@@ -159,6 +168,8 @@ W.component('new', {
 
     // Set jobData
     this.jobData = JSON.parse(JSON.stringify(jobData));
+
+    console.log('Cloned data initialized:', this.data);
   },
 
   loadClonedJob: function(jobData) {
