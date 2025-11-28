@@ -4,21 +4,19 @@ import os
 import subprocess
 
 # Import JobStatus from the API module
-import sys
 import threading
 import time
 from dataclasses import dataclass
 from logging import getLogger
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
 import schedule
-from qate.boot import sys_env
-from qate.boot.env import Env
-from qate.boot.env_name import EnvName
-from qate.boot.profile import StrategyProfile
+from qate.boot.config import TradingProfile
 from qate.boot.run_log import RunLogger
-from kilimanjaro.data_access import JobDataAccess
+from qate.env import sys_env
+from qate.env.env import Env, EnvName
 
 LOG = getLogger(__name__)
 ENV_NAME = EnvName.KILIMANJARO_AGENT
@@ -28,7 +26,7 @@ JOB_ACQUISITION_INTERVAL = 12  # seconds
 PROGRESS_CHECK_INTERVAL = 600  # seconds
 API_BASE_URL = "http://localhost:8766"
 BACKTEST_ENV = EnvName.QIN_TENGFEI
-BACKTEST_WORK_DIR = "/panda/potential-panda/potential-panda-k2/src"
+BACKTEST_WORK_DIR = "/panda/potential-panda/Himalaya"
 
 
 def _resolve_backtest_env(job_data: Dict[str, Any]) -> EnvName:
@@ -45,7 +43,7 @@ def create_cmd(job_data, env_name: EnvName):
     optimize = job_data.get("optimize", False)
     retest = job_data.get("retest", False)
 
-    cmd = ["python", "-m", "k2.a", "backtest", "--env", env_name.name, "--from-dt", from_dt]
+    cmd = ["python", "src/b.py", "--env", env_name.name, "--from-dt", from_dt]
     if to_dt:
         cmd.extend(["--to-dt", to_dt])
     if variant:
@@ -90,19 +88,20 @@ class KilimanjaroAgent:
         variant = job_data.get("variant", "v0")
         param_grid_data = job_data.get("param_grid", [])
         config = job_data.get("config", {})
-        profile = {
+        desc = {
             "modules": {
-                "config": f"bot.{strategy_name}.config.Config",
+                "config": f"{strategy_name}.config.Config",
                 "param_grid": "builtins.dict",
                 "params": "builtins.dict",
-                "strategy": "qate.boot.profile.StrategyProfile",
+                "trading": "qate.boot.config.TradingProfile",
                 "features": "builtins.dict",
             },
             "name": env_name.name,
         }
 
         env = Env(sys_env.ENV_DIR, env_name)
-        env.setup(profile, config, True)
+        env.setup(desc, True)
+        env.save_object("config.json", config, True)
         env.save_object("param_grid.json", param_grid_data, True)
         env.save_object("params.json", {}, True)
         env.save_object(
@@ -113,26 +112,25 @@ class KilimanjaroAgent:
             True,
         )
         env.save_object(
-            "strategy.json",
-            StrategyProfile(
-                f"bot.{strategy_name}",
+            "trading.json",
+            TradingProfile(
+                f"{strategy_name}",
                 variant,
             ),
             True,
         )
         return env
 
-    def read_recent_run_log_results(self, since_timestamp: float) -> list:
+    def read_recent_run_log_results(self, bt_env: Env, since_timestamp: float) -> list:
         """Read run log results created since the given timestamp"""
-        run_logger = RunLogger(sys_env.get_run_log_dir(is_backtest=True))
-        run_log_dir = run_logger.root_dir
+        run_log_dir = Path(bt_env.work_dir) / "run_log"
 
         results = []
         try:
             # List all JSON files in the run_log directory
             for filename in os.listdir(run_log_dir):
                 if filename.endswith(".json"):
-                    file_path = os.path.join(run_log_dir, filename)
+                    file_path = run_log_dir / filename
                     try:
                         # Check if file was created after the backtest started
                         file_mtime = os.path.getmtime(file_path)
@@ -197,9 +195,8 @@ class KilimanjaroAgent:
 
             if self.backtest_process.returncode == 0:
                 LOG.info(f"Backtest completed successfully for job {self.job_id}")
-
-                # Read run log results
-                run_log_results = self.read_recent_run_log_results(start_time)
+                run_log_results = self.read_recent_run_log_results(bt_env, start_time)
+                LOG.info(f"Update {len(run_log_results)} results")
 
                 result_data = {
                     "stdout": stdout[-1000:] if stdout else "",
@@ -297,7 +294,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.setup:
-        Env.setup_tool(sys_env.ENV_DIR, ENV_NAME, Config())
+        Env.setup_env(
+            sys_env.ENV_DIR,
+            ENV_NAME,
+            {
+                "config": Config(),
+            },
+        )
         exit(0)
 
     env = Env(sys_env.ENV_DIR, ENV_NAME)

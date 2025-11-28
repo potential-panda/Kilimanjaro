@@ -4,7 +4,6 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-
 from qate.env import sys_env
 from qate.env.env import Env
 from qate.env.env_name import EnvName
@@ -198,11 +197,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.setup:
-        Env.setup_tool(sys_env.ENV_DIR, EnvName.KILIMANJARO_API, Config())
+        Env.setup_env(
+            sys_env.ENV_DIR,
+            EnvName.KILIMANJARO_API,
+            {
+                "config": Config(),
+            },
+        )
         exit(0)
 
     env = Env(sys_env.ENV_DIR, EnvName.KILIMANJARO_API)
     env.load()
-
     env.visit()
     main()
