@@ -241,7 +241,7 @@ W.component('results', {
     $container.find('tbody td').on('click', (ev) => {
       const $clickedCell = $(ev.currentTarget);
       const cellIndex = $clickedCell.index();
-      if (cellIndex <= 1) { // Skip both checkbox column (0) and bucket_name column (1)
+      if (cellIndex <= 2) { // Skip checkbox column (0), Grafana icon column (1), and bucket_name column (2)
         return;
       }
 

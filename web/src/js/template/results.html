@@ -59,6 +59,9 @@ tbody td {
         <th style="width: 50px;">
           <input type="checkbox" class="form-check-input select-all" title="Select all">
         </th>
+        <th style="width: 50px;" title="Grafana Dashboard">
+          <i class="fa-solid fa-chart-line"></i>
+        </th>
         {{#visibleColumns}}
         <th class="sortable-header position-relative" data-column="{{name}}">
           <div class="d-flex align-items-center justify-content-between">
@@ -82,14 +85,15 @@ tbody td {
         <td>
           <input type="checkbox" class="form-check-input row-select" data-bucket-name="{{bucket_name}}">
         </td>
+        <td class="text-center">
+          <a href="{{__grafana_url}}" target="_blank" title="View in Grafana">
+            <i class="fa-solid fa-chart-line text-primary"></i>
+          </a>
+        </td>
         {{#../visibleColumns}}
         <td data-column="{{name}}">
           <small {{#if isImportant}}style="font-weight:bold;"{{/if}} class="result-cell bucket-cell">
-            {{#if @first}}
-            <a href="{{../__grafana_url}}" target="_blank" class="text-primary">{{lookup .. name}}</a>
-            {{else}}
             {{lookup .. name}}
-            {{/if}}
           </small>
         </td>
         {{/../visibleColumns}}
