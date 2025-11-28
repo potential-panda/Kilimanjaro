@@ -105,6 +105,48 @@ W.component('new', {
         factor: parseInt(param.factor) || 1000
       }))
     };
+
+    // Listen for job clone event
+    this.app.ev.on('job.clone', (jobData, source) => {
+      this.loadClonedJob(jobData);
+    }, this);
+  },
+
+  loadClonedJob: function(jobData) {
+    // Update data with cloned job settings
+    this.data.strategy_name = jobData.strategy_name;
+    this.data.variant = jobData.variant;
+    this.data.from_dt = jobData.from_dt;
+    this.data.to_dt = jobData.to_dt || '';
+    this.data.optimize = jobData.optimize;
+    this.data.retest = jobData.retest;
+
+    // Convert config object to array format for template
+    const configArray = [];
+    for (const [key, value] of Object.entries(jobData.config)) {
+      if (key !== 'params') {
+        configArray.push({
+          name: key,
+          default_value: value,
+          is_select: false
+        });
+      }
+    }
+    this.data.config = configArray;
+
+    // Convert param_grid to template format
+    this.data.param_grid = jobData.param_grid.map(param => ({
+      name: param.name,
+      default_value: param.default_value,
+      values: Array.isArray(param.values) ? param.values.join(', ') : param.values,
+      factor: param.factor
+    }));
+
+    // Update jobData
+    this.jobData = JSON.parse(JSON.stringify(jobData));
+
+    // Reload the component with cloned data
+    this.load();
   },
   getData: function(cb) {
     cb(this.data);

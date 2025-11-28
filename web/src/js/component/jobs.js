@@ -15,6 +15,23 @@ W.component('jobs', {
       this.load();
     });
 
+    // Clone job handler
+    $container.find('.clone-job').on('click', (ev) => {
+      const jobId = $(ev.target).closest('button').data('job-id');
+      this.client.fetchJob(jobId, (data) => {
+        if (!data || !data.job) {
+          alert('Error fetching job details');
+          return;
+        }
+
+        // Emit event with job data for the new component to listen
+        this.app.ev.emit('job.clone', data.job, this);
+
+        // Navigate to new job page
+        window.location.hash = '#new';
+      });
+    });
+
     // Delete job handler
     $container.find('.delete-job').on('click', (ev) => {
       const jobId = $(ev.target).data('job-id');
