@@ -1,19 +1,16 @@
 import argparse
-import json
-import os
-import subprocess
 import threading
 import time
 from dataclasses import dataclass
 from logging import getLogger
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
 import schedule
-from qate.boot.config import TradingProfile
 from qate.env import sys_env
 from qate.env.env import Env, EnvName
+
+from kilimanjaro.tasks import BaseTask, get_task_registry
 
 LOG = getLogger(__name__)
 ENV_NAME = EnvName.KILIMANJARO_AGENT
@@ -22,35 +19,8 @@ ENV_NAME = EnvName.KILIMANJARO_AGENT
 JOB_ACQUISITION_INTERVAL = 12  # seconds
 PROGRESS_CHECK_INTERVAL = 600  # seconds
 API_BASE_URL = "http://localhost:8766"
-BACKTEST_ENV = EnvName.QIN_TENGFEI
 BACKTEST_WORK_DIR = "/panda/potential-panda/Himalaya"
-
-
-def _resolve_backtest_env(job_data: Dict[str, Any]) -> EnvName:
-    env_name = job_data.get("env")
-    if env_name:
-        return EnvName[env_name]
-    return BACKTEST_ENV
-
-
-def create_cmd(job_data, env_name: EnvName):
-    from_dt = job_data.get("from_dt").replace("-", "")
-    to_dt = job_data.get("to_dt").replace("-", "")
-    variant = job_data.get("variant")
-    optimize = job_data.get("optimize", False)
-    retest = job_data.get("retest", False)
-
-    cmd = ["python", "src/b.py", "--env", env_name.name, "--from-dt", from_dt]
-    if to_dt:
-        cmd.extend(["--to-dt", to_dt])
-    if variant:
-        cmd.extend(["--variant", variant])
-    if optimize:
-        cmd.append("--optimize")
-    if retest:
-        cmd.append("--retest")
-
-    return cmd
+MARKET_DATA_SCHEDULE_TIME = "04:00"  # 4am daily
 
 
 @dataclass
@@ -59,219 +29,156 @@ class Config:
     job_acquisition_interval: int = JOB_ACQUISITION_INTERVAL
     progress_check_interval: int = PROGRESS_CHECK_INTERVAL
     backtest_work_dir: str = BACKTEST_WORK_DIR
+    enable_market_data_task: bool = True
+    market_data_schedule_time: str = MARKET_DATA_SCHEDULE_TIME
+    market_data_output_dir: str = "/panda/market-data"
+    market_data_download_tmp_dir: str = "/panda/tmp_download"
+    market_data_merge_tmp_dir: str = "/panda/tmp_merge"
 
 
 class KilimanjaroAgent:
     def __init__(self, config: Config):
         self.config = config
-        self.job_id: Optional[str] = None
         self.client = httpx.Client(base_url=config.api_base_url, timeout=30.0)
-        self.backtest_thread: Optional[threading.Thread] = None
-        self.backtest_process: Optional[subprocess.Popen] = None
+        self.task_registry = get_task_registry()
+        self.current_task: Optional[BaseTask] = None
+        self.task_thread: Optional[threading.Thread] = None
 
     def acquire_job(self) -> Optional[Dict[str, Any]]:
+        """Acquire a job from the API"""
         response = self.client.post("/job/acquire")
         if response.status_code == 200:
             job_data = response.json()
-            if job_data:  # Not empty
+            if job_data:
                 LOG.info(f"Acquired job: {job_data.get('job_id')}")
                 return job_data
         else:
             LOG.error(f"Failed to acquire job: {response.status_code}")
         return None
 
-    def setup_backtest_env(self, job_data: Dict[str, Any], env_name: EnvName) -> Env:
-        strategy_name = job_data.get("strategy_name", "orion")
-        variant = job_data.get("variant", "v0")
-        param_grid_data = job_data.get("param_grid", [])
-        config = job_data.get("config", {})
-        desc = {
-            "modules": {
-                "config": f"{strategy_name}.config.Config",
-                "param_grid": "builtins.dict",
-                "params": "builtins.dict",
-                "trading": "qate.boot.config.TradingProfile",
-                "features": "builtins.dict",
-            },
-            "name": env_name.name,
-        }
-
-        env = Env(sys_env.ENV_DIR, env_name)
-        env.setup(desc, True)
-        env.save_object("config.json", config, True)
-        env.save_object("param_grid.json", param_grid_data, True)
-        env.save_object("params.json", {}, True)
-        env.save_object(
-            "features.json",
-            {
-                "INVENTORY_HEALTH_CHECK": False,
-            },
-            True,
-        )
-        env.save_object(
-            "trading.json",
-            TradingProfile(
-                f"{strategy_name}",
-                variant,
-            ),
-            True,
-        )
-        return env
-
-    def read_recent_run_log_results(self, bt_env: Env, since_timestamp: float) -> list:
-        """Read run log results created since the given timestamp"""
-        run_log_dir = Path(bt_env.work_dir) / "run_log"
-
-        results = []
+    def _execute_task_thread(self, task: BaseTask):
+        """Execute task in background thread"""
         try:
-            # List all JSON files in the run_log directory
-            for filename in os.listdir(run_log_dir):
-                if filename.endswith(".json"):
-                    file_path = run_log_dir / filename
-                    try:
-                        # Check if file was created after the backtest started
-                        file_mtime = os.path.getmtime(file_path)
-                        if file_mtime >= since_timestamp:
-                            with open(file_path, "r") as f:
-                                run_log_data = json.load(f)
-                                # Add file metadata
-                                run_log_data["file_name"] = filename
-                                run_log_data["file_mtime"] = file_mtime
-                                results.append(run_log_data)
-                    except Exception as e:
-                        LOG.warning(f"Error reading run log file {filename}: {e}")
+            task.execute()
         except Exception as e:
-            LOG.error(f"Error reading run log directory: {e}")
-
-        # Sort by creation time (newest first)
-        results.sort(key=lambda x: x.get("file_mtime", 0), reverse=True)
-        return results
-
-    def _execute_backtest_thread(self, job_data: Dict[str, Any]):
-        """Execute backtest in background thread"""
-        start_time = time.time()
-
-        try:
-            target_env_name = _resolve_backtest_env(job_data)
-            bt_env = self.setup_backtest_env(job_data, target_env_name)
-
-            cmd = create_cmd(job_data, target_env_name)
-            LOG.info(f"Starting backtest for job {self.job_id}: {' '.join(cmd)}")
-            self.update_job_progress(self.job_id, {"progress": "started"})
-
-            shell_env = os.environ.copy()
-            shell_env["PYTHON_GIL"] = "0"
-            self.backtest_process = subprocess.Popen(
-                cmd,
-                env=shell_env,
-                cwd=self.config.backtest_work_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-
-            # Wait for completion and ensure proper cleanup
-            try:
-                stdout, stderr = self.backtest_process.communicate()
-                # Ensure returncode is set
-                if self.backtest_process.returncode is None:
-                    self.backtest_process.wait()
-
-                LOG.info(f"Command completed with return code: {self.backtest_process.returncode}")
-                if stdout:
-                    LOG.debug(f"STDOUT: {stdout}")
-                if stderr:
-                    LOG.debug(f"STDERR: {stderr}")
-            except Exception as e:
-                LOG.error(f"Error during subprocess communication: {e}")
-                # Force process termination if needed
-                if self.backtest_process.poll() is None:
-                    self.backtest_process.terminate()
-                    self.backtest_process.wait()
-                raise
-
-            if self.backtest_process.returncode == 0:
-                LOG.info(f"Backtest completed successfully for job {self.job_id}")
-                run_log_results = self.read_recent_run_log_results(bt_env, start_time)
-                LOG.info(f"Update {len(run_log_results)} results")
-
-                result_data = {
-                    "stdout": stdout[-1000:] if stdout else "",
-                    "env_name": bt_env.name.name,
-                    "run_logs": run_log_results,
-                    "run_log_count": len(run_log_results),
-                }
-
-                self.update_job_progress(self.job_id, {"progress": "DONE", "result": result_data})
-            else:
-                LOG.error(f"Backtest failed for job {self.job_id}: {stderr}")
-                self.update_job_progress(
-                    self.job_id,
-                    {
-                        "progress": "ERROR",
-                        "result": {
-                            "error": stderr[-1000:],
-                        },
-                    },
-                )
-        except Exception as e:
-            LOG.error(f"Error in backtest thread: {e}")
-            self.update_job_progress(
-                self.job_id,
-                {
-                    "progress": "ERROR",
-                    "result": {
-                        "error": str(e),
-                    },
-                },
-            )
+            LOG.error(f"Error executing task: {e}")
         finally:
-            self.backtest_process = None
-            self.backtest_thread = None
-            self.job_id = None
+            self.current_task = None
+            self.task_thread = None
 
-    def update_job_progress(self, job_id: str, update_data: Dict[str, Any]):
-        update_data["ts"] = time.time()
-        try:
-            response = self.client.post(f"/job/update/{job_id}", json=update_data)
-            if response.status_code != 204:
-                LOG.error(f"Failed to update job {job_id}: {response.status_code}")
-        except Exception as e:
-            LOG.error(f"Error updating job progress: {e}")
-
-    def check_running_job_progress(self):
-        if not self.job_id or not self.backtest_process:
+    def check_running_task_progress(self):
+        """Check progress of running task"""
+        if not self.current_task or not self.current_task.is_running:
             return
 
-        if self.backtest_process.poll() is None:
-            self.update_job_progress(self.job_id, {"progress": "running"})
+        # Call task-specific progress check if available
+        if hasattr(self.current_task, "check_progress"):
+            self.current_task.check_progress()
+
+    def _create_scheduled_task(self, task_type: str, job_data: Dict[str, Any]) -> Optional[BaseTask]:
+        """Create a scheduled task without requiring job acquisition"""
+        job_id = f"scheduled_{task_type}_{int(time.time())}"
+
+        # Build config dict for the task
+        config_dict = {
+            "backtest_work_dir": self.config.backtest_work_dir,
+        }
+
+        # Add market data specific config if it's a market data task
+        if task_type == "market_data":
+            config_dict.update(
+                {
+                    "output_dir": self.config.market_data_output_dir,
+                    "download_tmp_dir": self.config.market_data_download_tmp_dir,
+                    "merge_tmp_dir": self.config.market_data_merge_tmp_dir,
+                }
+            )
+
+        # Create task using registry
+        task = self.task_registry.create_task(task_type, job_id, job_data, self.client, config_dict)
+
+        return task
+
+    def run_market_data_task(self):
+        """Run the market data task (scheduled)"""
+        # Check if there's already a task running
+        if self.current_task and self.task_thread and self.task_thread.is_alive():
+            LOG.warning("Cannot start market data task: another task is already running")
+            return
+
+        LOG.info("Starting scheduled market data task")
+
+        job_data = {
+            "task_type": "market_data",
+            # Uses default markets defined in MarketDataTask
+        }
+
+        task = self._create_scheduled_task("market_data", job_data)
+
+        if not task:
+            LOG.error("Failed to create market data task")
+            return
+
+        # Start task in background thread
+        self.current_task = task
+        self.task_thread = threading.Thread(
+            target=self._execute_task_thread,
+            args=(task,),
+            daemon=True,
+        )
+        self.task_thread.start()
+        LOG.info("Market data task started successfully")
 
     def job_acquisition_task(self):
-        # Check if there's already a job running
-        if self.job_id or (self.backtest_thread and self.backtest_thread.is_alive()):
+        """Acquire and start executing a new job"""
+        # Check if there's already a task running
+        if self.current_task or (self.task_thread and self.task_thread.is_alive()):
             return
 
         job_data = self.acquire_job()
         if not job_data:
             return
 
-        self.job_id = job_data["job_id"]
-        self.backtest_thread = threading.Thread(
-            target=self._execute_backtest_thread,
-            args=(job_data,),
+        # Get task type from job data (default to "backtest" for backward compatibility)
+        task_type = job_data.get("task_type", "backtest")
+        job_id = job_data["job_id"]
+
+        # Create task using registry
+        config_dict = {
+            "backtest_work_dir": self.config.backtest_work_dir,
+        }
+        task = self.task_registry.create_task(task_type, job_id, job_data, self.client, config_dict)
+
+        if not task:
+            LOG.error(f"Failed to create task of type '{task_type}' for job {job_id}")
+            return
+
+        # Start task in background thread
+        self.current_task = task
+        self.task_thread = threading.Thread(
+            target=self._execute_task_thread,
+            args=(task,),
             daemon=True,
         )
-        self.backtest_thread.start()
+        self.task_thread.start()
+        LOG.info(f"Started task '{task_type}' for job {job_id}")
 
     def start(self):
+        """Start the agent main loop"""
         LOG.info("Starting Kilimanjaro Agent")
         LOG.info(f"API URL: {self.config.api_base_url}")
         LOG.info(f"Job acquisition interval: {self.config.job_acquisition_interval} seconds")
         LOG.info(f"Progress check interval: {self.config.progress_check_interval} seconds")
+        LOG.info(f"Registered task types: {self.task_registry.get_registered_tasks()}")
 
-        # Schedule tasks
+        # Schedule job acquisition and progress check
         schedule.every(self.config.job_acquisition_interval).seconds.do(self.job_acquisition_task)
-        schedule.every(self.config.progress_check_interval).seconds.do(self.check_running_job_progress)
+        schedule.every(self.config.progress_check_interval).seconds.do(self.check_running_task_progress)
+
+        # Schedule market data task at configured time (default 4am daily)
+        if self.config.enable_market_data_task:
+            schedule.every().day.at(self.config.market_data_schedule_time).do(self.run_market_data_task)
+            LOG.info(f"Market data task scheduled daily at {self.config.market_data_schedule_time}")
 
         # Run scheduler loop
         while True:
@@ -280,14 +187,19 @@ class KilimanjaroAgent:
             except Exception:
                 LOG.exception("Unhandled exception while running scheduled task")
             try:
-                time.sleep(10)  # Check every 10 seconds
+                time.sleep(10)
             except KeyboardInterrupt:
                 break
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--setup", action="store_true")
+    parser.add_argument("--setup", action="store_true", help="Setup agent environment")
+    parser.add_argument(
+        "--run-market-data",
+        action="store_true",
+        help="Manually run market data task once and exit",
+    )
     args = parser.parse_args()
 
     if args.setup:
@@ -304,8 +216,16 @@ if __name__ == "__main__":
     env.load()
 
     try:
-        env.enter()
+        env.visit()
         agent = KilimanjaroAgent(env.get("config"))
-        agent.start()
+        if args.run_market_data:
+            LOG.info("Running market data task manually...")
+            agent.run_market_data_task()
+            # Wait for task to complete
+            if agent.task_thread:
+                agent.task_thread.join()
+            LOG.info("Market data task completed")
+        else:
+            agent.start()
     finally:
         env.leave()
