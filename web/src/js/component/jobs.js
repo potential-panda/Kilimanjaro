@@ -24,8 +24,8 @@ W.component('jobs', {
           return;
         }
 
-        // Emit event with job data for the new component to listen
-        this.app.ev.emit('job.clone', data.job, this);
+        // Store job data in sessionStorage for the new component to pick up
+        sessionStorage.setItem('cloneJobData', JSON.stringify(data.job));
 
         // Navigate to new job page
         window.location.hash = '#new';

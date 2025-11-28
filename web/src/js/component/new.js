@@ -58,6 +58,21 @@ function getFormData($container) {
 
 W.component('new', {
   init: function() {
+    // Check if there's cloned job data in sessionStorage
+    const clonedJobDataStr = sessionStorage.getItem('cloneJobData');
+    if (clonedJobDataStr) {
+      // Load cloned job data
+      const clonedJobData = JSON.parse(clonedJobDataStr);
+      sessionStorage.removeItem('cloneJobData'); // Clear after reading
+      this.initializeWithClonedData(clonedJobData);
+      return;
+    }
+
+    // Normal initialization with defaults
+    this.initializeWithDefaults();
+  },
+
+  initializeWithDefaults: function() {
     // Get yesterday's date in YYYY-MM-DD format
     const today = new Date();
     const fromDay = new Date();
@@ -105,11 +120,45 @@ W.component('new', {
         factor: parseInt(param.factor) || 1000
       }))
     };
+  },
 
-    // Listen for job clone event
-    this.app.ev.on('job.clone', (jobData, source) => {
-      this.loadClonedJob(jobData);
-    }, this);
+  initializeWithClonedData: function(jobData) {
+    const strategies = getAvailableStrategies();
+
+    // Convert config object to array format for template
+    const configArray = [];
+    for (const [key, value] of Object.entries(jobData.config || {})) {
+      if (key !== 'params') {
+        configArray.push({
+          name: key,
+          default_value: value,
+          is_select: false
+        });
+      }
+    }
+
+    // Convert param_grid to template format
+    const paramGridArray = (jobData.param_grid || []).map(param => ({
+      name: param.name,
+      default_value: param.default_value,
+      values: Array.isArray(param.values) ? param.values.join(', ') : param.values,
+      factor: param.factor
+    }));
+
+    this.data = {
+      strategy_name: jobData.strategy_name,
+      variant: jobData.variant,
+      from_dt: jobData.from_dt,
+      to_dt: jobData.to_dt || '',
+      optimize: jobData.optimize,
+      retest: jobData.retest,
+      config: configArray,
+      param_grid: paramGridArray,
+      available_strategies: strategies
+    };
+
+    // Set jobData
+    this.jobData = JSON.parse(JSON.stringify(jobData));
   },
 
   loadClonedJob: function(jobData) {
@@ -148,6 +197,7 @@ W.component('new', {
     // Reload the component with cloned data
     this.load();
   },
+
   getData: function(cb) {
     cb(this.data);
   },
