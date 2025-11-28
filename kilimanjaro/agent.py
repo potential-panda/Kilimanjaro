@@ -2,8 +2,6 @@ import argparse
 import json
 import os
 import subprocess
-
-# Import JobStatus from the API module
 import threading
 import time
 from dataclasses import dataclass
@@ -14,7 +12,6 @@ from typing import Any, Dict, Optional
 import httpx
 import schedule
 from qate.boot.config import TradingProfile
-from qate.boot.run_log import RunLogger
 from qate.env import sys_env
 from qate.env.env import Env, EnvName
 
