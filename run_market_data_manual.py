@@ -14,13 +14,7 @@ import logging
 from qate.env import sys_env
 from qate.env.env import Env
 
-from kilimanjaro.agent import ENV_NAME, KilimanjaroAgent
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="{asctime} {levelname:8s} {name} {message}",
-    style="{",
-)
+from kilimanjaro.agent import ENV_NAME, Config, KilimanjaroAgent
 
 LOG = logging.getLogger(__name__)
 
@@ -33,11 +27,9 @@ def main():
 
     # Load agent environment and config
     env = Env(sys_env.ENV_DIR, ENV_NAME)
-    env.load()
-
     try:
-        env.enter()
-        config = env.get("config")
+        env.visit()
+        config = env.load_object("config.json", Config)
         agent = KilimanjaroAgent(config)
 
         # If specific market is requested, customize the job data

@@ -6,6 +6,7 @@ import httpx
 from .base import BaseTask
 from .backtest_task import BacktestTask
 from .market_data_task import MarketDataTask
+from .metrics_data_task import MetricsDataTask
 
 LOG = getLogger(__name__)
 
@@ -21,6 +22,7 @@ class TaskRegistry:
         """Register default task types"""
         self.register(BacktestTask.TASK_TYPE, BacktestTask)
         self.register(MarketDataTask.TASK_TYPE, MarketDataTask)
+        self.register(MetricsDataTask.TASK_TYPE, MetricsDataTask)
 
     def register(self, task_type: str, task_class: Type[BaseTask]) -> None:
         """Register a new task type

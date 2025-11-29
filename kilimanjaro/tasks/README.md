@@ -8,6 +8,7 @@ This directory contains the task implementations for the Kilimanjaro agent. The 
 - **TaskRegistry**: Registry for managing and creating task instances
 - **BacktestTask**: Task for running strategy backtests (job-based)
 - **MarketDataTask**: Task for downloading and merging market data from S3 (scheduled daily at 4am)
+- **MetricsDataTask**: Task for downloading metrics data from S3 to InfluxDB (scheduled every 30 minutes)
 
 ## How to Add a New Task
 
@@ -169,6 +170,44 @@ job_data = {
 ```
 
 See `market_data_task.py` for the full implementation.
+
+## Example: MetricsDataTask (Scheduled Task)
+
+The `MetricsDataTask` demonstrates a scheduled task that runs every 30 minutes:
+- Downloads metrics data from S3 for predefined hosts
+- Processes msgpack files containing system metrics
+- Writes metrics to InfluxDB for monitoring and analysis
+- Tracks statistics (downloaded files, processed metrics, errors)
+
+**Default Hosts:**
+- orion-01 (env: QIN_TENGFEI)
+- orion-03 (env: QASIM_TARIQ)
+
+**Configuration (in agent Config):**
+```python
+enable_metrics_data_task: bool = True  # Enable/disable the task
+metrics_data_interval: int = 30  # Run interval in minutes
+metrics_data_download_tmp_dir: str = "/panda/metrics-data"
+```
+
+**How it works:**
+1. For each host/environment pair:
+   - Checks the last processed timestamp
+   - Downloads new metric files from S3 (5-minute intervals)
+   - Processes msgpack files and deserializes metrics
+   - Writes metrics to InfluxDB bucket (named after environment)
+   - Marks processed files to avoid reprocessing
+
+**To customize hosts:**
+Pass a `hosts` array in the job_data:
+```python
+job_data = {
+    "task_type": "metrics_data",
+    "hosts": ["orion-01", "orion-03", "localhost"]
+}
+```
+
+See `metrics_data_task.py` for the full implementation.
 
 ## BaseTask API
 

@@ -34,6 +34,9 @@ class Config:
     market_data_output_dir: str = "/panda/market-data"
     market_data_download_tmp_dir: str = "/panda/tmp_download"
     market_data_merge_tmp_dir: str = "/panda/tmp_merge"
+    enable_metrics_data_task: bool = True
+    metrics_data_interval: int = 30  # minutes
+    metrics_data_download_tmp_dir: str = "/panda/metrics-data"
 
 
 class KilimanjaroAgent:
@@ -84,13 +87,19 @@ class KilimanjaroAgent:
             "backtest_work_dir": self.config.backtest_work_dir,
         }
 
-        # Add market data specific config if it's a market data task
+        # Add task-specific config
         if task_type == "market_data":
             config_dict.update(
                 {
                     "output_dir": self.config.market_data_output_dir,
                     "download_tmp_dir": self.config.market_data_download_tmp_dir,
                     "merge_tmp_dir": self.config.market_data_merge_tmp_dir,
+                }
+            )
+        elif task_type == "metrics_data":
+            config_dict.update(
+                {
+                    "download_tmp_dir": self.config.metrics_data_download_tmp_dir,
                 }
             )
 
@@ -128,6 +137,36 @@ class KilimanjaroAgent:
         )
         self.task_thread.start()
         LOG.info("Market data task started successfully")
+
+    def run_metrics_data_task(self):
+        """Run the metrics data task (scheduled)"""
+        # Check if there's already a task running
+        if self.current_task and self.task_thread and self.task_thread.is_alive():
+            LOG.warning("Cannot start metrics data task: another task is already running")
+            return
+
+        LOG.info("Starting scheduled metrics data task")
+
+        job_data = {
+            "task_type": "metrics_data",
+            # Uses default hosts: orion-01, orion-03
+        }
+
+        task = self._create_scheduled_task("metrics_data", job_data)
+
+        if not task:
+            LOG.error("Failed to create metrics data task")
+            return
+
+        # Start task in background thread
+        self.current_task = task
+        self.task_thread = threading.Thread(
+            target=self._execute_task_thread,
+            args=(task,),
+            daemon=True,
+        )
+        self.task_thread.start()
+        LOG.info("Metrics data task started successfully")
 
     def job_acquisition_task(self):
         """Acquire and start executing a new job"""
@@ -180,6 +219,11 @@ class KilimanjaroAgent:
             schedule.every().day.at(self.config.market_data_schedule_time).do(self.run_market_data_task)
             LOG.info(f"Market data task scheduled daily at {self.config.market_data_schedule_time}")
 
+        # Schedule metrics data task every N minutes (default 30 minutes)
+        if self.config.enable_metrics_data_task:
+            schedule.every(self.config.metrics_data_interval).minutes.do(self.run_metrics_data_task)
+            LOG.info(f"Metrics data task scheduled every {self.config.metrics_data_interval} minutes")
+
         # Run scheduler loop
         while True:
             try:
@@ -199,6 +243,11 @@ if __name__ == "__main__":
         "--run-market-data",
         action="store_true",
         help="Manually run market data task once and exit",
+    )
+    parser.add_argument(
+        "--run-metrics-data",
+        action="store_true",
+        help="Manually run metrics data task once and exit",
     )
     args = parser.parse_args()
 
@@ -225,6 +274,13 @@ if __name__ == "__main__":
             if agent.task_thread:
                 agent.task_thread.join()
             LOG.info("Market data task completed")
+        elif args.run_metrics_data:
+            LOG.info("Running metrics data task manually...")
+            agent.run_metrics_data_task()
+            # Wait for task to complete
+            if agent.task_thread:
+                agent.task_thread.join()
+            LOG.info("Metrics data task completed")
         else:
             agent.start()
     finally:
