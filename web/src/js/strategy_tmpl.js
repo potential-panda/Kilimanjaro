@@ -40,7 +40,7 @@ const STRATEGY_TEMPLATES = {
       },
       {
         name: "magnifier",
-        value: [3.0, 5.0, 10.0],
+        value: [5.0, 3.0, 10.0],
       },
     ],
     param_grid: [
@@ -64,8 +64,8 @@ const STRATEGY_TEMPLATES = {
       },
       {
         name: 'box_size_rate',
-        default_value: '0.00075',
-        values: '0.00075,0.001,0.0015,0.002',
+        default_value: '0.0015',
+        values: '0.001,0.0015,0.002,0.0025,0.003',
         factor: '100000'
       }
     ],
