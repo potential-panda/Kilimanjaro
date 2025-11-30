@@ -13,6 +13,7 @@ from kilimanjaro.data_access import JobDataAccess
 # Configuration
 PORT = 8766
 JOB_DIR = Path(sys_env.ENV_DIR) / EnvName.KILIMANJARO_API.name / "jobs"
+RESULTS_DIR = Path(sys_env.ENV_DIR) / EnvName.KILIMANJARO_API.name / "results"
 WWW_DIR = Path(__file__).resolve().parent.parent / "web" / "public"
 
 
@@ -20,6 +21,7 @@ WWW_DIR = Path(__file__).resolve().parent.parent / "web" / "public"
 class Config:
     port: int = PORT
     job_dir: str = str(JOB_DIR)
+    results_dir: str = str(RESULTS_DIR)
 
 
 # Note: Locking is handled in JobDataAccess layer
@@ -76,10 +78,14 @@ def process_job_data(job_data):
     return job_data
 
 
-def create_app():
+def create_app(config: Config = None):
     app = Flask(__name__, static_folder=WWW_DIR, static_url_path="/html")
     CORS(app, origins=["http://localhost:8080"])
-    job_data_access = JobDataAccess(JOB_DIR)
+
+    if config is None:
+        config = Config()
+
+    job_data_access = JobDataAccess(config.job_dir, config.results_dir)
 
     @app.route("/job/new", methods=["POST"])
     def create_job():
@@ -184,11 +190,16 @@ def create_app():
 
 
 def main():
-    app = create_app()
+    env = Env(sys_env.ENV_DIR, EnvName.KILIMANJARO_API)
+    env.load()
+    config = env.get("config")
 
-    print(f"Starting Kilimanjaro API server on port {PORT}")
-    print(f"Job directory: {JOB_DIR}")
-    app.run(host="0.0.0.0", port=PORT, threaded=True)
+    app = create_app(config)
+
+    print(f"Starting Kilimanjaro API server on port {config.port}")
+    print(f"Job directory: {config.job_dir}")
+    print(f"Results directory: {config.results_dir}")
+    app.run(host="0.0.0.0", port=config.port, threaded=True)
 
 
 if __name__ == "__main__":
@@ -206,7 +217,4 @@ if __name__ == "__main__":
         )
         exit(0)
 
-    env = Env(sys_env.ENV_DIR, EnvName.KILIMANJARO_API)
-    env.load()
-    env.visit()
     main()

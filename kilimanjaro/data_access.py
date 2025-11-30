@@ -26,11 +26,17 @@ class JobStatus(Enum):
 
 
 class JobDataAccess:
-    def __init__(self, job_dir: str):
+    def __init__(self, job_dir: str, results_dir: str = None):
         self.job_dir = Path(job_dir)
         self.job_dir.mkdir(parents=True, exist_ok=True)
-        self.results_dir = self.job_dir.parent / "results"
+
+        # Use provided results_dir or derive from job_dir (for backward compatibility)
+        if results_dir:
+            self.results_dir = Path(results_dir)
+        else:
+            self.results_dir = self.job_dir.parent / "results"
         self.results_dir.mkdir(parents=True, exist_ok=True)
+
         self._lock = threading.Lock()
 
     def create_job(self, job_data: Dict[str, Any]) -> str:
