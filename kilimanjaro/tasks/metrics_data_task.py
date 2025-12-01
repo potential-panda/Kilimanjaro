@@ -1,8 +1,9 @@
 import os
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict
+from typing import Dict
 from zoneinfo import ZoneInfo
 
 import msgpack
@@ -15,7 +16,7 @@ from .base import BaseTask
 LOG = getLogger(__name__)
 
 # Default configuration
-DEFAULT_DOWNLOAD_TMP_DIR = "/panda/metrics-data"
+DEFAULT_DOWNLOAD_DIR = "/panda/metrics-data"
 DEFAULT_ORG = "panda-org"
 
 # Default host configuration
@@ -176,15 +177,24 @@ class MetricsWorker:
         return stats
 
 
+@dataclass
+class Config:
+    download_dir: str = DEFAULT_DOWNLOAD_DIR
+
+
+def load_config():
+    # TODO read {__class__.__name__}.json from current dir
+    return Config()
+
+
 class MetricsDataTask(BaseTask):
     """Task for downloading and processing metrics data from S3 to InfluxDB"""
 
-    TASK_TYPE = "metrics_data"
-
-    def __init__(self, job_id: str, job_data: Dict[str, Any], client, config: Dict[str, Any]):
-        super().__init__(job_id, job_data, client)
-        self.config = config
-        self.download_dir = Path(config.get("download_tmp_dir", DEFAULT_DOWNLOAD_TMP_DIR))
+    def __init__(self):
+        super().__init__()
+        self.job_data = {}  # Scheduled task with no job data
+        self.config = load_config()
+        self.download_dir = Path(self.config.download_dir)
         self.download_dir.mkdir(parents=True, exist_ok=True)
         self.hosts = self._get_hosts()
         self.stats = {
@@ -195,13 +205,6 @@ class MetricsDataTask(BaseTask):
             "total_skipped": 0,
             "errors": 0,
         }
-
-    def get_task_type(self) -> str:
-        return self.TASK_TYPE
-
-    def update_progress(self, update_data: Dict[str, Any]) -> None:
-        """Override to just log progress instead of calling API (scheduled task)"""
-        LOG.info(f"Metrics data task progress: {update_data}")
 
     def _get_hosts(self) -> list[str]:
         """Get list of hosts to process from job data or use defaults"""
@@ -243,7 +246,6 @@ class MetricsDataTask(BaseTask):
     def execute(self) -> None:
         """Execute the metrics data download and processing task"""
         try:
-            self.mark_started()
             LOG.info(f"Starting metrics data task for hosts: {self.hosts}")
 
             self.stats["total_hosts"] = len(self.hosts)
@@ -262,31 +264,13 @@ class MetricsDataTask(BaseTask):
                     if host in DEFAULT_HOST_CONFIG:
                         self.stats["total_envs"] += len(DEFAULT_HOST_CONFIG[host]["envs"])
 
-                    self.update_progress(
-                        {
-                            "progress": "running",
-                            "stats": self.stats,
-                        }
-                    )
-
                 except Exception as e:
                     LOG.error(f"Error processing host {host}: {e}")
                     self.stats["errors"] += 1
 
             LOG.info(f"Metrics data task completed. Stats: {self.stats}")
-            self.mark_completed(
-                {
-                    "stats": self.stats,
-                    "hosts_processed": self.hosts,
-                }
-            )
 
         except Exception as e:
             LOG.error(f"Error in metrics data task: {e}")
-            self.mark_failed(str(e))
         finally:
             self.cleanup()
-
-    def cleanup(self) -> None:
-        """Clean up resources"""
-        pass

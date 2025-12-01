@@ -1,9 +1,9 @@
 import math
 import os
 import time
+from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict
 
 import msgpack
 from qate.core.ev_type import EventType
@@ -213,17 +213,28 @@ def merge_market_data(merge_files: list[Path], exchange: str, symbol: str):
     return [serialize(x) for x in merged]
 
 
+@dataclass
+class Config:
+    output_dir: str = DEFAULT_OUTPUT_DIR
+    download_tmp_dir: str = DEFAULT_DOWNLOAD_TMP_DIR
+    merge_tmp_dir: str = DEFAULT_MERGE_TMP_DIR
+
+
+def load_config():
+    # TODO read {__class__.__name__}.json from current dir
+    return Config()
+
+
 class MarketDataTask(BaseTask):
     """Task for downloading, merging and saving market data"""
 
-    TASK_TYPE = "market_data"
-
-    def __init__(self, job_id: str, job_data: Dict[str, Any], client, config: Dict[str, Any]):
-        super().__init__(job_id, job_data, client)
-        self.config = config
-        self.output_dir = config.get("output_dir", DEFAULT_OUTPUT_DIR)
-        self.download_tmp_dir = config.get("download_tmp_dir", DEFAULT_DOWNLOAD_TMP_DIR)
-        self.merge_tmp_dir = config.get("merge_tmp_dir", DEFAULT_MERGE_TMP_DIR)
+    def __init__(self):
+        super().__init__()
+        self.job_data = {}  # Scheduled task with no job data
+        self.config = load_config()
+        self.output_dir = self.config.output_dir
+        self.download_tmp_dir = self.config.download_tmp_dir
+        self.merge_tmp_dir = self.config.merge_tmp_dir
         self.markets = self._get_markets()
         self.s3_client = None
         self.stats = {
@@ -234,13 +245,6 @@ class MarketDataTask(BaseTask):
             "skipped_files": 0,
             "errors": 0,
         }
-
-    def get_task_type(self) -> str:
-        return self.TASK_TYPE
-
-    def update_progress(self, update_data: Dict[str, Any]) -> None:
-        """Override to just log progress instead of calling API (scheduled task)"""
-        LOG.info(f"Market data task progress: {update_data}")
 
     def _get_markets(self) -> list[Market]:
         """Get list of markets to process from job data or use defaults"""
@@ -325,7 +329,6 @@ class MarketDataTask(BaseTask):
     def execute(self) -> None:
         """Execute the market data download and merge task"""
         try:
-            self.mark_started()
             LOG.info(f"Starting market data task for {len(self.markets)} markets")
 
             # Ensure directories exist
@@ -339,27 +342,14 @@ class MarketDataTask(BaseTask):
             for market in self.markets:
                 try:
                     self._process_market(market.exchange_name, market.symbol)
-                    self.update_progress(
-                        {
-                            "progress": "running",
-                            "stats": self.stats,
-                        }
-                    )
                 except Exception as e:
                     LOG.error(f"Error processing market {market}: {e}")
                     self.stats["errors"] += 1
 
             LOG.info(f"Market data task completed. Stats: {self.stats}")
-            self.mark_completed(
-                {
-                    "stats": self.stats,
-                    "markets_processed": [f"{m.exchange_name.name}_{m.symbol.name}" for m in self.markets],
-                }
-            )
 
         except Exception as e:
             LOG.error(f"Error in market data task: {e}")
-            self.mark_failed(str(e))
         finally:
             self.cleanup()
 

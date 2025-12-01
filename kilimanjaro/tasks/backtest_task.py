@@ -22,17 +22,12 @@ DEFAULT_BACKTEST_WORK_DIR = "/panda/potential-panda/Himalaya"
 class BacktestTask(BaseTask):
     """Task for executing backtests"""
 
-    TASK_TYPE = "backtest"
-
-    def __init__(self, job_id: str, job_data: Dict[str, Any], client, config: Dict[str, Any]):
-        super().__init__(job_id, job_data, client)
-        self.config = config
+    def __init__(self):
+        super().__init__()
+        # job_id and job_data will be set by registry.create_task()
         self.backtest_process: Optional[subprocess.Popen] = None
         self.bt_env: Optional[Env] = None
         self.start_time: Optional[float] = None
-
-    def get_task_type(self) -> str:
-        return self.TASK_TYPE
 
     def _resolve_backtest_env(self) -> EnvName:
         """Resolve which backtest environment to use"""
@@ -141,10 +136,10 @@ class BacktestTask(BaseTask):
             # Create command
             cmd = self._create_backtest_cmd(target_env_name)
             LOG.info(f"Starting backtest for job {self.job_id}: {' '.join(cmd)}")
-            self.mark_started()
+            self.is_running = True
 
             # Execute backtest
-            backtest_work_dir = self.config.get("backtest_work_dir", DEFAULT_BACKTEST_WORK_DIR)
+            backtest_work_dir = DEFAULT_BACKTEST_WORK_DIR
             shell_env = os.environ.copy()
             shell_env["PYTHON_GIL"] = "0"
 
@@ -179,30 +174,26 @@ class BacktestTask(BaseTask):
             if self.backtest_process.returncode == 0:
                 LOG.info(f"Backtest completed successfully for job {self.job_id}")
                 run_log_results = self._read_recent_run_log_results(self.start_time)
-                LOG.info(f"Update {len(run_log_results)} results")
+                LOG.info(f"Found {len(run_log_results)} results")
 
-                result_data = {
-                    "stdout": stdout[-1000:] if stdout else "",
-                    "env_name": self.bt_env.name.name,
-                    "run_logs": run_log_results,
-                    "run_log_count": len(run_log_results),
-                }
-
-                self.mark_completed(result_data)
+                self.is_running = False
+                self.is_complete = True
             else:
                 LOG.error(f"Backtest failed for job {self.job_id}: {stderr}")
-                self.mark_failed(stderr[-1000:] if stderr else "Unknown error")
+                self.is_running = False
+                self.is_complete = True
 
         except Exception as e:
             LOG.error(f"Error in backtest task: {e}")
-            self.mark_failed(str(e))
+            self.is_running = False
+            self.is_complete = True
         finally:
             self.cleanup()
 
     def check_progress(self) -> None:
-        """Check and update progress for running backtest"""
+        """Check progress for running backtest"""
         if self.backtest_process and self.backtest_process.poll() is None:
-            self.update_progress({"progress": "running"})
+            LOG.debug(f"Backtest {self.job_id} is still running")
 
     def cleanup(self) -> None:
         """Clean up resources"""
