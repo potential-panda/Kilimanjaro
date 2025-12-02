@@ -1,5 +1,6 @@
 import argparse
 from dataclasses import dataclass
+from logging import getLogger
 from pathlib import Path
 
 from flask import Flask, jsonify, request
@@ -10,7 +11,7 @@ from qate.env.env_name import EnvName
 
 from kilimanjaro.data_access import JobDataAccess
 
-# Configuration
+LOG = getLogger(__name__)
 PORT = 8766
 JOB_DIR = Path(sys_env.ENV_DIR) / EnvName.KILIMANJARO_API.name / "jobs"
 RESULTS_DIR = Path(sys_env.ENV_DIR) / EnvName.KILIMANJARO_API.name / "results"
@@ -133,6 +134,7 @@ def create_app(config: Config = None):
             return jsonify(jobs), 200
 
         except Exception as e:
+            LOG.exception(e)
             return jsonify({"error": str(e)}), 500
 
     @app.route("/job/update/<job_id>", methods=["POST"])
@@ -148,6 +150,7 @@ def create_app(config: Config = None):
                 return jsonify({"error": "Job not found"}), 404
 
         except Exception as e:
+            LOG.exception(e)
             return jsonify({"error": str(e)}), 500
 
     @app.route("/job/<job_id>", methods=["GET"])
@@ -192,14 +195,18 @@ def create_app(config: Config = None):
 def main():
     env = Env(sys_env.ENV_DIR, EnvName.KILIMANJARO_API)
     env.load()
-    config = env.get("config")
+    try:
+        env.enter()
+        config = env.get("config")
 
-    app = create_app(config)
+        app = create_app(config)
 
-    print(f"Starting Kilimanjaro API server on port {config.port}")
-    print(f"Job directory: {config.job_dir}")
-    print(f"Results directory: {config.results_dir}")
-    app.run(host="0.0.0.0", port=config.port, threaded=True)
+        print(f"Starting Kilimanjaro API server on port {config.port}")
+        print(f"Job directory: {config.job_dir}")
+        print(f"Results directory: {config.results_dir}")
+        app.run(host="0.0.0.0", port=config.port, threaded=True)
+    finally:
+        env.leave()
 
 
 if __name__ == "__main__":
