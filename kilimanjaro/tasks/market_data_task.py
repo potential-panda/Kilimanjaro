@@ -228,9 +228,8 @@ def load_config():
 class MarketDataTask(BaseTask):
     """Task for downloading, merging and saving market data"""
 
-    def __init__(self):
+    def __init__(self, _):
         super().__init__()
-        self.job_data = {}  # Scheduled task with no job data
         self.config = load_config()
         self.output_dir = self.config.output_dir
         self.download_tmp_dir = self.config.download_tmp_dir
@@ -247,16 +246,6 @@ class MarketDataTask(BaseTask):
         }
 
     def _get_markets(self) -> list[Market]:
-        """Get list of markets to process from job data or use defaults"""
-        markets_data = self.job_data.get("markets")
-        if markets_data:
-            # Parse markets from job data
-            markets = []
-            for m in markets_data:
-                exchange = ExchangeName[m["exchange"]]
-                symbol = Symbol[m["symbol"]]
-                markets.append(Market(exchange, symbol))
-            return markets
         return DEFAULT_MARKETS
 
     def _ensure_directories(self):

@@ -190,9 +190,8 @@ def load_config():
 class MetricsDataTask(BaseTask):
     """Task for downloading and processing metrics data from S3 to InfluxDB"""
 
-    def __init__(self):
+    def __init__(self, _):
         super().__init__()
-        self.job_data = {}  # Scheduled task with no job data
         self.config = load_config()
         self.download_dir = Path(self.config.download_dir)
         self.download_dir.mkdir(parents=True, exist_ok=True)
@@ -207,11 +206,6 @@ class MetricsDataTask(BaseTask):
         }
 
     def _get_hosts(self) -> list[str]:
-        """Get list of hosts to process from job data or use defaults"""
-        hosts_data = self.job_data.get("hosts")
-        if hosts_data:
-            return hosts_data
-        # Default to orion-01 and orion-03 as specified
         return ["orion-01", "orion-03"]
 
     def _process_host(self, host: str) -> Dict[str, int]:

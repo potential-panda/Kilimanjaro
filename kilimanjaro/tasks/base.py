@@ -24,7 +24,6 @@ class BaseTask(ABC):
         acquired = lock.acquire(blocking=False)
         if acquired:
             self._lock_acquired = True
-            LOG.info(f"Lock acquired for task type '{task_class.__name__}'")
         else:
             LOG.warning(
                 f"Could not acquire lock for task type '{task_class.__name__}': another task of this type is running"
@@ -45,9 +44,8 @@ class BaseTask(ABC):
         if lock:
             lock.release()
             self._lock_acquired = False
-            LOG.info(f"Lock released for task type '{task_class.__name__}'")
 
-    def run(self) -> None:
+    def run_async(self) -> None:
         if not self.try_acquire_lock():
             LOG.warning(f"Task skipped: another task of type '{self.__class__.__name__}' is running")
             return
@@ -59,6 +57,19 @@ class BaseTask(ABC):
         thread.start()
 
     def _run_in_thread(self):
+        try:
+            self.execute()
+        except Exception as e:
+            LOG.error(f"Error executing task {self.__class__.__name__}: {e}")
+            raise
+        finally:
+            self.release_lock()
+
+    def run(self) -> None:
+        if not self.try_acquire_lock():
+            LOG.warning(f"Task skipped: another task of type '{self.__class__.__name__}' is running")
+            return
+
         try:
             self.execute()
         except Exception as e:
