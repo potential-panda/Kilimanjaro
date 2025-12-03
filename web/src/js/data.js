@@ -6,8 +6,17 @@ function generateGrafanaUrl(bucketName, fromDate, toDate) {
     if (!dateStr) return '';
     try {
       let date;
+      // Handle YYYYMMDD_hhmm format (e.g., "20250919_1430")
+      if (/^\d{8}_\d{4}$/.test(dateStr)) {
+        const year = dateStr.substring(0, 4);
+        const month = dateStr.substring(4, 6);
+        const day = dateStr.substring(6, 8);
+        const hour = dateStr.substring(9, 11);
+        const minute = dateStr.substring(11, 13);
+        date = new Date(`${year}-${month}-${day}T${hour}:${minute}:00`);
+      }
       // Handle YYYYMMDD format (e.g., "20250919")
-      if (/^\d{8}$/.test(dateStr)) {
+      else if (/^\d{8}$/.test(dateStr)) {
         const year = dateStr.substring(0, 4);
         const month = dateStr.substring(4, 6);
         const day = dateStr.substring(6, 8);
@@ -22,12 +31,15 @@ function generateGrafanaUrl(bucketName, fromDate, toDate) {
       }
 
       // Set time based on whether it's start or end date
-      if (isEndDate) {
-        // End of day: 23:59:59.999
-        date.setHours(23, 59, 59, 999);
-      } else {
-        // Start of day: 00:00:00.000
-        date.setHours(0, 0, 0, 0);
+      // Only apply for YYYYMMDD format (not for YYYYMMDD_hhmm which already has time)
+      if (!/^\d{8}_\d{4}$/.test(dateStr)) {
+        if (isEndDate) {
+          // End of day: 23:59:59.999
+          date.setHours(23, 59, 59, 999);
+        } else {
+          // Start of day: 00:00:00.000
+          date.setHours(0, 0, 0, 0);
+        }
       }
 
       return date.toISOString();
