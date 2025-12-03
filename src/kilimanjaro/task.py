@@ -6,7 +6,7 @@ from logging import getLogger
 from pathlib import Path
 
 LOG = getLogger(__name__)
-LOCK_DIR = Path("./task_locks")
+LOCK_DIR = "./task_locks"
 
 
 class Task(ABC):
@@ -17,13 +17,15 @@ class Task(ABC):
     def _get_lock_file_path(self) -> Path:
         """Get the lock file path for this task type"""
         task_class_name = self.__class__.__name__
-        return LOCK_DIR / f"{task_class_name}.lock"
+        lock_dir = Path(LOCK_DIR)
+        return lock_dir / f"{task_class_name}.lock"
 
     def try_acquire_lock(self) -> bool:
         """Try to acquire a file-based lock for this task type"""
         try:
             # Ensure lock directory exists
-            LOCK_DIR.mkdir(parents=True, exist_ok=True)
+            lock_dir = Path(LOCK_DIR)
+            lock_dir.mkdir(parents=True, exist_ok=True)
 
             lock_file_path = self._get_lock_file_path()
 
