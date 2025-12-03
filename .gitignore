@@ -158,6 +158,9 @@ ops/hosts
 *.jsonl
 *.writing
 
+# Task lock files
+task_locks/
+
 \#.*
 public/
 *~
