@@ -153,38 +153,36 @@ a:hover {
   color: var(--dark-text-primary);
 }
 
-.table tbody tr.highlighted-row {
+.table tbody tr.highlighted-row td {
   --bs-table-bg: var(--dark-highlight-row) !important;
   --bs-table-striped-bg: var(--dark-highlight-row) !important;
   --bs-table-hover-bg: var(--dark-highlight-row) !important;
+  --bs-table-active-bg: var(--dark-highlight-row) !important;
   background-color: var(--dark-highlight-row) !important;
 }
 
-.table tbody tr.highlighted-row td {
-  --bs-table-bg: var(--dark-highlight-row) !important;
-  background-color: var(--dark-highlight-row) !important;
-}
-
-.table .highlighted-column {
+.table td.highlighted-column {
   --bs-table-bg: var(--dark-highlight-col) !important;
   --bs-table-striped-bg: var(--dark-highlight-col) !important;
+  --bs-table-hover-bg: var(--dark-highlight-col) !important;
+  --bs-table-active-bg: var(--dark-highlight-col) !important;
   background-color: var(--dark-highlight-col) !important;
 }
 
-.table tbody tr.highlighted-row .highlighted-column {
+.table th.highlighted-column {
+  --bs-table-bg: var(--dark-highlight-col) !important;
+  --bs-table-striped-bg: var(--dark-highlight-col) !important;
+  --bs-table-hover-bg: var(--dark-highlight-col) !important;
+  --bs-table-active-bg: var(--dark-highlight-col) !important;
+  background-color: var(--dark-highlight-col) !important;
+}
+
+.table tbody tr.highlighted-row td.highlighted-column {
   --bs-table-bg: var(--dark-highlight-both) !important;
   --bs-table-striped-bg: var(--dark-highlight-both) !important;
+  --bs-table-hover-bg: var(--dark-highlight-both) !important;
+  --bs-table-active-bg: var(--dark-highlight-both) !important;
   background-color: var(--dark-highlight-both) !important;
-}
-
-/* Override striped rows for highlighted cells */
-.table-striped tbody tr.highlighted-row {
-  --bs-table-bg: var(--dark-highlight-row) !important;
-  --bs-table-striped-bg: var(--dark-highlight-row) !important;
-}
-
-.table-striped tbody .highlighted-column {
-  --bs-table-striped-bg: var(--dark-highlight-col) !important;
 }
 
 /* Alerts */
