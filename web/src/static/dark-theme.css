@@ -328,3 +328,86 @@ small {
 .dropdown-divider {
   border-color: var(--dark-border);
 }
+
+/* Cards */
+.card {
+  background-color: var(--dark-bg-secondary);
+  border-color: var(--dark-border);
+  color: var(--dark-text-primary);
+}
+
+.card-header {
+  background-color: var(--dark-bg-tertiary);
+  border-color: var(--dark-border);
+  color: var(--dark-text-primary);
+}
+
+.card-body {
+  background-color: var(--dark-bg-secondary);
+  color: var(--dark-text-primary);
+}
+
+.card-title {
+  color: var(--dark-text-primary);
+}
+
+.card-footer {
+  background-color: var(--dark-bg-tertiary);
+  border-color: var(--dark-border);
+}
+
+/* Form labels */
+.form-label {
+  color: var(--dark-text-primary);
+}
+
+.form-label-sm {
+  color: var(--dark-text-primary);
+}
+
+.form-check-label {
+  color: var(--dark-text-primary);
+}
+
+/* Form check inputs (checkboxes) */
+.form-check-input {
+  background-color: var(--dark-bg-tertiary);
+  border-color: var(--dark-border);
+}
+
+.form-check-input:checked {
+  background-color: var(--dark-link);
+  border-color: var(--dark-link);
+}
+
+.form-check-input:focus {
+  border-color: var(--dark-link);
+  box-shadow: 0 0 0 0.25rem rgba(93, 173, 226, 0.25);
+}
+
+/* Date inputs */
+input[type="date"] {
+  background-color: var(--dark-bg-secondary);
+  border-color: var(--dark-border);
+  color: var(--dark-text-primary);
+  color-scheme: dark;
+}
+
+input[type="date"]:focus {
+  background-color: var(--dark-bg-tertiary);
+  border-color: var(--dark-link);
+  color: var(--dark-text-primary);
+}
+
+/* Number inputs */
+input[type="number"] {
+  background-color: var(--dark-bg-secondary);
+  border-color: var(--dark-border);
+  color: var(--dark-text-primary);
+}
+
+input[type="number"]:focus {
+  background-color: var(--dark-bg-tertiary);
+  border-color: var(--dark-link);
+  color: var(--dark-text-primary);
+}
