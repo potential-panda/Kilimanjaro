@@ -8,6 +8,7 @@ const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 const distDir = './public';
 const whirlpoolDist = path.resolve(__dirname, 'src/static/whirlpool.min.js');
+const darkThemeCss = path.resolve(__dirname, 'src/static/dark-theme.css');
 
 module.exports = {
   entry: [
@@ -33,6 +34,10 @@ module.exports = {
         {
           from: whirlpoolDist,
           to: path.resolve(__dirname, distDir, 'whirlpool.min.js'),
+        },
+        {
+          from: darkThemeCss,
+          to: path.resolve(__dirname, distDir, 'dark-theme.css'),
         },
       ],
     }),
