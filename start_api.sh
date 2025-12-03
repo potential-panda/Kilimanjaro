@@ -7,3 +7,4 @@ cd "$(dirname "$0")"
 nohup python src/api.py > kilimanjaro_api.log 2>&1 &
 
 echo "Kilimanjaro API started with PID $!"
+
