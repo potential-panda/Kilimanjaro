@@ -11,7 +11,7 @@ import qate.env.sys_env as sys_env
 from qate.store.s3 import download
 from qate.util.serializer import MetricSerializer
 
-from .base import BaseTask
+from ..task import Task
 
 LOG = getLogger(__name__)
 
@@ -187,7 +187,7 @@ def load_config():
     return Config()
 
 
-class MetricsDataTask(BaseTask):
+class MetricsDataTask(Task):
     """Task for downloading and processing metrics data from S3 to InfluxDB"""
 
     def __init__(self, _):

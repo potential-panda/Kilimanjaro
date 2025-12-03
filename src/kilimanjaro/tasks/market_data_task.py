@@ -13,7 +13,7 @@ from qate.store.msgpack_loader import MarketDataLoader
 from qate.store.s3 import download
 from qate.util.serializer import OrderBookSerializer, TradeSerializer
 
-from .base import BaseTask
+from ..task import Task
 
 LOG = getLogger(__name__)
 
@@ -225,7 +225,7 @@ def load_config():
     return Config()
 
 
-class MarketDataTask(BaseTask):
+class MarketDataTask(Task):
     """Task for downloading, merging and saving market data"""
 
     def __init__(self, _):

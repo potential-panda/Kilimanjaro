@@ -6,8 +6,8 @@ from typing import Any, Dict
 import httpx
 from qate.env.env_name import EnvName
 
-from .backtest_runner import run_backtest
-from .base import BaseTask
+from ..backtest_runner import run_backtest
+from ..task import Task
 
 LOG = getLogger(__name__)
 API_BASE_URL = "http://localhost:8766"
@@ -24,7 +24,7 @@ def load_config():
     return Config()
 
 
-class JobAcquisitionTask(BaseTask):
+class BestDaysTask(Task):
     def __init__(self, config):
         super().__init__()
         self.config = config

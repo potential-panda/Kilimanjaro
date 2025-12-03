@@ -5,7 +5,7 @@ from logging import getLogger
 LOG = getLogger(__name__)
 
 
-class BaseTask(ABC):
+class Task(ABC):
     def __init__(self):
         self._lock_acquired = False
 
@@ -45,7 +45,7 @@ class BaseTask(ABC):
             lock.release()
             self._lock_acquired = False
 
-    def run_async(self) -> None:
+    def run_async(self) -> threading.Thread:
         if not self.try_acquire_lock():
             LOG.warning(f"Task skipped: another task of type '{self.__class__.__name__}' is running")
             return
@@ -55,6 +55,7 @@ class BaseTask(ABC):
             daemon=True,
         )
         thread.start()
+        return thread
 
     def _run_in_thread(self):
         try:

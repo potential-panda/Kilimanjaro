@@ -1,0 +1,136 @@
+import argparse
+import time
+from dataclasses import dataclass
+from logging import getLogger
+from typing import Any, Type
+
+import schedule
+from qate.env import sys_env
+from qate.env.env import Env, EnvName
+
+from kilimanjaro.task import Task
+from kilimanjaro.tasks import (
+    AddBacktestTask,
+    JobAcquisitionTask,
+    MarketDataTask,
+    MetricsDataTask,
+)
+
+LOG = getLogger(__name__)
+ENV_NAME = EnvName.KILIMANJARO_AGENT
+API_BASE_URL = "http://localhost:8766"
+
+
+@dataclass
+class Config:
+    api_base_url: str = API_BASE_URL
+    job_acquisition_interval: int = 12  # seconds
+    market_data_schedule_time: str = "04:00"  # 4am daily
+    metrics_data_interval: int = 10  # minutes
+
+
+def run_task(TaskClass: Type[Task], input: Any = None):
+    LOG.info(f"run_task {TaskClass}")
+    task = TaskClass(input)
+    return task.run_async()
+
+
+class KilimanjaroAgent:
+    def __init__(self, config: Config):
+        self.config = config
+
+    def start(self):
+        LOG.info("Starting Kilimanjaro Agent")
+        LOG.info(f"config: {self.config}")
+
+        schedule.every(11).seconds.do(run_task, JobAcquisitionTask, self.config)
+        schedule.every().day.at("04:00").do(run_task, MarketDataTask)
+        schedule.every(11).minutes.do(run_task, MetricsDataTask)
+
+        schedule.every().day.at("03:00").do(
+            run_task,
+            AddBacktestTask,
+            {
+                "env_name": EnvName.BACKTEST_LAST_WEEK,
+                "from_dt": "ONE_WEEK_AGO",
+            },
+        )
+        schedule.every().week.at("05:00").do(
+            run_task,
+            AddBacktestTask,
+            {
+                "env_name": EnvName.BACKTEST_LAST_MONTH,
+                "from_dt": "ONE_MONTH_AGO",
+            },
+        )
+
+        while True:
+            try:
+                schedule.run_pending()
+            except Exception:
+                LOG.exception("Unhandled exception while running scheduled task")
+            try:
+                time.sleep(10)
+            except KeyboardInterrupt:
+                break
+
+
+def handle_setup(args):
+    Env.setup_env(
+        sys_env.ENV_DIR,
+        ENV_NAME,
+        {
+            "config": Config(),
+        },
+    )
+
+
+def handle_schedule(args):
+    env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
+    try:
+        env.enter()
+        agent = KilimanjaroAgent(env.get("config"))
+        agent.start()
+    finally:
+        env.leave()
+
+
+def handle_run(args):
+    env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
+    try:
+        env.visit()
+        thread = run_task(
+            AddBacktestTask,
+            {
+                "env_name": EnvName.BACKTEST_LAST_MONTH,
+                "from_dt": "ONE_MONTH_AGO",
+            },
+        )
+        thread.join()
+    finally:
+        env.leave()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Kilimanjaro Agent")
+    subparsers = parser.add_subparsers(dest="command")
+
+    setup_parser = subparsers.add_parser("setup", help="Setup the agent environment")
+    setup_parser.set_defaults(func=handle_setup)
+
+    schedule_parser = subparsers.add_parser("schedule", help="Start the agent scheduler")
+    schedule_parser.set_defaults(func=handle_schedule)
+
+    run_parser = subparsers.add_parser("run", help="run a task")
+    run_parser.set_defaults(func=handle_run)
+
+    args = parser.parse_args()
+
+    if hasattr(args, "func"):
+        args.func(args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
