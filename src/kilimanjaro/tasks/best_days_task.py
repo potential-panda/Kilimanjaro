@@ -5,6 +5,7 @@ from pathlib import Path
 
 from qate.env.env_name import EnvName
 
+from .. import job_data
 from ..backtest_runner import run_backtest
 from ..task import Task
 
@@ -23,43 +24,18 @@ class BestDaysTask(Task):
     def execute(self) -> None:
         """Execute backtest and log best parameters from result file"""
         try:
-            # Generate job_data in memory
-            job_data = {
-                "job_id": "best_days_task",
-                "strategy_name": "orion",
-                "variant": "v601",
-                "from_dt": "ONE_WEEK_AGO",
-                "to_dt": "",
-                "optimize": True,
-                "retest": True,
-                "config": {
-                    "market": "GMO:XRP_JPY",
-                    "ref_market": "BINANCE:XRP_USDT",
-                    "order_size": 200,
-                    "magnifier": 5,
-                },
-                "param_grid": [
-                    {"name": "acceleration", "default_value": 0.02, "values": [0.02], "factor": 1000},
-                    {"name": "step", "default_value": 0.04, "values": [0.02, 0.04], "factor": 1000},
-                    {"name": "maximum", "default_value": 0.2, "values": [0.2], "factor": 1000},
-                    {
-                        "name": "box_size_rate",
-                        "default_value": 0.0015,
-                        "values": [0.001, 0.0015, 0.002, 0.0025, 0.003],
-                        "factor": 100000,
-                    },
-                ],
-            }
+            # Generate job_data using preset
+            backtest_job_data = job_data.create("ONE_WEEK_AGO", "xrp")
 
             LOG.info("Starting backtest with job_data")
-            LOG.info(f"Job data: {json.dumps(job_data, indent=2)}")
+            LOG.info(f"Job data: {json.dumps(backtest_job_data, indent=2)}")
 
             # Run the backtest
             run_logs = run_backtest(
                 DEFAULT_ENV_NAME,
-                job_data,
-                job_data["config"],
-                job_data["param_grid"],
+                backtest_job_data,
+                backtest_job_data["config"],
+                backtest_job_data["param_grid"],
             )
 
             LOG.info(f"Backtest completed. Got {len(run_logs)} run logs")
