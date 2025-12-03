@@ -267,7 +267,7 @@ class MarketDataTask(Task):
 
             dist_file = Path(self.output_dir) / f"{name}.msgpack"
             if dist_file.is_file():
-                LOG.info(f"Dist File {dist_file} already exists")
+                LOG.debug(f"Dist File {dist_file} already exists")
                 self.stats["skipped_files"] += 1
                 continue
 

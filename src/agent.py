@@ -30,7 +30,6 @@ class Config:
 
 
 def run_task(TaskClass: Type[Task], input: Any = None):
-    LOG.info(f"run_task {TaskClass}")
     task = TaskClass(input)
     return task.run_async()
 
@@ -96,16 +95,19 @@ def handle_schedule(args):
 
 
 def handle_run(args):
+    # Map task names to task classes
+    task_map = {
+        "MarketDataTask": MarketDataTask,
+        "MetricsDataTask": MetricsDataTask,
+    }
+
+    task_class = task_map[args.task]
+
     env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
     try:
         env.visit()
-        thread = run_task(
-            AddBacktestTask,
-            {
-                "env_name": EnvName.BACKTEST_LAST_MONTH,
-                "from_dt": "ONE_MONTH_AGO",
-            },
-        )
+        LOG.info(f"Running task: {args.task}")
+        thread = run_task(task_class)
         thread.join()
     finally:
         env.leave()
@@ -121,7 +123,13 @@ def main():
     schedule_parser = subparsers.add_parser("schedule", help="Start the agent scheduler")
     schedule_parser.set_defaults(func=handle_schedule)
 
-    run_parser = subparsers.add_parser("run", help="run a task")
+    run_parser = subparsers.add_parser("run", help="Run a task manually")
+    run_parser.add_argument(
+        "--task",
+        required=True,
+        choices=["MarketDataTask", "MetricsDataTask"],
+        help="Task to run",
+    )
     run_parser.set_defaults(func=handle_run)
 
     args = parser.parse_args()
