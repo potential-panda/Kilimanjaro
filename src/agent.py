@@ -63,8 +63,8 @@ class KilimanjaroAgent:
                 "from_dt": "ONE_MONTH_AGO",
             },
         )
-        schedule.every().hour.at(":05").do(run_task, BestDaysTask, {"preset": "xrp"})
-        schedule.every().hour.at(":35").do(run_task, BestDaysTask, {"preset": "eth"})
+        schedule.every().hour.at(":20").do(run_task, BestDaysTask, {"preset": "xrp"})
+        schedule.every().hour.at(":50").do(run_task, BestDaysTask, {"preset": "eth"})
 
         while True:
             try:
