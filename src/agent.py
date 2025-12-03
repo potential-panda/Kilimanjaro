@@ -63,8 +63,8 @@ class KilimanjaroAgent:
                 "from_dt": "ONE_MONTH_AGO",
             },
         )
-        schedule.every().hour.at(":05").do(run_task, BestDaysTask, "xrp")
-        schedule.every().hour.at(":15").do(run_task, BestDaysTask, "eth")
+        schedule.every().hour.at(":05").do(run_task, BestDaysTask, {"preset": "xrp"})
+        schedule.every().hour.at(":35").do(run_task, BestDaysTask, {"preset": "eth"})
 
         while True:
             try:
@@ -140,7 +140,7 @@ def handle_best(args):
     env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
     try:
         env.visit()
-        thread = run_task(BestDaysTask)
+        thread = run_task(BestDaysTask, {"preset": args.preset})
         if thread:
             thread.join()
     finally:
@@ -168,6 +168,7 @@ def main():
     c_parser.set_defaults(func=handle_backtest)
 
     d_parser = subparsers.add_parser("best")
+    d_parser.add_argument("--preset", default="xrp")
     d_parser.set_defaults(func=handle_best)
 
     args = parser.parse_args()

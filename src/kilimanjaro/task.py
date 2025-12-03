@@ -30,7 +30,7 @@ class Task(ABC):
             lock_file_path = self._get_lock_file_path()
 
             # Open the lock file (create if doesn't exist)
-            self._lock_file = open(lock_file_path, 'w')
+            self._lock_file = open(lock_file_path, "w")
 
             # Try to acquire exclusive lock without blocking
             fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -47,9 +47,7 @@ class Task(ABC):
             if self._lock_file:
                 self._lock_file.close()
                 self._lock_file = None
-            LOG.warning(
-                f"Could not acquire lock for task type '{self.__class__.__name__}': another task of this type is running"
-            )
+            # LOG.warning(f"Could not acquire lock for task type '{self.__class__.__name__}'")
             return False
         except Exception as e:
             if self._lock_file:
@@ -81,7 +79,7 @@ class Task(ABC):
 
     def run_async(self) -> threading.Thread:
         if not self.try_acquire_lock():
-            LOG.warning(f"Task skipped: another task of type '{self.__class__.__name__}' is running")
+            # LOG.warning(f"Task skipped: another task of type '{self.__class__.__name__}' is running")
             return
 
         thread = threading.Thread(

@@ -12,7 +12,7 @@ from qate.trading.param import ParamGrid
 
 LOG = getLogger(__name__)
 
-BACKTEST_SCRIPT = "/panda/potential-panda/Himalaya/src/b.py"
+BACKTEST_SCRIPT = "/panda/potential-panda/Himalaya/start.sh"
 
 
 options = {
@@ -73,7 +73,7 @@ def create_cmd(env_name: EnvName, options: dict) -> list:
     optimize = options.get("optimize", False)
     retest = options.get("retest", False)
 
-    cmd = ["python", BACKTEST_SCRIPT, "--env", env_name.name, "--from-dt", from_dt]
+    cmd = [BACKTEST_SCRIPT, "--env", env_name.name, "--from-dt", from_dt]
     if to_dt:
         cmd.extend(["--to-dt", to_dt])
     if variant:
@@ -123,12 +123,8 @@ def run_backtest(env_name: EnvName, options: dict, config: dict, param_grid: dic
     cmd = create_cmd(env_name, options)
     LOG.info(f"Starting backtest {' '.join(cmd)}")
 
-    shell_env = os.environ.copy()
-    shell_env["PYTHON_GIL"] = "0"
-
     bt_process = subprocess.Popen(
         cmd,
-        env=shell_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

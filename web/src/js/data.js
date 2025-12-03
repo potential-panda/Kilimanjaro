@@ -101,8 +101,8 @@ function formatData(data) {
     if (flattened.bucket_name) {
       flattened.__grafana_url = generateGrafanaUrl(
         flattened.bucket_name,
-        flattened.from_date || flattened.from_dt,
-        flattened.to_date || flattened.to_dt
+        flattened.start_str || flattened.from_dt,
+        flattened.end_str || flattened.to_dt
       );
     }
     return formatFloats(flattened);

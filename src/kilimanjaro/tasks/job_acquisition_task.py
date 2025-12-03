@@ -29,13 +29,21 @@ class JobRunner:
     def __init__(self, job_data):
         self.job_data = job_data
 
+    def _get_env_name(self) -> EnvName:
+        try:
+            return EnvName[self.job_data["env_name"]]
+        except Exception:
+            return DEFAULT_ENV_NAME
+
     def run(self) -> None:
         try:
             LOG.info(self.job_data)
             self.job_id = self.job_data["job_id"]
+            env_name = self._get_env_name()
+
             self.mark_started()
             run_logs = run_backtest(
-                DEFAULT_ENV_NAME,
+                env_name,
                 self.job_data,
                 self.job_data["config"],
                 self.job_data["param_grid"],

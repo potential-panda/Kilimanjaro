@@ -67,47 +67,15 @@ class BestDaysTask(Task):
 
             LOG.info(f"Backtest completed. Got {len(run_logs)} run logs")
 
-            # Read and log best parameters from result folder
-            self._log_best_parameters()
+            params_path = self.populate_best_params()
+            if params_path:
+                self.scp_to_remote(params_path)
 
         except Exception as e:
             LOG.error(f"Error executing BestDaysTask: {e}")
             raise
 
-    def populate_best_params(self, result_file: Path) -> Path:
-        """Parse best result JSON, merge with template, and save to local file
-
-        Args:
-            result_file: Path to the result JSON file
-
-        Returns:
-            Path to the saved params.json file
-        """
-        # Read and parse the JSON content
-        with open(result_file, "r") as f:
-            content = f.read()
-            result_data = json.loads(content)
-            best_params = result_data.get("params", {})
-            merged_params = copy.deepcopy(PARAMS_TEMPLATE)
-            merged_params.update(best_params)
-
-            # Save to ./tmp/{preset}/params.json
-            output_dir = Path("./tmp") / self.preset
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_file = output_dir / "params.json"
-
-            with open(output_file, "w") as out_f:
-                json.dump(merged_params, out_f, indent=2)
-
-            LOG.info(f"Saved merged parameters to: {output_file} {merged_params}")
-            return output_file
-
     def scp_to_remote(self, local_file: Path) -> None:
-        """Copy params.json to remote host using scp
-
-        Args:
-            local_file: Path to the local params.json file
-        """
         remote_path = PRESET_REMOTE.get(self.preset)
         if not remote_path:
             LOG.warning(f"No remote path configured for preset: {self.preset}")
@@ -124,8 +92,7 @@ class BestDaysTask(Task):
             LOG.error(f"Failed to copy params.json to {remote_path}: {e}")
             LOG.error(f"scp stderr: {e.stderr}")
 
-    def _log_best_parameters(self) -> None:
-        """Read and log best parameters from the best result directory"""
+    def populate_best_params(self) -> Path:
         try:
             env = Env(sys_env.ENV_DIR, DEFAULT_ENV_NAME)
             best_result_dir = Path(env.work_dir) / BEST_RESULT_DIR
@@ -154,11 +121,23 @@ class BestDaysTask(Task):
 
             LOG.info(f"Reading best parameters from: {newest_file} (created at: {ctime})")
 
-            # Populate best params and save locally
-            output_file = self.populate_best_params(newest_file)
+            with open(newest_file, "r") as f:
+                content = f.read()
+                result_data = json.loads(content)
+                best_params = result_data.get("params", {})
+                merged_params = copy.deepcopy(PARAMS_TEMPLATE)
+                merged_params.update(best_params)
 
-            # Copy to remote host
-            self.scp_to_remote(output_file)
+                # Save to ./tmp/{preset}/params.json
+                output_dir = Path("./tmp") / self.preset
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_file = output_dir / "params.json"
+
+                with open(output_file, "w") as out_f:
+                    json.dump(merged_params, out_f, indent=2)
+
+                LOG.info(f"Saved merged parameters to: {output_file} {merged_params}")
+                return output_file
 
         except Exception as e:
             LOG.error(f"Error reading best parameters: {e}")
