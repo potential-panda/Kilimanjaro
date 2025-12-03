@@ -50,7 +50,7 @@ class KilimanjaroAgent:
             run_task,
             AddBacktestTask,
             {
-                "env_name": EnvName.BACKTEST_LAST_WEEK,
+                "env_name": EnvName.BACKTEST_LAST_WEEK.name,
                 "from_dt": "ONE_WEEK_AGO",
             },
         )
@@ -58,7 +58,7 @@ class KilimanjaroAgent:
             run_task,
             AddBacktestTask,
             {
-                "env_name": EnvName.BACKTEST_LAST_MONTH,
+                "env_name": EnvName.BACKTEST_LAST_MONTH.name,
                 "from_dt": "ONE_MONTH_AGO",
             },
         )
@@ -94,20 +94,31 @@ def handle_schedule(args):
         env.leave()
 
 
-def handle_run(args):
-    # Map task names to task classes
-    task_map = {
-        "MarketDataTask": MarketDataTask,
-        "MetricsDataTask": MetricsDataTask,
-    }
-
-    task_class = task_map[args.task]
-
+def handle_market_data(args):
     env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
     try:
         env.visit()
-        LOG.info(f"Running task: {args.task}")
-        thread = run_task(task_class)
+        thread = run_task(MarketDataTask)
+        thread.join()
+    finally:
+        env.leave()
+
+
+def handle_metrics_data(args):
+    env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
+    try:
+        env.visit()
+        thread = run_task(MetricsDataTask)
+        thread.join()
+    finally:
+        env.leave()
+
+
+def handle_backtest(args):
+    env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
+    try:
+        env.visit()
+        thread = run_task(AddBacktestTask, args)
         thread.join()
     finally:
         env.leave()
@@ -123,14 +134,15 @@ def main():
     schedule_parser = subparsers.add_parser("schedule", help="Start the agent scheduler")
     schedule_parser.set_defaults(func=handle_schedule)
 
-    run_parser = subparsers.add_parser("run", help="Run a task manually")
-    run_parser.add_argument(
-        "--task",
-        required=True,
-        choices=["MarketDataTask", "MetricsDataTask"],
-        help="Task to run",
-    )
-    run_parser.set_defaults(func=handle_run)
+    a_parser = subparsers.add_parser("market-data")
+    a_parser.set_defaults(func=handle_market_data)
+
+    b_parser = subparsers.add_parser("metrics-data")
+    b_parser.set_defaults(func=handle_metrics_data)
+
+    c_parser = subparsers.add_parser("backtest")
+    c_parser.add_argument("--from-dt", required=True, help="Start date for backtest")
+    c_parser.set_defaults(func=handle_backtest)
 
     args = parser.parse_args()
 
