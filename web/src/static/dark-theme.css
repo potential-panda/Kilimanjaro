@@ -9,9 +9,9 @@
   --dark-text-primary: #e4e6eb;
   --dark-text-secondary: #b0b3b8;
   --dark-text-muted: #8a8d93;
-  --dark-highlight-row: #3a4a3a;
-  --dark-highlight-col: #2a4a5a;
-  --dark-highlight-both: #4a5a3a;
+  --dark-highlight-row: #5d6e3a;
+  --dark-highlight-col: #3a6080;
+  --dark-highlight-both: #6d7e4a;
   --dark-link: #5dade2;
   --dark-link-hover: #85c1e9;
 }
@@ -155,21 +155,36 @@ a:hover {
 
 .table tbody tr.highlighted-row {
   --bs-table-bg: var(--dark-highlight-row) !important;
+  --bs-table-striped-bg: var(--dark-highlight-row) !important;
+  --bs-table-hover-bg: var(--dark-highlight-row) !important;
   background-color: var(--dark-highlight-row) !important;
 }
 
 .table tbody tr.highlighted-row td {
+  --bs-table-bg: var(--dark-highlight-row) !important;
   background-color: var(--dark-highlight-row) !important;
 }
 
 .table .highlighted-column {
   --bs-table-bg: var(--dark-highlight-col) !important;
+  --bs-table-striped-bg: var(--dark-highlight-col) !important;
   background-color: var(--dark-highlight-col) !important;
 }
 
 .table tbody tr.highlighted-row .highlighted-column {
   --bs-table-bg: var(--dark-highlight-both) !important;
+  --bs-table-striped-bg: var(--dark-highlight-both) !important;
   background-color: var(--dark-highlight-both) !important;
+}
+
+/* Override striped rows for highlighted cells */
+.table-striped tbody tr.highlighted-row {
+  --bs-table-bg: var(--dark-highlight-row) !important;
+  --bs-table-striped-bg: var(--dark-highlight-row) !important;
+}
+
+.table-striped tbody .highlighted-column {
+  --bs-table-striped-bg: var(--dark-highlight-col) !important;
 }
 
 /* Alerts */
