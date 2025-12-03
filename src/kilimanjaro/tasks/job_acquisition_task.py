@@ -7,6 +7,7 @@ import httpx
 from qate.env.env_name import EnvName
 
 from ..backtest_runner import run_backtest
+from ..data_access import JobDataAccess
 from ..task import Task
 
 LOG = getLogger(__name__)
@@ -61,16 +62,18 @@ class JobRunner:
 
 
 class LocalJobRunner(JobRunner):
-    def __init__(self, job_data):
+    def __init__(self, job_data, job_data_access):
         super().__init__(job_data)
+        self.job_data_access = job_data_access
 
     def update_progress(self, update_data):
-        pass
+        self.job_data_access.update_job(self.job_id, update_data)
 
 
 class ApiJobRunner(JobRunner):
-    def __init__(self, job_data):
+    def __init__(self, job_data, client):
         super().__init__(job_data)
+        self.client = client
 
     def update_progress(self, update_data: Dict[str, Any]) -> None:
         update_data["ts"] = time.time()
@@ -87,18 +90,38 @@ class JobAcquisitionTask(Task):
         super().__init__()
         self.config = config
         self.client = httpx.Client(base_url=self.config.api_base_url, timeout=30.0)
+        self.job_data_access = JobDataAccess("jobs", "results")
 
-    def _acquire_job(self) -> JobRunner:
-        response = self.client.post("/job/acquire")
-        if response.status_code == 200:
-            job_data = response.json()
-            if job_data:
-                LOG.info(f"Acquired job: {job_data.get('job_id')}")
-                return ApiJobRunner(job_data)
+    def _acquire_api_job(self) -> JobRunner:
+        """Try to acquire a job from the API"""
+        try:
+            response = self.client.post("/job/acquire")
+            if response.status_code == 200:
+                job_data = response.json()
+                if job_data:
+                    LOG.info(f"Acquired API job: {job_data.get('job_id')}")
+                    return ApiJobRunner(job_data, self.client)
+        except Exception as e:
+            LOG.warning(f"Failed to acquire API job: {e}")
+        return None
+
+    def _acquire_local_job(self) -> JobRunner:
+        """Try to acquire a job from local files"""
+        job_data = self.job_data_access.acquire_job()
+        if job_data:
+            LOG.info(f"Acquired local job: {job_data.get('job_id')}")
+            return LocalJobRunner(job_data, self.job_data_access)
         return None
 
     def execute(self) -> None:
-        job_runner = self._acquire_job()
+        # Try API first
+        job_runner = self._acquire_api_job()
+
+        # Fall back to local jobs if API has no jobs
+        if not job_runner:
+            job_runner = self._acquire_local_job()
+
+        # Execute the job if one was acquired
         if not job_runner:
             return
         job_runner.run()
