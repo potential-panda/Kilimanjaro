@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import time
@@ -19,10 +20,22 @@ BEST_RESULT_DIR = "best_result"
 DEFAULT_ENV_NAME = EnvName.BACKTEST_DAYS_BEST
 
 
+PARAMS_TEMPLATE = {
+    "acceleration": 0.02,
+    "box_size_rate": 0.002,
+    "margin_pct_min": 0.0015,
+    "maximum": 0.2,
+    "period": 60,
+    "step": 0.02,
+    "tick_cnt_threshold": 50,
+    "volume_threshold": 0.5,
+}
+
+
 class BestDaysTask(Task):
     def __init__(self, config):
         super().__init__()
-        self.config = config
+        self.preset = config["preset"]
         self.start_time = None
 
     def execute(self) -> None:
@@ -33,10 +46,10 @@ class BestDaysTask(Task):
             LOG.info(f"Task started at: {self.start_time}")
 
             # Generate job_data using preset
-            backtest_job_data = job_data.create(DEFAULT_ENV_NAME.name, "TWO_DAYS_AGO", "xrp")
+            backtest_job_data = job_data.create(DEFAULT_ENV_NAME.name, "TWO_DAYS_AGO", self.preset)
 
             LOG.info("Starting backtest with job_data")
-            LOG.info(f"Job data: {json.dumps(backtest_job_data, indent=2)}")
+            LOG.info(f"Job data: {json.dumps(backtest_job_data)}")
 
             # Run the backtest
             run_logs = run_backtest(
@@ -85,7 +98,7 @@ class BestDaysTask(Task):
 
             LOG.info(f"Reading best parameters from: {newest_file} (created at: {ctime})")
 
-            # Read and log the content
+            # Read and parse the JSON content
             with open(newest_file, "r") as f:
                 content = f.read()
                 LOG.info("=" * 80)
@@ -93,6 +106,24 @@ class BestDaysTask(Task):
                 LOG.info("=" * 80)
                 LOG.info(content)
                 LOG.info("=" * 80)
+
+                # Parse JSON and extract params
+                result_data = json.loads(content)
+                best_params = result_data.get("params", {})
+
+                # Clone template and merge with best params
+                merged_params = copy.deepcopy(PARAMS_TEMPLATE)
+                merged_params.update(best_params)
+
+                # Save to ./tmp/{preset}/params.json
+                output_dir = Path("./tmp") / self.preset
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_file = output_dir / "params.json"
+
+                with open(output_file, "w") as out_f:
+                    json.dump(merged_params, out_f, indent=2)
+
+                LOG.info(f"Saved merged parameters to: {output_file}")
 
         except Exception as e:
             LOG.error(f"Error reading best parameters: {e}")
