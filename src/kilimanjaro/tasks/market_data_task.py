@@ -285,7 +285,7 @@ class MarketDataTask(Task):
 
             dist_file = Path(self.output_dir) / f"{name}.msgpack"
             if dist_file.is_file():
-                LOG.info(f"Dist File {dist_file} already exists")
+                LOG.debug(f"Dist File {dist_file} already exists")
                 self.stats["skipped_files"] += 1
                 continue
 
@@ -333,6 +333,7 @@ class MarketDataTask(Task):
                     self._process_market(market.exchange_name, market.symbol)
                 except Exception as e:
                     LOG.error(f"Error processing market {market}: {e}")
+                    LOG.exception(e)
                     self.stats["errors"] += 1
 
             LOG.info(f"Market data task completed. Stats: {self.stats}")
