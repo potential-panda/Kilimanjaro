@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import subprocess
 import time
 from logging import getLogger
 from pathlib import Path
@@ -29,6 +30,11 @@ PARAMS_TEMPLATE = {
     "step": 0.02,
     "tick_cnt_threshold": 50,
     "volume_threshold": 0.5,
+}
+
+PRESET_REMOTE = {
+    "xrp": "orion-01:/home/ubuntu/env/QIN_TENGFEI/",
+    "eth": "orion-03:/home/ubuntu/env/QASIM_TARIQ/",
 }
 
 
@@ -101,17 +107,8 @@ class BestDaysTask(Task):
             # Read and parse the JSON content
             with open(newest_file, "r") as f:
                 content = f.read()
-                LOG.info("=" * 80)
-                LOG.info("BEST PARAMETERS:")
-                LOG.info("=" * 80)
-                LOG.info(content)
-                LOG.info("=" * 80)
-
-                # Parse JSON and extract params
                 result_data = json.loads(content)
                 best_params = result_data.get("params", {})
-
-                # Clone template and merge with best params
                 merged_params = copy.deepcopy(PARAMS_TEMPLATE)
                 merged_params.update(best_params)
 
@@ -123,7 +120,24 @@ class BestDaysTask(Task):
                 with open(output_file, "w") as out_f:
                     json.dump(merged_params, out_f, indent=2)
 
-                LOG.info(f"Saved merged parameters to: {output_file}")
+                LOG.info(f"Saved merged parameters to: {output_file} {merged_params}")
+
+                # Copy to remote host using scp
+                remote_path = PRESET_REMOTE.get(self.preset)
+                if remote_path:
+                    try:
+                        scp_cmd = ["scp", str(output_file), remote_path]
+                        LOG.info(f"Running scp command: {' '.join(scp_cmd)}")
+                        result = subprocess.run(scp_cmd, check=True, capture_output=True, text=True)
+                        LOG.info(f"Successfully copied params.json to {remote_path}")
+                        if result.stdout:
+                            LOG.info(f"scp stdout: {result.stdout}")
+                    except subprocess.CalledProcessError as e:
+                        LOG.error(f"Failed to copy params.json to {remote_path}: {e}")
+                        LOG.error(f"scp stderr: {e.stderr}")
+                else:
+                    LOG.warning(f"No remote path configured for preset: {self.preset}")
 
         except Exception as e:
             LOG.error(f"Error reading best parameters: {e}")
+            LOG.exception(e)
