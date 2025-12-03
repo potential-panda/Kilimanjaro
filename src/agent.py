@@ -11,6 +11,7 @@ from qate.env.env import Env, EnvName
 from kilimanjaro.task import Task
 from kilimanjaro.tasks import (
     AddBacktestTask,
+    BestDaysTask,
     JobAcquisitionTask,
     MarketDataTask,
     MetricsDataTask,
@@ -54,7 +55,7 @@ class KilimanjaroAgent:
                 "from_dt": "ONE_WEEK_AGO",
             },
         )
-        schedule.every().week.at("05:00").do(
+        schedule.every().week.monday.at("05:00").do(
             run_task,
             AddBacktestTask,
             {
@@ -62,6 +63,8 @@ class KilimanjaroAgent:
                 "from_dt": "ONE_MONTH_AGO",
             },
         )
+        schedule.every().hour.at(":05").do(run_task, BestDaysTask, "xrp")
+        schedule.every().hour.at(":15").do(run_task, BestDaysTask, "eth")
 
         while True:
             try:
@@ -99,7 +102,8 @@ def handle_market_data(args):
     try:
         env.visit()
         thread = run_task(MarketDataTask)
-        thread.join()
+        if thread:
+            thread.join()
     finally:
         env.leave()
 
@@ -109,7 +113,8 @@ def handle_metrics_data(args):
     try:
         env.visit()
         thread = run_task(MetricsDataTask)
-        thread.join()
+        if thread:
+            thread.join()
     finally:
         env.leave()
 
@@ -118,8 +123,26 @@ def handle_backtest(args):
     env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
     try:
         env.visit()
-        thread = run_task(AddBacktestTask, args)
-        thread.join()
+        thread = run_task(
+            AddBacktestTask,
+            {
+                "env_name": EnvName.QIN_TENGFEI.name,
+                "from_dt": args.from_dt,
+            },
+        )
+        if thread:
+            thread.join()
+    finally:
+        env.leave()
+
+
+def handle_best(args):
+    env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
+    try:
+        env.visit()
+        thread = run_task(BestDaysTask)
+        if thread:
+            thread.join()
     finally:
         env.leave()
 
@@ -143,6 +166,9 @@ def main():
     c_parser = subparsers.add_parser("backtest")
     c_parser.add_argument("--from-dt", required=True, help="Start date for backtest")
     c_parser.set_defaults(func=handle_backtest)
+
+    d_parser = subparsers.add_parser("best")
+    d_parser.set_defaults(func=handle_best)
 
     args = parser.parse_args()
 
