@@ -25,6 +25,9 @@ W.switch('pages', {
   }
 );
 
+// Attach client to app.data for direct access
+app.data.client = client;
+
 app.data.register('jobs', client.fetchJobs);
 app.data.register('results', client.fetchResults);
 app.data.register('hiddenColumns', hiddenColumns.fetch);
