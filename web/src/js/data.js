@@ -114,9 +114,21 @@ function formatData(data) {
 
 
 export class Client {
-  fetchResults(cb) {
-    // Fetch run_logs directly from API
-    $.get(API_CONFIG.ROOT + 'result/list')
+  fetchResultDirs(cb) {
+    // Fetch available result directories
+    $.get(API_CONFIG.ROOT + 'result/dirs')
+      .done(data => {
+        cb(data);
+      })
+      .fail(() => {
+        cb([]);
+      });
+  }
+
+  fetchResults(cb, dirName = 'default') {
+    // Fetch run_logs directly from API with optional dir parameter
+    const url = API_CONFIG.ROOT + 'result/list' + (dirName !== 'default' ? '?dir=' + encodeURIComponent(dirName) : '');
+    $.get(url)
       .done(data => {
         cb({results: formatData(data)});
       })

@@ -129,6 +129,15 @@ W.component('results', {
       direction: 'desc',
     };
     this.searchTerm = '';
+    this.currentDir = this.getUrlParam('dir') || 'default';
+    this.resultDirs = [];
+
+    // Fetch result directories first
+    this.app.data.client.fetchResultDirs((dirs) => {
+      this.resultDirs = dirs;
+      this.renderTabs();
+      this.loadResults();
+    });
 
     // Listen for data updates from other components
     this.app.data.on('results', (data, source) => {
@@ -139,7 +148,58 @@ W.component('results', {
       this.load();
     }, this);
 
-    this.app.data.fetch(['results', 'hiddenColumns']);
+    this.app.data.fetch(['hiddenColumns']);
+  },
+
+  getUrlParam: function(name) {
+    const hash = window.location.hash;
+    const params = new URLSearchParams(hash.split('?')[1] || '');
+    return params.get(name);
+  },
+
+  loadResults: function() {
+    this.app.data.client.fetchResults((data) => {
+      this.app.data.set('results', data);
+    }, this.currentDir);
+  },
+
+  renderTabs: function() {
+    if (this.resultDirs.length <= 1) {
+      return; // Don't show tabs if only default dir
+    }
+
+    const $tabsContainer = $(this.el).find('.result-dir-tabs');
+    $tabsContainer.empty().show();
+
+    this.resultDirs.forEach(dir => {
+      const isActive = dir.name === this.currentDir ? 'active' : '';
+      const $tab = $(`
+        <li class="nav-item">
+          <a class="nav-link ${isActive}" href="#results?dir=${dir.name}" data-dir="${dir.name}">
+            ${dir.name}
+          </a>
+        </li>
+      `);
+
+      $tab.find('a').on('click', (e) => {
+        e.preventDefault();
+        this.switchDir(dir.name);
+      });
+
+      $tabsContainer.append($tab);
+    });
+  },
+
+  switchDir: function(dirName) {
+    this.currentDir = dirName;
+    window.location.hash = `results?dir=${dirName}`;
+
+    // Update active tab
+    $(this.el).find('.result-dir-tabs .nav-link').removeClass('active');
+    $(this.el).find(`.result-dir-tabs .nav-link[data-dir="${dirName}"]`).addClass('active');
+
+    // Reload results
+    this.loadResults();
   },
 
   getData: function(cb) {
@@ -189,7 +249,7 @@ W.component('results', {
 
     // Manual refresh handler
     $container.find('.refresh-results').on('click', () => {
-      this.app.data.fetch('results');
+      this.loadResults();
     });
 
     filterTable(this.searchTerm, $container);
