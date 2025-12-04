@@ -11,6 +11,12 @@ const importantColumns = new Set([
   'bucket_name',
 ]);
 
+function getUrlParam(name) {
+  const hash = window.location.hash;
+  const params = new URLSearchParams(hash.split('?')[1] || '');
+  return params.get(name);
+}
+
 function sortData(data, column, direction) {
   if (!column) {
     return data;
@@ -129,7 +135,7 @@ W.component('results', {
       direction: 'desc',
     };
     this.searchTerm = '';
-    this.currentDir = this.getUrlParam('dir') || 'default';
+    this.currentDir = getUrlParam('dir') || 'default';
     this.resultDirs = [];
 
     // Fetch result directories first
@@ -149,12 +155,6 @@ W.component('results', {
     }, this);
 
     this.app.data.fetch(['hiddenColumns']);
-  },
-
-  getUrlParam: function(name) {
-    const hash = window.location.hash;
-    const params = new URLSearchParams(hash.split('?')[1] || '');
-    return params.get(name);
   },
 
   loadResults: function() {
