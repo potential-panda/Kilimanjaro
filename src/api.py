@@ -278,7 +278,7 @@ def main():
         print(f"Job directory: {config.job_dir}")
         print(f"Results directory: {config.results_dir}")
         if config.extra_results_dirs:
-            print(f"Extra results directories:")
+            print("Extra results directories:")
             for dir_path in config.extra_results_dirs:
                 print(f"  - {extract_dir_name(dir_path)}: {dir_path}")
         app.run(host="0.0.0.0", port=config.port, threaded=True)
