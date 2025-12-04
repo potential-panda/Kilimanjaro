@@ -139,11 +139,16 @@ W.component('results', {
     this.resultDirs = [];
 
     // Fetch result directories first
-    this.app.data.client.fetchResultDirs((dirs) => {
-      this.resultDirs = dirs;
-      this.renderTabs();
+    if (this.app.data.client && this.app.data.client.fetchResultDirs) {
+      this.app.data.client.fetchResultDirs((dirs) => {
+        this.resultDirs = dirs;
+        this.renderTabs();
+        this.loadResults();
+      });
+    } else {
+      console.error('Client not available, loading default results');
       this.loadResults();
-    });
+    }
 
     // Listen for data updates from other components
     this.app.data.on('results', (data, source) => {
@@ -158,9 +163,14 @@ W.component('results', {
   },
 
   loadResults: function() {
-    this.app.data.client.fetchResults((data) => {
-      this.app.data.set('results', data);
-    }, this.currentDir);
+    if (this.app.data.client && this.app.data.client.fetchResults) {
+      this.app.data.client.fetchResults((data) => {
+        this.app.data.set('results', data);
+      }, this.currentDir);
+    } else {
+      // Fallback to using registered data fetch
+      this.app.data.fetch('results');
+    }
   },
 
   renderTabs: function() {
