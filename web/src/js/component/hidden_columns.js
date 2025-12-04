@@ -1,6 +1,12 @@
 import { hiddenColumns } from "../data";
 
 W.component('hidden_columns', {
+  init: function() {
+    this.app.data.fetch('hiddenColumns');
+    this.app.data.on('hiddenColumns', () => {
+      this.load();
+    }, this);
+  },
   getData: function(cb) {
     const columns = this.app.data.get('hiddenColumns');
     cb({

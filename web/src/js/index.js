@@ -2,6 +2,8 @@
 import './component/new.js';
 import './component/jobs.js';
 import './component/results.js';
+import './component/results_table.js';
+import './component/tabs.js';
 import './component/nav.js';
 import './component/header.js';
 import './component/delete_button.js';
@@ -30,5 +32,6 @@ app.data.client = client;
 
 app.data.register('jobs', client.fetchJobs);
 app.data.register('results', client.fetchResults);
+app.data.register('dirs', client.fetchResultDirs);
 app.data.register('hiddenColumns', hiddenColumns.fetch);
 app.start(document.body);
