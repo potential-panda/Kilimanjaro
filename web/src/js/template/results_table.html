@@ -53,6 +53,13 @@ tbody td {
   background-color: rgba(220, 53, 69, 0.08) !important;
 }
 
+/* Highlighted column overrides PNL colors */
+.table tbody tr.pnl-positive td.highlighted-column,
+.table tbody tr.pnl-negative td.highlighted-column {
+  --bs-table-bg: #81ecec !important;
+  background-color: #81ecec !important;
+}
+
 /* Highlighted row overrides PNL colors */
 .table tbody tr.highlighted-row.pnl-positive,
 .table tbody tr.highlighted-row.pnl-negative {
@@ -63,6 +70,13 @@ tbody td {
 .table tbody tr.highlighted-row.pnl-positive td,
 .table tbody tr.highlighted-row.pnl-negative td {
   background-color: #ffeaa7 !important;
+}
+
+/* Highlighted row AND column intersection has highest priority */
+.table tbody tr.highlighted-row.pnl-positive td.highlighted-column,
+.table tbody tr.highlighted-row.pnl-negative td.highlighted-column {
+  --bs-table-bg: #fdcb6e !important;
+  background-color: #fdcb6e !important;
 }
 </style>
 
