@@ -267,7 +267,7 @@ W.component('results_table', {
     // Timestamp link click handler
     $container.find('.timestamp-link').on('click', (ev) => {
       ev.stopPropagation(); // Prevent row/column highlighting
-      const timestamp = $(ev.target).data('timestamp');
+      const timestamp = String($(ev.target).attr('data-timestamp'));
       if (timestamp) {
         // Populate the filter box
         const $searchFilter = $container.find('.search-filter');
