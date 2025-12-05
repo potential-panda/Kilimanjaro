@@ -196,6 +196,20 @@ W.component('results_table', {
       run_logs = sortData(run_logs, this.sortOption.col, this.sortOption.direction);
     }
 
+    // Add PNL class for row coloring
+    run_logs = run_logs.map(log => {
+      const pnl5 = parseFloat(log.result_trading_pnl5);
+      let pnlClass = '';
+      if (!isNaN(pnl5)) {
+        if (pnl5 > 0) {
+          pnlClass = 'pnl-positive';
+        } else if (pnl5 < 0) {
+          pnlClass = 'pnl-negative';
+        }
+      }
+      return { ...log, __pnl_class: pnlClass };
+    });
+
     cb({
       run_logs: run_logs,
       visibleColumns: columns,

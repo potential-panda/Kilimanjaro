@@ -22,6 +22,37 @@
 tbody td {
   cursor: pointer;
 }
+
+/* PNL-based row coloring */
+.table tbody tr.pnl-positive {
+  --bs-table-bg: rgba(40, 167, 69, 0.15) !important;
+  background-color: rgba(40, 167, 69, 0.15) !important;
+}
+
+.table tbody tr.pnl-negative {
+  --bs-table-bg: rgba(220, 53, 69, 0.15) !important;
+  background-color: rgba(220, 53, 69, 0.15) !important;
+}
+
+.table tbody tr.pnl-positive td {
+  background-color: rgba(40, 167, 69, 0.15) !important;
+}
+
+.table tbody tr.pnl-negative td {
+  background-color: rgba(220, 53, 69, 0.15) !important;
+}
+
+/* Highlighted row overrides PNL colors */
+.table tbody tr.highlighted-row.pnl-positive,
+.table tbody tr.highlighted-row.pnl-negative {
+  --bs-table-bg: #ffeaa7 !important;
+  background-color: #ffeaa7 !important;
+}
+
+.table tbody tr.highlighted-row.pnl-positive td,
+.table tbody tr.highlighted-row.pnl-negative td {
+  background-color: #ffeaa7 !important;
+}
 </style>
 
 {{#if error}}
@@ -81,7 +112,7 @@ tbody td {
     </thead>
     <tbody>
       {{#run_logs}}
-      <tr>
+      <tr class="{{__pnl_class}}">
         <td>
           <input type="checkbox" class="form-check-input row-select" data-bucket-name="{{bucket_name}}">
         </td>
