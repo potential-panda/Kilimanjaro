@@ -198,7 +198,7 @@ W.component('results_table', {
 
     // Add PNL class for row coloring
     run_logs = run_logs.map(log => {
-      const pnl5 = parseFloat(log.result_trading_pnl5);
+      const pnl5 = parseFloat(log.result_pnl5);
       let pnlClass = '';
       if (!isNaN(pnl5)) {
         if (pnl5 > 0) {
