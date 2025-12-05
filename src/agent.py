@@ -25,9 +25,6 @@ API_BASE_URL = "http://localhost:8766"
 @dataclass
 class Config:
     api_base_url: str = API_BASE_URL
-    job_acquisition_interval: int = 12  # seconds
-    market_data_schedule_time: str = "04:00"  # 4am daily
-    metrics_data_interval: int = 10  # minutes
 
 
 def run_task(TaskClass: Type[Task], input: Any = None):
