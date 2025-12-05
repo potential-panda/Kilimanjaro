@@ -208,15 +208,18 @@ W.component('results_table', {
         }
       }
 
-      // Extract timestamp from bucket_name (format: xxx_timestamp_xxxx)
+      // Extract timestamp from bucket_name using regex to match 10-digit numbers
       let timestamp = '';
       let bucketNameFormatted = log.bucket_name;
       if (log.bucket_name) {
-        const parts = log.bucket_name.split('_');
-        if (parts.length >= 2) {
-          timestamp = parts[1]; // Second part is the timestamp
+        const timestampMatch = log.bucket_name.match(/_([0-9]{10})_/);
+        if (timestampMatch) {
+          timestamp = timestampMatch[1];
           // Create formatted bucket name with clickable timestamp
-          bucketNameFormatted = parts[0] + '_<span class="timestamp-link" data-timestamp="' + timestamp + '">' + timestamp + '</span>' + (parts.length > 2 ? '_' + parts.slice(2).join('_') : '');
+          bucketNameFormatted = log.bucket_name.replace(
+            /_([0-9]{10})_/,
+            '_<span class="timestamp-link" data-timestamp="' + timestamp + '">' + timestamp + '</span>_'
+          );
         }
       }
 
