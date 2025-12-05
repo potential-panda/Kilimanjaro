@@ -223,6 +223,9 @@ W.component('results_table', {
       return { ...log, __pnl_class: pnlClass, __timestamp: timestamp, __bucket_name_formatted: bucketNameFormatted };
     });
 
+    // Store modified run_logs for use in rendered()
+    this.processedRunLogs = run_logs;
+
     cb({
       run_logs: run_logs,
       visibleColumns: columns,
@@ -242,11 +245,10 @@ W.component('results_table', {
     filterTable(this.searchTerm, $container);
 
     // Format bucket_name cells with clickable timestamps
-    const results = this.app.data.get('results');
-    if (results && results.results) {
+    if (this.processedRunLogs) {
       // Create a map of bucket_name to formatted version
       const bucketMap = {};
-      results.results.forEach(log => {
+      this.processedRunLogs.forEach(log => {
         if (log.bucket_name && log.__bucket_name_formatted) {
           bucketMap[log.bucket_name] = log.__bucket_name_formatted;
         }
