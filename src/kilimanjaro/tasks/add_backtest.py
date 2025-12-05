@@ -14,7 +14,7 @@ RESULTS_DIR = "results"
 class AddBacktestTask(Task):
     def __init__(self, config):
         super().__init__()
-        self.env_name_str = config["env_name"]
+        self.env_name_str = config["env_name"] if "env_name" in config else ""
         self.from_dt = config["from_dt"]
         self.job_dir = JOB_DIR
         self.results_dir = RESULTS_DIR

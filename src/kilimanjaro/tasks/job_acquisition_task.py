@@ -12,7 +12,7 @@ from ..task import Task
 
 LOG = getLogger(__name__)
 API_BASE_URL = "http://localhost:8766"
-DEFAULT_ENV_NAME = EnvName.QIN_TENGFEI
+DEFAULT_ENV_NAME = EnvName.BENJAMIN_TATUM
 
 
 @dataclass

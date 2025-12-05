@@ -229,7 +229,7 @@ npm run build
 
 - **Job Acquisition Interval**: 12 seconds (polls API for new jobs)
 - **Progress Check Interval**: 600 seconds (10 minutes, updates job status)
-- **Backtest Environment**: Configurable per job or uses default `QIN_TENGFEI`
+- **Backtest Environment**: Configurable per job or uses default `BENJAMIN_TATUM`
 
 ## Development
 

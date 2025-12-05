@@ -128,7 +128,6 @@ def handle_backtest(args):
         thread = run_task(
             AddBacktestTask,
             {
-                "env_name": EnvName.QIN_TENGFEI.name,
                 "from_dt": args.from_dt,
             },
         )
