@@ -196,7 +196,7 @@ W.component('results_table', {
       run_logs = sortData(run_logs, this.sortOption.col, this.sortOption.direction);
     }
 
-    // Add PNL class for row coloring
+    // Add PNL class for row coloring and parse bucket_name for timestamp
     run_logs = run_logs.map(log => {
       const pnl5 = parseFloat(log.result_pnl5);
       let pnlClass = '';
@@ -207,7 +207,20 @@ W.component('results_table', {
           pnlClass = 'pnl-negative';
         }
       }
-      return { ...log, __pnl_class: pnlClass };
+
+      // Extract timestamp from bucket_name (format: xxx_timestamp_xxxx)
+      let timestamp = '';
+      let bucketNameFormatted = log.bucket_name;
+      if (log.bucket_name) {
+        const parts = log.bucket_name.split('_');
+        if (parts.length >= 2) {
+          timestamp = parts[1]; // Second part is the timestamp
+          // Create formatted bucket name with clickable timestamp
+          bucketNameFormatted = parts[0] + '_<span class="timestamp-link" data-timestamp="' + timestamp + '">' + timestamp + '</span>' + (parts.length > 2 ? '_' + parts.slice(2).join('_') : '');
+        }
+      }
+
+      return { ...log, __pnl_class: pnlClass, __timestamp: timestamp, __bucket_name_formatted: bucketNameFormatted };
     });
 
     cb({
@@ -227,6 +240,41 @@ W.component('results_table', {
     });
 
     filterTable(this.searchTerm, $container);
+
+    // Format bucket_name cells with clickable timestamps
+    const results = this.app.data.get('results');
+    if (results && results.results) {
+      // Create a map of bucket_name to formatted version
+      const bucketMap = {};
+      results.results.forEach(log => {
+        if (log.bucket_name && log.__bucket_name_formatted) {
+          bucketMap[log.bucket_name] = log.__bucket_name_formatted;
+        }
+      });
+
+      $container.find('tbody tr').each((_, row) => {
+        const $row = $(row);
+        const bucketName = $row.find('.row-select').data('bucket-name');
+        const $bucketCell = $row.find('td[data-column="bucket_name"]');
+        if ($bucketCell.length > 0 && bucketName && bucketMap[bucketName]) {
+          $bucketCell.find('.result-cell').html(bucketMap[bucketName]);
+        }
+      });
+    }
+
+    // Timestamp link click handler
+    $container.find('.timestamp-link').on('click', (ev) => {
+      ev.stopPropagation(); // Prevent row/column highlighting
+      const timestamp = $(ev.target).data('timestamp');
+      if (timestamp) {
+        // Populate the filter box
+        const $searchFilter = $container.find('.search-filter');
+        $searchFilter.val(timestamp);
+        // Trigger the filter
+        this.searchTerm = timestamp;
+        filterTable(timestamp, $container);
+      }
+    });
 
     // Search/filter functionality
     $container.find('.search-filter').on('input', (ev) => {
