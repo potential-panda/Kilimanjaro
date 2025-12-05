@@ -10,13 +10,21 @@
 }
 
 .table .highlighted-column {
-  --bs-table-bg: #d3d3d3 !important;
-  background-color: #d3d3d3 !important;
+  --bs-table-bg: #4a5568 !important;
+  background-color: #4a5568 !important;
+}
+
+/* Lighter color for tbody cells */
+.table tbody td.highlighted-column {
+  --bs-table-bg: #6c7a8d !important;
+  background-color: #6c7a8d !important;
+  color: white !important;
 }
 
 .table tbody tr.highlighted-row .highlighted-column {
   --bs-table-bg: #fdcb6e !important;
   background-color: #fdcb6e !important;
+  color: inherit !important;
 }
 
 tbody td {
@@ -56,8 +64,9 @@ tbody td {
 /* Highlighted column overrides PNL colors */
 .table tbody tr.pnl-positive td.highlighted-column,
 .table tbody tr.pnl-negative td.highlighted-column {
-  --bs-table-bg: #d3d3d3 !important;
-  background-color: #d3d3d3 !important;
+  --bs-table-bg: #6c7a8d !important;
+  background-color: #6c7a8d !important;
+  color: white !important;
 }
 
 /* Highlighted row overrides PNL colors */
@@ -77,6 +86,7 @@ tbody td {
 .table tbody tr.highlighted-row.pnl-negative td.highlighted-column {
   --bs-table-bg: #fdcb6e !important;
   background-color: #fdcb6e !important;
+  color: inherit !important;
 }
 </style>
 
