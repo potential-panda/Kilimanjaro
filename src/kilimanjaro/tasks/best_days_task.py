@@ -52,7 +52,7 @@ class BestDaysTask(Task):
             LOG.info(f"Task started at: {self.start_time}")
 
             # Generate job_data using preset
-            backtest_job_data = job_data.create(DEFAULT_ENV_NAME.name, "TWO_DAYS_AGO", self.preset)
+            backtest_job_data = job_data.create(DEFAULT_ENV_NAME.name, "THREE_DAYS_AGO", self.preset)
 
             LOG.info("Starting backtest with job_data")
             LOG.info(f"Job data: {json.dumps(backtest_job_data)}")
