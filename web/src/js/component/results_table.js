@@ -262,6 +262,10 @@ W.component('results_table', {
         const bucketName = $row.find('.row-select').data('bucket-name');
         const $bucketCell = $row.find('td[data-column="bucket_name"]');
         if ($bucketCell.length > 0 && bucketName && bucketMap[bucketName]) {
+          // Add data-bucket-name to row and cell to preserve original value
+          $row.attr('data-bucket-name', bucketName);
+          $bucketCell.attr('data-bucket-name', bucketName);
+          // Update the HTML content with formatted version
           $bucketCell.find('.result-cell').html(bucketMap[bucketName]);
         }
       });
