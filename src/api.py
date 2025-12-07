@@ -282,7 +282,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        env.enter()
+        env.enter(daemon=True)
         config = env.get("config")
 
         app = create_app(config)

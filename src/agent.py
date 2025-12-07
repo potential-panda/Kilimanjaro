@@ -102,7 +102,7 @@ def handle_schedule(args):
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        env.enter()
+        env.enter(daemon=True)
         agent = KilimanjaroAgent(env.get("config"))
         agent.start()
     finally:
