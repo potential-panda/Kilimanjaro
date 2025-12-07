@@ -1,4 +1,6 @@
 import argparse
+import signal
+import sys
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
@@ -268,6 +270,17 @@ def create_app(config: Config = None):
 def main():
     env = Env(sys_env.ENV_DIR, EnvName.KILIMANJARO_API)
     env.load()
+
+    def signal_handler(signum, frame):
+        """Handle shutdown signals gracefully"""
+        print(f"\nReceived signal {signum}, shutting down gracefully...")
+        env.leave()
+        sys.exit(0)
+
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     try:
         env.enter()
         config = env.get("config")
