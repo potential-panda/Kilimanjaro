@@ -24,7 +24,7 @@ JOB_DATA_TEMPLATE = {
         {
             "name": "box_size_rate",
             "default_value": 0.0015,
-            "values": [0.001, 0.0015, 0.002, 0.0025, 0.003],
+            "values": [0.0015, 0.002, 0.0025, 0.003],
             "factor": 100000,
         },
     ],
