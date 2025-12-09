@@ -112,16 +112,6 @@ def handle_schedule(args):
 def handle_market_data(args):
     env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
 
-    def signal_handler(signum, frame):
-        """Handle shutdown signals gracefully"""
-        print(f"\nReceived signal {signum}, shutting down gracefully...")
-        env.leave()
-        sys.exit(0)
-
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
     try:
         env.visit()
         thread = run_task(MarketDataTask)
@@ -134,16 +124,6 @@ def handle_market_data(args):
 def handle_metrics_data(args):
     env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
 
-    def signal_handler(signum, frame):
-        """Handle shutdown signals gracefully"""
-        print(f"\nReceived signal {signum}, shutting down gracefully...")
-        env.leave()
-        sys.exit(0)
-
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
     try:
         env.visit()
         thread = run_task(MetricsDataTask)
@@ -155,16 +135,6 @@ def handle_metrics_data(args):
 
 def handle_backtest(args):
     env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
-
-    def signal_handler(signum, frame):
-        """Handle shutdown signals gracefully"""
-        print(f"\nReceived signal {signum}, shutting down gracefully...")
-        env.leave()
-        sys.exit(0)
-
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
 
     try:
         env.visit()
@@ -182,16 +152,6 @@ def handle_backtest(args):
 
 def handle_best(args):
     env = Env.load_env(sys_env.ENV_DIR, ENV_NAME)
-
-    def signal_handler(signum, frame):
-        """Handle shutdown signals gracefully"""
-        print(f"\nReceived signal {signum}, shutting down gracefully...")
-        env.leave()
-        sys.exit(0)
-
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
 
     try:
         env.visit()
