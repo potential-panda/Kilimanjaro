@@ -226,10 +226,10 @@ def create_app(config: Config = None):
     def list_results():
         try:
             # Get optional 'dir' parameter
-            dir_name = request.args.get('dir', 'default')
+            dir_name = request.args.get("dir", "default")
 
             # If default, use the job_data_access
-            if dir_name == 'default':
+            if dir_name == "default":
                 run_logs = job_data_access.get_all_run_logs()
             else:
                 # Find the matching extra results dir
