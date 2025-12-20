@@ -2,6 +2,7 @@ import math
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from logging import getLogger
 from pathlib import Path
 
@@ -123,8 +124,15 @@ def get_prefix(env: str = None, exchange: str = None, symbol: str = None, v: int
     return "_".join(params)
 
 
-def get_all_files(s3, exchange: ExchangeName, symbol: Symbol) -> dict[str, list]:
-    """Get all S3 files for a given market"""
+def get_all_files(s3, exchange: ExchangeName, symbol: Symbol, target_dates: list[str] = None) -> dict[str, list]:
+    """Get all S3 files for a given market
+
+    Args:
+        s3: S3 client
+        exchange: Exchange name
+        symbol: Symbol
+        target_dates: Optional list of dates in YYYYMMDD format to filter files
+    """
     from qate.store.s3 import list_files
 
     result = {}
@@ -149,6 +157,12 @@ def get_all_files(s3, exchange: ExchangeName, symbol: Symbol) -> dict[str, list]
         prefix = get_prefix(env, exchange.name, symbol.name, 1)
         res = list_files(s3, bucket, prefix)
         for name, items in res.items():
+            # Filter by target dates if specified
+            if target_dates:
+                # Check if any of the target dates is in the file name
+                if not any(date in name for date in target_dates):
+                    continue
+
             if name not in result:
                 result[name] = []
             result[name].extend(items)
@@ -228,14 +242,29 @@ def load_config():
 class MarketDataTask(Task):
     """Task for downloading, merging and saving market data"""
 
-    def __init__(self, _):
+    def __init__(self, params=None):
         super().__init__()
         self.config = load_config()
         self.output_dir = self.config.output_dir
         self.download_tmp_dir = self.config.download_tmp_dir
         self.merge_tmp_dir = self.config.merge_tmp_dir
-        self.markets = self._get_markets()
+
+        # Parse market parameter - format: "EXCHANGE:SYMBOL" (e.g., "GMO:BTC_JPY")
+        # If not specified, use DEFAULT_MARKETS
+        self.markets = self._get_markets(params)
         self.s3_client = None
+
+        # Parse days_ago parameter - download data for multiple days
+        # If days_ago=3, download data for -3, -2, -1 days ago
+        self.target_dates = []
+        if params and isinstance(params, dict) and "days_ago" in params:
+            days_ago = params["days_ago"]
+            today = datetime.now()
+            for i in range(days_ago, 0, -1):
+                target_date = today - timedelta(days=i)
+                self.target_dates.append(target_date.strftime("%Y%m%d"))
+            LOG.info(f"Target dates for download: {self.target_dates}")
+
         self.stats = {
             "total_markets": 0,
             "processed_markets": 0,
@@ -245,7 +274,29 @@ class MarketDataTask(Task):
             "errors": 0,
         }
 
-    def _get_markets(self) -> list[Market]:
+    def _get_markets(self, params=None) -> list[Market]:
+        """Get markets to process.
+
+        Args:
+            params: Optional dict with 'market' key in format "EXCHANGE:SYMBOL" (e.g., "GMO:BTC_JPY")
+
+        Returns:
+            List of Market objects to process
+        """
+        if params and isinstance(params, dict) and "market" in params:
+            market_str = params["market"]
+            try:
+                # Parse format: "EXCHANGE:SYMBOL"
+                exchange_str, symbol_str = market_str.split(":")
+                exchange = ExchangeName[exchange_str.upper()]
+                symbol = Symbol[symbol_str.upper()]
+                market = Market(exchange, symbol)
+                LOG.info(f"Using specified market: {market}")
+                return [market]
+            except (ValueError, KeyError) as e:
+                LOG.error(f"Invalid market format '{market_str}'. Expected format: 'EXCHANGE:SYMBOL' (e.g., 'GMO:BTC_JPY')")
+                raise ValueError(f"Invalid market format: {market_str}. Error: {e}")
+
         return DEFAULT_MARKETS
 
     def _ensure_directories(self):
@@ -258,7 +309,7 @@ class MarketDataTask(Task):
         """Process a single market: download, merge, and save"""
         LOG.info(f"Processing market: {exchange_name.name} {symbol.name}")
 
-        result = get_all_files(self.s3_client, exchange_name, symbol)
+        result = get_all_files(self.s3_client, exchange_name, symbol, self.target_dates if self.target_dates else None)
 
         # Process files that don't need merging
         for name, items in result.items():

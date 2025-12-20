@@ -114,7 +114,12 @@ def handle_market_data(args):
 
     try:
         env.visit()
-        thread = run_task(MarketDataTask)
+        params = {}
+        if hasattr(args, "days_ago") and args.days_ago:
+            params["days_ago"] = args.days_ago
+        if hasattr(args, "market") and args.market:
+            params["market"] = args.market
+        thread = run_task(MarketDataTask, params if params else None)
         if thread:
             thread.join()
     finally:
@@ -173,6 +178,8 @@ def main():
     schedule_parser.set_defaults(func=handle_schedule)
 
     a_parser = subparsers.add_parser("market-data")
+    a_parser.add_argument("--days-ago", type=int, help="Download data for the past N days (e.g., --days-ago 3 downloads data for -3, -2, -1 days ago)")
+    a_parser.add_argument("--market", type=str, help="Specific market to download (format: EXCHANGE:SYMBOL, e.g., GMO:BTC_JPY)")
     a_parser.set_defaults(func=handle_market_data)
 
     b_parser = subparsers.add_parser("metrics-data")
