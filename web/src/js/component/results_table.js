@@ -3,14 +3,12 @@ import { getUrlParam, getPage } from '../util/url.js';
 
 
 const importantColumns = new Set([
-  'result_trading_pnl0',
-  'result_trading_pnl5',
-  'result_total_cnt0',
-  'result_total_cnt5',
-  'result_slippage_avg0',
-  'result_slippage_avg5',
+  'result_pnl5',
+  'result_pnl_cnt0',
+  'result_slippage_rate5',
   'bucket_name',
 ]);
+
 
 function sortData(data, column, direction) {
   if (!column) {

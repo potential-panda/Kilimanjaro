@@ -52,7 +52,12 @@ function generateGrafanaUrl(bucketName, fromDate, toDate) {
   const fromFormatted = formatDateForGrafana(fromDate, false);
   const toFormatted = formatDateForGrafana(toDate, true);
 
-  let url = GRAFANA_CONFIG.DASHBOARD_BASE_URL + encodeURIComponent(bucketName);
+  let url = GRAFANA_CONFIG.ORION_BASE_URL + encodeURIComponent(bucketName);
+  if (bucketName.startsWith("ATSUSHI_EGAWA")) {
+    url = GRAFANA_CONFIG.LYRA_BASE_URL + encodeURIComponent(bucketName);
+  } else if (bucketName.startsWith("POLLUX_XEON")) {
+    url = GRAFANA_CONFIG.GEMINI_BASE_URL + encodeURIComponent(bucketName);
+  }
 
   if (fromFormatted) {
     url += '&from=' + encodeURIComponent(fromFormatted);
