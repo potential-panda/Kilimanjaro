@@ -149,7 +149,7 @@ tbody td {
       {{#run_logs}}
       <tr class="{{__pnl_class}}">
         <td>
-          <input type="checkbox" class="form-check-input row-select" data-bucket-name="{{bucket_name}}">
+          <input id="{{file_name}}" type="checkbox" class="form-check-input row-select" data-bucket-name="{{bucket_name}}" data-file-name="{{file_name}}">
         </td>
         <td class="text-center">
           <a href="{{__grafana_url}}" target="_blank" title="View in Grafana">

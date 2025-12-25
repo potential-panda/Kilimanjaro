@@ -56,6 +56,7 @@ def get_results_from_dir(dir_path):
             try:
                 with open(result_file, "r") as f:
                     run_log_data = json.load(f)
+                    run_log_data["file_name"] = result_file.name
                 run_logs.append(run_log_data)
             except Exception as e:
                 LOG.warning(f"Error reading result file {result_file}: {e}")
@@ -249,40 +250,27 @@ def create_app(config: Config = None):
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    @app.route("/result/<bucket_name>", methods=["DELETE"])
-    def delete_result(bucket_name):
+    @app.route("/result/<file_name>", methods=["DELETE"])
+    def delete_result(file_name):
         try:
-            # Extract env_name from bucket_name (format: FirstName_LastName_xxxxx)
-            parts = bucket_name.split("_")
-            if len(parts) >= 2:
-                env_name = f"{parts[0]}_{parts[1]}"
-            else:
-                env_name = None
+            # Validate file_name format: must be [a-f0-9]+.json
+            import re
+            if not re.match(r'^[a-f0-9]+\.json$', file_name):
+                return jsonify({"error": "Invalid file name format"}), 400
 
-            # If env_name is BENJAMIN_TATUM, try to delete from default results_dir
-            if env_name == "BENJAMIN_TATUM":
-                result_file_path = Path(config.results_dir) / f"{bucket_name}.json"
+            # Combine config.results_dir and config.extra_results_dirs into one list
+            all_dirs = [config.results_dir] + config.extra_results_dirs
+
+            # Search through all directories
+            for dir_path in all_dirs:
+                result_file_path = Path(dir_path) / file_name
                 if result_file_path.exists():
                     try:
                         result_file_path.unlink()
                         return "", 204
                     except Exception as e:
-                        LOG.warning(f"Error deleting result file {bucket_name}: {e}")
+                        LOG.warning(f"Error deleting result file {file_name}: {e}")
                         return jsonify({"error": str(e)}), 500
-
-            # If not returned yet, try to match env_name in extra_results_dirs
-            if env_name:
-                for dir_path in config.extra_results_dirs:
-                    # Check if this extra_results_dir contains the env_name
-                    if env_name in dir_path:
-                        result_file_path = Path(dir_path) / f"{bucket_name}.json"
-                        if result_file_path.exists():
-                            try:
-                                result_file_path.unlink()
-                                return "", 204
-                            except Exception as e:
-                                LOG.warning(f"Error deleting result file {bucket_name}: {e}")
-                                return jsonify({"error": str(e)}), 500
 
             # File not found in any location
             return jsonify({"error": "Result not found"}), 404

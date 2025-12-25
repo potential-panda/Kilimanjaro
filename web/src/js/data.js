@@ -146,9 +146,9 @@ export class Client {
     let completed = 0;
     let failed = 0;
     const total = results.length
-    results.forEach(bucketName => {
+    results.forEach(({ name, fileName }) => {
       $.ajax({
-        url: API_CONFIG.ROOT + 'result/' + encodeURIComponent(bucketName),
+        url: API_CONFIG.ROOT + 'result/' + encodeURIComponent(fileName) + (name ? '?bucket_name=' + encodeURIComponent(name) : ''),
         method: 'DELETE',
         success: () => {
           completed++;

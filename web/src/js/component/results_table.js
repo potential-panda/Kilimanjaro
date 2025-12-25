@@ -95,8 +95,9 @@ class ManageCheckBoxes {
   publish() {
     const selectedResults = [];
     this.$container.find('.row-select:checked').each((_, el) => {
-      const name = $(el).data('bucket-name')
-      selectedResults.push(name);
+      const name = $(el).data('bucket-name');
+      const fileName = $(el).data('file-name');
+      selectedResults.push({ name, fileName });
     });
     this.component.app.ev.emit('data.selectedResults.updated', { selectedResults: selectedResults });
   };
