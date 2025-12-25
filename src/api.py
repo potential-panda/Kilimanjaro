@@ -252,10 +252,40 @@ def create_app(config: Config = None):
     @app.route("/result/<bucket_name>", methods=["DELETE"])
     def delete_result(bucket_name):
         try:
-            if job_data_access.delete_result(bucket_name):
-                return "", 204
+            # Extract env_name from bucket_name (format: FirstName_LastName_xxxxx)
+            parts = bucket_name.split("_")
+            if len(parts) >= 2:
+                env_name = f"{parts[0]}_{parts[1]}"
             else:
-                return jsonify({"error": "Result not found"}), 404
+                env_name = None
+
+            # If env_name is BENJAMIN_TATUM, try to delete from default results_dir
+            if env_name == "BENJAMIN_TATUM":
+                result_file_path = Path(config.results_dir) / f"{bucket_name}.json"
+                if result_file_path.exists():
+                    try:
+                        result_file_path.unlink()
+                        return "", 204
+                    except Exception as e:
+                        LOG.warning(f"Error deleting result file {bucket_name}: {e}")
+                        return jsonify({"error": str(e)}), 500
+
+            # If not returned yet, try to match env_name in extra_results_dirs
+            if env_name:
+                for dir_path in config.extra_results_dirs:
+                    # Check if this extra_results_dir contains the env_name
+                    if env_name in dir_path:
+                        result_file_path = Path(dir_path) / f"{bucket_name}.json"
+                        if result_file_path.exists():
+                            try:
+                                result_file_path.unlink()
+                                return "", 204
+                            except Exception as e:
+                                LOG.warning(f"Error deleting result file {bucket_name}: {e}")
+                                return jsonify({"error": str(e)}), 500
+
+            # File not found in any location
+            return jsonify({"error": "Result not found"}), 404
 
         except Exception as e:
             return jsonify({"error": str(e)}), 500

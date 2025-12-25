@@ -294,7 +294,7 @@ class MarketDataTask(Task):
                 LOG.info(f"Using specified market: {market}")
                 return [market]
             except (ValueError, KeyError) as e:
-                LOG.error(f"Invalid market format '{market_str}'. Expected format: 'EXCHANGE:SYMBOL' (e.g., 'GMO:BTC_JPY')")
+                LOG.error(f"Invalid market format '{market_str}'. Expected format: 'EXCHANGE:SYMBOL'")
                 raise ValueError(f"Invalid market format: {market_str}. Error: {e}")
 
         return DEFAULT_MARKETS
