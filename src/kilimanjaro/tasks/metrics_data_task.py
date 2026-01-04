@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 import msgpack
 import qate.env.sys_env as sys_env
 from qate.store.s3 import download
-from qate.util.serializer import MetricSerializer
 
 from ..task import Task
 
@@ -56,8 +55,7 @@ def process_file(influxdb_writer, full_path: Path) -> int:
     with open(full_path, "rb") as f:
         unpacker = msgpack.Unpacker(f, raw=False)
         for i, obj in enumerate(unpacker, 1):
-            point = MetricSerializer.deserialize(obj)
-            influxdb_writer.add(point)
+            influxdb_writer.add(obj)
             count = i
 
     LOG.info(f"Processed {full_path}. Inserted {count} metrics into {influxdb_writer.bucket_name}")
