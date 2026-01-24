@@ -63,7 +63,7 @@ class KilimanjaroAgent:
             },
         )
         # Schedule every 4 hours at the same minutes
-        for hour in [1, 5, 9, 13, 17, 21]:
+        for hour in [2, 6, 10, 14, 18, 22]:
             schedule.every().day.at(f"{hour:02d}:20").do(run_task, BestDaysTask, {"preset": "xrp"})
             schedule.every().day.at(f"{hour:02d}:50").do(run_task, BestDaysTask, {"preset": "eth"})
 

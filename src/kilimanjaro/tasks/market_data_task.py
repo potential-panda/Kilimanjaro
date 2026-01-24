@@ -1,6 +1,5 @@
 import math
 import os
-import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from logging import getLogger
@@ -10,7 +9,7 @@ import msgpack
 from qate.core.ev_type import EventType
 from qate.core.model import ExchangeName, Market, Symbol, TimeSeriesData
 from qate.env.sys_env import get_s3_client
-from qate.store.msgpack_loader import MarketDataLoader
+from qate.store.market_data_store import MarketDataLoader
 from qate.store.s3 import download
 from qate.util.serializer import OrderBookSerializer, TradeSerializer
 
@@ -47,49 +46,6 @@ BUCKETS = {
     "margaux": ["panda-cc-margaux", "CASSANDRA_HILL"],
     "margaux-v1": ["panda-cc-i-53100000522554", "CARLY_GOODWIN"],
 }
-
-
-class DataSource:
-    """Helper class for merging multiple data series"""
-
-    class Series:
-        def __init__(self, data: list):
-            self.data = data
-            self.pos = 0
-
-        def rewind(self):
-            self.pos = 0
-
-        @property
-        def no_more_data(self) -> bool:
-            return self.pos == len(self.data)
-
-        @property
-        def top_ts(self) -> TimeSeriesData:
-            return self.data[self.pos][1].get_ts()
-
-        def get(self) -> tuple[str, TimeSeriesData]:
-            item = self.data[self.pos]
-            self.pos += 1
-            return item
-
-    def __init__(self, data: list[list[tuple[str, TimeSeriesData]]]):
-        self.series_list = [self.__class__.Series(item) for item in data]
-
-    def get(self) -> tuple[str, TimeSeriesData]:
-        min_ts = time.time()
-        min_series = None
-
-        for series in self.series_list:
-            if series.no_more_data:
-                continue
-            if series.top_ts < min_ts:
-                min_ts = series.top_ts
-                min_series = series
-
-        if not min_series:
-            return None
-        return min_series.get()
 
 
 def serialize(data: tuple[str, object]) -> list:
