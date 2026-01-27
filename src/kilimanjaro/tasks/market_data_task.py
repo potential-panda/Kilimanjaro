@@ -213,6 +213,10 @@ class MarketDataTask(Task):
         # Parse days_ago parameter - download data for multiple days
         # If days_ago=3, download data for -3, -2, -1 days ago
         self.target_dates = []
+        if not params:
+            params = {}
+        if "days_ago" not in params:
+            params["days_ago"] = 3
         if params and isinstance(params, dict) and "days_ago" in params:
             days_ago = params["days_ago"]
             today = datetime.now()
