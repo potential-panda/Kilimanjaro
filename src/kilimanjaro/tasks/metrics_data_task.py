@@ -27,8 +27,8 @@ DEFAULT_HOST_CONFIG = {
             "QIN_TENGFEI",
         ],
     },
-    "orion-03": {
-        "bucket": "panda-cc-orion-03",
+    "orion-02": {
+        "bucket": "panda-cc-orion-02",
         "envs": [
             "QASIM_TARIQ",
         ],

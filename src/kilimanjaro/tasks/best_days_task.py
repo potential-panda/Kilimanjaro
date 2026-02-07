@@ -34,7 +34,7 @@ PARAMS_TEMPLATE = {
 
 PRESET_REMOTE = {
     "xrp": "orion-01:/home/ubuntu/env/QIN_TENGFEI/",
-    "eth": "orion-03:/home/ubuntu/env/QASIM_TARIQ/",
+    "eth": "orion-02:/home/ubuntu/env/QASIM_TARIQ/",
 }
 
 
