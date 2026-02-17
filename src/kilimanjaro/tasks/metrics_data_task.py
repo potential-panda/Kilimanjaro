@@ -205,7 +205,7 @@ class MetricsDataTask(Task):
         }
 
     def _get_hosts(self) -> list[str]:
-        return ["orion-01", "orion-03"]
+        return ["orion-01", "orion-02"]
 
     def _process_host(self, host: str) -> Dict[str, int]:
         """Process metrics for a single host"""
