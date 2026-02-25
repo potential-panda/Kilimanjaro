@@ -53,7 +53,7 @@ function generateGrafanaUrl(bucketName, fromDate, toDate) {
   const toFormatted = formatDateForGrafana(toDate, true);
 
   let url = GRAFANA_CONFIG.ORION_BASE_URL + encodeURIComponent(bucketName);
-  if (bucketName.startsWith("ANTHONY_TORRES")) {
+  if (bucketName.startsWith("ATSUSHI_EGAWA")) {
     url = GRAFANA_CONFIG.LYRA_BASE_URL + encodeURIComponent(bucketName);
   } else if (bucketName.startsWith("POLLUX_XEON")) {
     url = GRAFANA_CONFIG.GEMINI_BASE_URL + encodeURIComponent(bucketName);
