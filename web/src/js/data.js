@@ -6,8 +6,8 @@ function generateGrafanaUrl(bucketName, fromDate, toDate) {
     if (!dateStr) return '';
     try {
       let date;
-      // Handle YYYYMMDD_hhmm format (e.g., "20250919_1430")
-      if (/^\d{8}_\d{4}$/.test(dateStr)) {
+      // Handle YYYYMMDD_hhmm format (e.g., "20250919_143059")
+      if (/^\d{8}_\d{6}$/.test(dateStr)) {
         const year = dateStr.substring(0, 4);
         const month = dateStr.substring(4, 6);
         const day = dateStr.substring(6, 8);
@@ -53,7 +53,7 @@ function generateGrafanaUrl(bucketName, fromDate, toDate) {
   const toFormatted = formatDateForGrafana(toDate, true);
 
   let url = GRAFANA_CONFIG.ORION_BASE_URL + encodeURIComponent(bucketName);
-  if (bucketName.startsWith("ATSUSHI_EGAWA")) {
+  if (bucketName.startsWith("ANTHONY_TORRES")) {
     url = GRAFANA_CONFIG.LYRA_BASE_URL + encodeURIComponent(bucketName);
   } else if (bucketName.startsWith("POLLUX_XEON")) {
     url = GRAFANA_CONFIG.GEMINI_BASE_URL + encodeURIComponent(bucketName);
