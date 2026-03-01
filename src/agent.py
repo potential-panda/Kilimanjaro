@@ -46,22 +46,22 @@ class KilimanjaroAgent:
         schedule.every().day.at("04:00").do(run_task, MarketDataTask)
         schedule.every(11).minutes.do(run_task, MetricsDataTask)
 
-        schedule.every().day.at("03:00").do(
-            run_task,
-            AddBacktestTask,
-            {
-                "env_name": EnvName.BACKTEST_LAST_WEEK.name,
-                "from_dt": "ONE_WEEK_AGO",
-            },
-        )
-        schedule.every().week.monday.at("05:00").do(
-            run_task,
-            AddBacktestTask,
-            {
-                "env_name": EnvName.BACKTEST_LAST_MONTH.name,
-                "from_dt": "ONE_MONTH_AGO",
-            },
-        )
+        # schedule.every().day.at("03:00").do(
+        #     run_task,
+        #     AddBacktestTask,
+        #     {
+        #         "env_name": EnvName.BACKTEST_LAST_WEEK.name,
+        #         "from_dt": "ONE_WEEK_AGO",
+        #     },
+        # )
+        # schedule.every().week.monday.at("05:00").do(
+        #     run_task,
+        #     AddBacktestTask,
+        #     {
+        #         "env_name": EnvName.BACKTEST_LAST_MONTH.name,
+        #         "from_dt": "ONE_MONTH_AGO",
+        #     },
+        # )
         # # Schedule every 4 hours at the same minutes
         # for hour in [2, 6, 10, 14, 18, 22]:
         #     schedule.every().day.at(f"{hour:02d}:20").do(run_task, BestDaysTask, {"preset": "xrp"})
