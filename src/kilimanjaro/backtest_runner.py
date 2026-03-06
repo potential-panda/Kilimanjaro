@@ -8,7 +8,6 @@ from pathlib import Path
 from qate.boot.config import TradingProfile
 from qate.env import sys_env
 from qate.env.env import Env, EnvName
-from qate.trading.param import ParamGrid
 
 LOG = getLogger(__name__)
 
@@ -28,7 +27,6 @@ config = {
     "order_size": 150,
     "magnifier": 5,
 }
-param_grid = ParamGrid()
 
 
 def setup_env(env_name: EnvName, strategy_name: str, variant: str, config: dict, param_grid: dict) -> Env:
