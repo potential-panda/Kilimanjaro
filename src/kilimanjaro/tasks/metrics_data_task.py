@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import msgpack
 import qate.env.sys_env as sys_env
-from qate.store.influx_writer import convert_to_point
+from qate.store.influx_store import InfluxdbStore, convert_to_point
 from qate.store.s3 import download
 
 from ..task import Task
@@ -81,7 +81,8 @@ class MetricsWorker:
     def load_files(self) -> int:
         """Load downloaded files into InfluxDB"""
         total_count = 0
-        influxdb_writer = sys_env.get_influxdb_writer(self.influxdb_bucket_name, 4096, no_retention=True)
+        influx_store = InfluxdbStore(sys_env.get_influxdb())
+        influxdb_writer = influx_store.create_writer(self.influxdb_bucket_name, 4096, no_retention=True)
         files = sorted(self.download_dir.iterdir(), key=lambda p: p.stat().st_ctime, reverse=True)
 
         for f in files:
