@@ -1,377 +1,192 @@
-# potential-panda-kilimanjaro
+# Kilimanjaro
 
-Remote backtesting job management system for running and monitoring quantitative trading strategy backtests from anywhere.
+Kilimanjaro is the workspace for designing and operating an AI-assisted
+workflow that repeatedly discovers, tests, and improves trading strategies.
 
-Part of the [potential-panda](https://github.com/potential-panda) trading system ecosystem.
+The old Kilimanjaro strategy code has been moved to other repositories. This
+repo should now stay lightweight: briefs, workflow specs, generated requirements,
+and eventually orchestration glue only.
 
-## Features
+## Goal
 
-- **Remote Job Submission**: Submit backtesting jobs via web UI from anywhere
-- **Background Agent**: Agent runs on development server, polls for jobs and executes backtests
-- **Real-time Status Tracking**: Monitor job progress (pending, running, done, error)
-- **Results Management**: View and analyze completed backtest results with sortable columns
-- **Strategy Templates**: Dynamic form generation based on strategy configuration
-- **Parameter Grid**: Configure parameter optimization grids for backtesting
+Use agent dialogues to design a repeatable strategy-discovery loop:
 
-## Problem Statement
+1. Inspect available data and tools.
+2. Propose trading hypotheses.
+3. Convert hypotheses into testable strategy variants.
+4. Run backtests through existing infrastructure.
+5. Analyze results with strict anti-overfitting checks.
+6. Promote useful findings into a strategy library or reject them with memory.
+7. Repeat.
 
-Running backtests on a development server has several challenges:
-- Backtesting takes significant time to complete
-- Consumes almost all system resources during execution
-- Cannot easily start backtests when away from the development machine
+The output should be a disciplined research machine, not a one-off idea
+generator.
 
-**Solution**: Kilimanjaro provides a web UI hosted on a public server for job submission, and a lightweight agent on the development server that polls for jobs and executes them in the background.
+## Existing Tools
 
-## Architecture
+Kilimanjaro should reuse existing systems instead of rebuilding them.
 
-- **API Service** (`kilimanjaro/api.py`): Flask-based REST API for job management
-- **Agent** (`kilimanjaro/agent.py`): Background service that polls for jobs and executes backtests
-- **Web UI** (`web/`): JavaScript frontend built with Whirlpool framework ([see web/README.md](web/README.md))
+### potential-panda-core
 
-For detailed feature specification, see [spec.md](spec.md).
+Path: `/home/lulurun/workspace/potential-panda-core`
 
-## Prerequisites
+Role:
 
-- Python 3.11+
-- Node.js 18+ (for web UI development)
-- Git (for installing core library dependency)
-- Access to potential-panda-core repository
-- Development server for running backtests
+- Core trading abstractions.
+- Strategy base classes and variant contracts.
+- Exchange and simulator abstractions.
+- Shared utilities and storage primitives.
 
-## Installation & Development Workflow
+Use it when a generated strategy needs to become executable code.
 
-This project depends on the qate core library via git+ssh (declared in `pyproject.toml`). Two common setups:
+### Makalu
 
-### Local development (editable installs)
+Path: `/home/lulurun/workspace/Makalu`
 
-Use when you develop Kilimanjaro and core side-by-side.
+Role:
 
-```bash
-cd ~/workspace
-git clone git@github.com:potential-panda/potential-panda-core.git
-git clone git@github.com:potential-panda/potential-panda-kilimanjaro.git
+- Market data lake.
+- Data pipeline from raw tick data into layered Parquet datasets.
+- Bronze data: raw trades and order book snapshots.
+- Silver/gold data: derived microstructure metrics and signals.
+- SQL/query interface for data inspection.
 
-cd potential-panda-kilimanjaro
-# activate your env (e.g., pyenv local panda-313 or python -m venv .venv && source .venv/bin/activate)
-pip install -e ../potential-panda-core   # qate core, editable
-pip install -e . --no-deps               # kilimanjaro app, editable
-```
+Makalu is currently the most important source of research edge because the
+bronze data contains order book snapshots and trades.
 
-Run from the repo root so imports resolve:
-```bash
-python -m kilimanjaro.api    # start API
-python -m kilimanjaro.agent  # start agent
-```
+### Himalaya
 
-### Production / CI
+Path: `/home/lulurun/workspace/Himalaya`
 
-Install from the git-pinned dependency:
-```bash
-pip install .
-```
+Role:
 
-To pin a specific core ref, edit the dependency in `pyproject.toml` (branch/tag/commit) and reinstall.
+- Backtest engine.
+- Replays stored market data through a simulator gateway.
+- Runs strategies and parameter grids.
+- Writes results to InfluxDB, Parquet, and run logs.
 
-### Notes
+Use it for candidate strategy evaluation, optimization, retesting, and
+cross-period validation.
 
-- Keep `kilimanjaro/` as the package root; prefer running with `python -m kilimanjaro.api` or `python -m kilimanjaro.agent`.
-- Verify editable installs with `pip show potential-panda-core` (Location should point to your local repo).
+## Product Thesis
 
-**Important Notes:**
+The valuable asset is not an individual strategy idea. The valuable asset is a
+closed-loop workflow that can repeatedly search a large hypothesis space while
+remaining skeptical about false positives.
 
-- ⚠️ **Do NOT commit** the editable install state—it's local only
-- ⚠️ **Do NOT modify** `pyproject.toml` for ad-hoc local changes; keep dependency pins intentional
-- ✅ CI and production use the git+ssh dependency from `pyproject.toml`
-- ✅ The editable install only affects your local environment
+The workflow should treat bronze data as the raw material:
 
-**Publishing Core Changes:**
+- order book imbalance;
+- queue/depth changes;
+- spread and microprice behavior;
+- trade aggression;
+- burst/withdrawal/refill behavior;
+- lead-lag and volatility/spread regimes;
+- liquidity shocks around short horizons.
 
-When your core library changes are ready:
+Potential edge is likely in microstructure patterns that are hard to see from
+bar data alone.
 
-```bash
-# 1. Commit and push core changes
-cd ../potential-panda-core
-git add .
-git commit -m "Add new feature"
-git push origin main
+## Non-Goals
 
-# 2. (Optional) Tag a release
-git tag -a v0.1.7 -m "Release v0.1.7"
-git push origin v0.1.7
+- Do not rebuild Makalu, Himalaya, or potential-panda-core here.
+- Do not turn AI output directly into a live strategy.
+- Do not accept PnL-only evidence.
+- Do not optimize parameters on one period and call it discovery.
+- Do not ignore fees, spread, slippage, queue position, latency, or liquidity.
+- Do not let the agent repeatedly rediscover rejected ideas without new
+  evidence.
 
-# 3. Update app dependency (if using tags)
-cd ../potential-panda-kilimanjaro
-# Edit pyproject.toml dependency to reference the new tag/commit
-git add pyproject.toml
-git commit -m "Update core dependency to v0.1.7"
-git push
-```
+## Proposed Workflow
 
-**Switching Back to Production Mode:**
+### Phase 1: Workflow Direction Dialogue
 
-To remove the editable install and use the GitHub version:
+Use an agentop dialogue to decide:
 
-```bash
-pip uninstall potential-panda-core
-pip install .
-```
+- what the strategy-discovery workflow should be;
+- whether existing tools are enough;
+- what additional tools are needed;
+- how bronze order book/trade data should be used;
+- how to control overfitting and false positives;
+- what artifacts the workflow should produce.
 
----
+Brief:
 
-### Quick Reference
+- `briefs/strategy-discovery-workflow.md`
 
-| Mode | When to Use | Installation |
-|------|-------------|--------------|
-| **Production/CI** | Production, CI, app-only development | `pip install .` |
-| **Local Dev** | Developing both app and core | `pip install -e ../potential-panda-core && pip install -e . --no-deps` |
+Expected outputs:
 
-| Task | Command |
-|------|---------|
-| Verify editable install | `pip show potential-panda-core \| grep Editable` |
-| Switch to production mode | `pip uninstall potential-panda-core && pip install .` |
-| Update core from GitHub | `pip install . --force-reinstall --no-cache-dir` |
-| Check import source | `python -c "import qate; print(qate.__file__)"` |
+- `workflow-strategy.md`
+- `tool-gap-analysis.md`
+- `hypothesis-taxonomy.md`
+- `evaluation-framework.md`
 
----
+### Phase 2: Implementation Requirements Dialogue
 
-## Configuration
+Use another dialogue to translate the approved workflow into buildable
+requirements.
 
-The application requires:
+Brief:
 
-**Environment Directory** (`~/env/KILIMANJARO_API/` and `~/env/KILIMANJARO_AGENT/`):
-```bash
-# Create API environment
-python -m kilimanjaro.api --setup
+- `briefs/implementation-requirements.md`
 
-# Create Agent environment
-python -m kilimanjaro.agent --setup
-```
+Expected outputs:
 
-This creates the necessary directory structure for configuration and data storage.
+- `requirements.md`
+- `data-contract.md`
+- `agent-loop-design.md`
+- `implementation-tasks.md`
+- `test-plan.md`
 
-**Web UI Dependencies** (Optional):
-```bash
-cd web
-npm install
-```
+### Phase 3: Code Agent
 
-## Usage
+No dialogue unless the requirements are unclear.
 
-### Running with Docker (Recommended)
+Give the phase-2 docs to a code agent and implement the smallest useful slice.
 
-```bash
-# Build and start the service
-docker-compose up -d
+## First Slice Recommendation
 
-# View logs
-docker-compose logs -f
+Start with a workflow that does not generate strategy code yet.
 
-# Stop the service
-docker-compose down
-```
+Suggested v1:
 
-The API will be available at `http://localhost:8766`
+1. Build a hypothesis registry.
+2. Build a data-availability and feature-discovery report over Makalu bronze and
+   existing silver/gold datasets.
+3. Let agents propose hypotheses in a structured format.
+4. Require each hypothesis to define:
+   - market/instrument;
+   - data required;
+   - entry condition;
+   - exit condition;
+   - execution assumptions;
+   - expected edge mechanism;
+   - falsification tests;
+   - backtest plan.
+5. Convert only approved hypotheses into Himalaya-compatible implementation
+   tasks.
 
-### Running Locally
+This avoids premature code generation and forces the workflow to learn what
+ideas are testable.
 
-**API Service:**
-```bash
-# Run directly with Python module
-python -m kilimanjaro.api
-```
+## Briefs
 
-**Agent Service:**
-```bash
-# Run the agent
-python -m kilimanjaro.agent
-```
+Briefs live under `briefs/`.
 
-**Web UI Development:**
-```bash
-cd web
+Current briefs:
 
-# Development server with hot reload (port 8080)
-npm run dev
+- `briefs/strategy-discovery-workflow.md`
+- `briefs/implementation-requirements.md`
 
-# Production build
-npm run build
-```
+## Open Design Questions
 
-## API Endpoints
-
-- `POST /job/new` - Create new backtesting job
-- `DELETE /job/delete/<job_id>` - Delete a job
-- `POST /job/acquire` - Agent acquires next pending job
-- `GET /job/list` - List all jobs
-- `POST /job/update/<job_id>` - Update job progress/status
-- `GET /job/<job_id>` - Get job details
-- `GET /result/list` - List all completed run logs
-- `DELETE /result/<bucket_name>` - Delete a result
-- `GET /health` - Health check
-
-## Application Configuration
-
-### Port Configuration
-
-- **API Service**: 8766
-- **Web Development Server**: 8080
-
-### Data Storage
-
-- **Job Files**: `~/env/KILIMANJARO_API/jobs/` (JSONL format)
-  - `.json` - Pending jobs
-  - `.json.acquired` - Jobs being processed
-  - `.json.done` - Completed jobs
-  - `.json.error` - Failed jobs
-- **Results**: `~/env/KILIMANJARO_API/results/` (Individual JSON files per run log)
-
-### Agent Configuration
-
-- **Job Acquisition Interval**: 12 seconds (polls API for new jobs)
-- **Progress Check Interval**: 600 seconds (10 minutes, updates job status)
-- **Backtest Environment**: Configurable per job or uses default `BENJAMIN_TATUM`
-
-## Development
-
-### Project Structure
-
-```
-potential-panda-kilimanjaro/
-├── kilimanjaro/
-│   ├── api.py             # Flask API backend
-│   ├── data_access.py     # File-based job storage
-│   └── agent.py           # Background agent
-├── web/                           # JavaScript frontend (separate from Python)
-│   ├── src/
-│   ├── public/
-│   ├── package.json
-│   └── webpack.*.js
-├── pyproject.toml                 # Python package/dep config
-├── Dockerfile                     # Docker image definition
-├── docker-compose.yml            # Docker orchestration
-└── README.md                     # This file
-```
-
-### Dependencies
-
-This application depends on [potential-panda-core](https://github.com/potential-panda/potential-panda-core), which provides:
-
-- `qate.boot.env` - Environment management
-- `qate.boot.profile` - Strategy profile configuration
-- `qate.boot.run_log` - Run log reading and processing
-
-**Development Modes:**
-
-See the [Installation & Development Workflow](#installation--development-workflow) section above for detailed instructions on:
-- **Production/CI Mode**: Using the core library from GitHub (default)
-- **Local Development Mode**: Using an editable local install for simultaneous app and core development
-
-### Making Changes
-
-**App-Only Changes:**
-1. Create a feature branch
-2. Make your changes to `kilimanjaro/`
-3. Test locally: `python -m kilimanjaro.api`
-4. Submit a pull request
-
-**App + Core Changes:**
-1. Set up local development mode (see workflow section)
-2. Make changes to both repositories
-3. Test with editable install: `pip install -e ../potential-panda-core`
-4. Commit and push core changes first
-5. Update `pyproject.toml` if you need to pin a new core ref
-6. Commit and push app changes
-
-### Testing
-
-```bash
-# Run API service
-python -m kilimanjaro.api
-
-# In another terminal, run agent
-python -m kilimanjaro.agent
-
-# In another terminal, test endpoints
-curl http://localhost:8766/health
-curl -X POST http://localhost:8766/job/new -H "Content-Type: application/json" -d '{"strategy_name":"orion","variant":"v0","from_dt":"2024-01-01","to_dt":"2024-12-31"}'
-```
-
-## Deployment
-
-### Production Deployment
-
-1. **Set up server environment**:
-   - Ensure Python 3.11+ is installed
-   - Install git for core library access
-   - Configure development server with backtest environment
-
-2. **Deploy with Docker**:
-   ```bash
-   git clone git@github.com:potential-panda/potential-panda-kilimanjaro.git
-   cd potential-panda-kilimanjaro
-   docker-compose up -d
-   ```
-
-3. **Configure reverse proxy** (nginx example):
-   ```nginx
-   server {
-       listen 80;
-       server_name backtest.example.com;
-
-       location / {
-           proxy_pass http://localhost:8766;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-       }
-   }
-   ```
-
-4. **Set up agent on development server**:
-   ```bash
-   python -m kilimanjaro.agent --setup
-   python -m kilimanjaro.agent
-   ```
-
-### Environment Variables
-
-- `PYTHONUNBUFFERED=1` - Enable real-time logging in Docker
-- `PYTHON_GIL=0` - Disable GIL for backtest execution (Python 3.13+)
-
-## Troubleshooting
-
-### Agent Cannot Acquire Jobs
-
-- Check that API service is running and accessible
-- Verify `API_BASE_URL` in agent configuration matches API service location
-- Check network connectivity between agent and API service
-
-### Backtest Execution Fails
-
-- Verify backtest environment is properly configured in `~/env/`
-- Check agent logs for error messages
-- Ensure development server has required resources (CPU, memory)
-
-### Web UI Not Connecting to API
-
-- Verify API service is running on port 8766
-- Check browser console for CORS errors
-- Ensure Flask-CORS is installed and enabled
-
-## License
-
-MIT
-
-## Documentation
-
-- **[spec.md](spec.md)** - Detailed feature specification
-- **[web.md](web.md)** - Web UI specification and implementation details
-- **[web/README.md](web/README.md)** - Frontend architecture and development guide
-
-## Related Repositories
-
-- [potential-panda-core](https://github.com/potential-panda/potential-panda-core) - Core trading engine library
-- [potential-panda](https://github.com/potential-panda) - Organization homepage
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
+- Is Makalu bronze data queryable efficiently enough for repeated agent-driven
+  exploration?
+- Do we need a feature catalog over existing Makalu datasets?
+- Do we need a hypothesis registry with rejection memory?
+- Should the agent propose pure rules, feature transforms, or full strategy
+  variants?
+- How do we force train/test/forward-split discipline?
+- What result metrics should matter beyond PnL?
+- How do we prevent strategy proliferation without evidence quality?
+- What is the minimum loop that produces learning even when a strategy fails?
