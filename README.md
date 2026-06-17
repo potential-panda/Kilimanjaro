@@ -97,6 +97,46 @@ bar data alone.
 - Do not let the agent repeatedly rediscover rejected ideas without new
   evidence.
 
+## Agent Dialogue System
+
+The "agentop dialogue" referenced below is a real tool, not a metaphor.
+
+Path: `/home/lulurun/workspace/agentop`
+
+Role:
+
+- Orchestrates two agent CLI sessions (Claude Code, Codex, or Antigravity)
+  collaborating on a shared task through a structured turn-taking protocol.
+- Each agent runs in its own tmux session; a background orchestrator relays
+  messages between them and stops when an agent signals `status:complete`.
+- A scenario TOML file (under
+  `agentop/src/agentop/dialogue/scenarios/`) defines both agents' role
+  prompts. Useful built-ins for this project: `strategist-challenger.toml`,
+  `researcher-skeptic.toml`, `trading-researcher-reviewer.toml`.
+- All dialogue state persists to `~/.agent-dashboard/dialogues/<id>/`
+  (`brief.md`, `scenario.toml`, `dialogue.log`, `progress.md`), so a dialogue
+  can be inspected or resumed even if the orchestrating session is lost.
+
+Starting a dialogue:
+
+```bash
+agentop dialogue start \
+  --brief briefs/strategy-discovery-workflow.md \
+  --scenario /home/lulurun/workspace/agentop/src/agentop/dialogue/scenarios/researcher-skeptic.toml \
+  [--agent-a claude] [--agent-b claude] [--max-turns N]
+```
+
+Checking on it:
+
+```bash
+agentop dialogue list                # status of all dialogues
+agentop dialogue stop <id>           # stop the orchestrator
+agentop dialogue stop <id> --close   # also kill both agent tmux sessions
+```
+
+Full reference: `/home/lulurun/workspace/agentop/docs/dialogue.md` and
+`/home/lulurun/workspace/agentop/docs/cli.md`.
+
 ## Proposed Workflow
 
 ### Phase 1: Workflow Direction Dialogue
