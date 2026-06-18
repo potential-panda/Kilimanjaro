@@ -84,30 +84,44 @@ populate / derive-from-bronze / define-new-dataset decision order in
 
 Each inventory entry must include:
 
+This is the real shape `tools/inventory.py` emits (task 4, implemented and
+verified against live Makalu on 2026-06-18) — `population_action` is
+`populate`, not `derive_from_bronze`, because Makalu does have a `populate
+BookState` command (see "Known populate commands" in
+`makalu-integration-contract.md`); `derive_from_bronze` is the fallback for
+datasets with no such command, not the default for every unqueryable one:
+
 ```yaml
 dataset_name: BookState
+view_name: bookstate
 catalog_declared_layer: bronze    # catalog.yaml's claim — not trusted as-is
-resolved_layer: silver            # verified against actual on-disk path / data-check
-query_verified: false             # confirmed via `query --list` / `DESCRIBE`, not assumed from the catalog
-reliability: candidate            # bronze datasets are "guaranteed"; everything else is "candidate"
-population_action: derive_from_bronze   # none | populate | derive_from_bronze | new_dataset_needed
-exchange: GMO
-symbol: BTC_JPY
-start_date: "2026-01-01"
-end_date: "2026-01-31"
-available_dates: []
-missing_dates:
-  - "2026-01-01"
-partition_keys:
+resolved_layer: silver            # verified by filesystem probe, since the view isn't registered
+query_verified: false             # `DESCRIBE bookstate` fails today
+reliability: candidate            # only Trade/OrderBook are ever "guaranteed", regardless of catalog_declared_layer
+population_action: populate       # Makalu has a `populate BookState` command — preferred over derive_from_bronze
+canonicality: candidate
+primary_timestamp: ts
+partition_columns: [exchange, symbol]
+source_dataset: OrderBook
+path_template: "/panda/makalu-data/silver/dataset=BookState/exchange={exchange}/symbol={symbol}/date={date}/data.parquet"
+columns:
+  metadata_source: dataset_definitions_md   # DESCRIBE unavailable since the view isn't registered
+  names: []
+availability:
+  status: missing         # GMO/BTC_JPY: data-check itself works (uses its own correct layer map), but no GMO data exists
+  method: data_check
   exchange: GMO
   symbol: BTC_JPY
-  date: "2026-01-01"
-columns: []
-freshness_checked_at: "2026-06-18T00:00:00Z"
-source_catalog_path: "/home/lulurun/workspace/Makalu/doc/catalog.yaml"
-query_probe_command: "python src/cli.py query --sql \"DESCRIBE bookstate\""
-canonicality: candidate
-notes: "Not registered for query today (root cause: catalog says bronze, data lives under silver). GMO/BTC_JPY has zero populated dates; only BINANCE/BTC_USDT is populated. Routed to derive_from_bronze rather than blocking — see makalu-integration-contract.md."
+  start_date: "2026-01-01"
+  end_date: "2026-01-31"
+  existing_dates: []
+  missing_dates: []       # "missing" means no data for this scope at all, not a list of gaps within an existing window
+metadata_warnings:
+  - "catalog_declared_layer (bronze) disagrees with resolved_layer (silver); query engine does not register this view"
+# resolved_layer is dataset-level (does BookState exist under silver/ for *any*
+# exchange?), not exchange-scoped, so there's no separate "no data anywhere"
+# warning here even though this specific GMO/BTC_JPY scope has zero dates --
+# that's exactly what availability.status: unknown and missing_dates capture.
 ```
 
 `reliability` values:

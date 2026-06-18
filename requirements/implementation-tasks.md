@@ -93,6 +93,8 @@ Acceptance (all proven by `python -m unittest tests.test_ledger -v`):
 
 ### 4. Implement Makalu inventory snapshot
 
+**Done (2026-06-18).**
+
 Dependencies: task 1.
 
 **Feasibility spike completed (2026-06-18)**, running the exact commands
@@ -148,6 +150,49 @@ Acceptance:
   `needs-tooling`/`needs-more-data`. `needs-tooling`/`needs-more-data` apply
   only when bronze itself can't support the needed window, or when a
   `new_dataset_needed` routing hasn't been actioned yet.
+
+Delivered: `tools/inventory.py`, run and verified against the real Makalu
+instance (not mocked — the entire point is checking what's actually true).
+Building and testing it surfaced three more real bugs beyond the original
+spike, all fixed and folded into `makalu-integration-contract.md`/
+`data-contract.md`:
+
+- An early implementation computed `reliability` from `catalog_layer ==
+  "bronze"` — i.e., from the catalog's *claim*, which is exactly the
+  untrusted value this model exists to route around. `BookState`/
+  `BookChange` were showing `reliability: guaranteed` until fixed to check
+  the literal dataset name (`Trade`/`OrderBook` only).
+- `data-check` exits 0 with no error even for datasets it doesn't support
+  (`Feature_NearHFT`, the research labels) — it just logs an "Unknown
+  dataset" line to stdout instead of any of the documented field labels.
+  Originally fell through to a generic `unknown` status for the wrong
+  reason; now detected explicitly and routed to the documented filesystem
+  `path_template` fallback, with a warning explaining why.
+- `data-check` also logs `"No data for exchange=X under ..."` (a real,
+  explicit absence signal) when a dataset has a registered view but zero
+  data for the requested exchange — this also fell through to `unknown`
+  originally; now mapped to `status: missing`.
+- The hardcoded list of "datasets needing extra partitions beyond
+  exchange/symbol" (`MarketPrice`/`VolSpread`/`LeadLag`) missed
+  `TripleBarrierLabel`/`TripleBarrierLabel_tmp`/`BuyLabel_tmp`/`Chart_*`,
+  which also have a `param_id` partition per `catalog.yaml`. Replaced with
+  a check against the catalog's own `partition_columns` field instead of a
+  hand-maintained list, so it can't silently drift out of sync again.
+- `Window`/`Missing` line examples in the integration contract used an
+  ASCII `->` and always listed individual missing dates; the real CLI uses
+  a Unicode `→` and can express missing dates as ranges. Doc corrected.
+
+Acceptance proven by `tests/test_inventory.py` (skipped automatically if
+the real Makalu checkout isn't present, since mocking it would defeat the
+point): all five layers present; bronze marked `guaranteed` and everything
+else `candidate` independent of the catalog's claim; `BookState`'s
+catalog/resolved mismatch surfaces correctly; canonical vs. research-
+ephemeral distinguished; missing dates represented (including the
+"nothing exists for this scope at all" case, confirmed against
+`Feature_NearHFT`); non-bronze unavailability always resolves to a
+`population_action`, never a direct block; extra-partition datasets skip
+the date check with a warning instead of misreporting; no `populate`
+calls anywhere in the tool.
 
 ### 5. Implement spec validation against inventory
 

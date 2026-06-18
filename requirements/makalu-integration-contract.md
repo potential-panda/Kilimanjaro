@@ -31,6 +31,30 @@ Confirmed directly against the running Makalu instance (2026-06-18):
 
 Per the Bronze-First Reliability Model above, none of this blocks v1: `BookState`/`BookChange` are candidates to populate for `GMO`/`BTC_JPY` if the bootstrap hypotheses need them there, or the same imbalance/pull-refill mechanics can be derived directly from bronze `OrderBook` if populating isn't worth it. Kilimanjaro does not depend on `catalog.yaml`'s declared layer being correct — see "Catalog Contract" below for the verification rule this implies.
 
+### Known populate commands (confirmed against `python cli.py populate --help`, 2026-06-18)
+
+Only these datasets have a known, existing Makalu pipeline that Kilimanjaro
+can invoke for the `populate` routing decision:
+
+| Dataset | Populate subcommand |
+|---|---|
+| `Trade`, `OrderBook` | `populate bronze` (always together, from raw msgpack) |
+| `BookChange` | `populate BookChange` |
+| `BookState` | `populate BookState` |
+| `TradeAggression` | `populate TradeAggression` |
+| `MarketPrice` | `populate MarketPrice` |
+| `VolSpread` | `populate VolSpread` (depends on `MarketPrice`) |
+| `LeadLag` | `populate LeadLag` (depends on `MarketPrice` for both markets) |
+
+`Feature_Mid`, `Feature_NearHFT`, `TripleBarrierLabel`,
+`TripleBarrierLabel_tmp`, `BuyLabel_tmp`, and `BacktestPnL` have **no**
+populate subcommand in the current Makalu CLI — whatever data exists for
+them today (only `Feature_NearHFT` does) was produced by a process outside
+this CLI surface. For these, when unpopulated for a needed scope, the
+Bronze-First routing defaults to `derive_from_bronze` rather than
+`populate`, since no Kilimanjaro-invokable pipeline exists; `new_dataset_needed`
+remains available if deriving from bronze genuinely isn't sufficient.
+
 ## Required Makalu Sources
 
 Kilimanjaro v1 reads these Makalu files and commands:
@@ -176,19 +200,34 @@ python /home/lulurun/workspace/Makalu/src/cli.py data-check \
   --execution-size 0.002 --start 2026-01-01 --end 2026-01-31
 ```
 
-Expected text shape when all partitions are supplied:
+Actual text shape when all partitions are supplied, confirmed against the
+running CLI (2026-06-18) — corrected from the originally assumed shape,
+which used an ASCII arrow and always listed missing dates individually:
 
 ```text
 Dataset : Trade
 Location: /panda/makalu-data/bronze/dataset=Trade/exchange=GMO/symbol=BTC_JPY
 Partition: exchange=GMO / symbol=BTC_JPY
-Min date: 2026-01-01
-Max date: 2026-01-31
-Total   : 30 days on disk
-Window  : 2026-01-01 -> 2026-01-31
-Missing : 1 days
-  2026-01-07
+Min date: 2025-06-29
+Max date: 2026-06-10
+Total   : 340 days on disk
+Window  : 2026-01-01 → 2026-01-31
+Missing : 0 days
 ```
+
+The arrow on the `Window` line is the Unicode character `→` (U+2192), not
+`->`. When a window has missing dates, they are listed below the `Missing`
+line — each as either a single `YYYY-MM-DD` or a `YYYY-MM-DD → YYYY-MM-DD`
+range, never expanded day-by-day:
+
+```text
+Missing : 5 days
+  2025-12-25 → 2025-12-29
+```
+
+When `--start`/`--end` are omitted, `Missing` covers the full on-disk range
+instead and the line gets a suffix: `Missing : 0 days (between min and
+max)` (no `Window` line is printed in that case).
 
 Expected text shape when a partition value is omitted:
 
@@ -201,6 +240,9 @@ Available exchange:
 Rules:
 
 - v1 must parse the exact labels above: `Dataset`, `Location`, `Partition`, `Min date`, `Max date`, `Total`, `Window`, `Missing`, and `Available <key>`.
+- The parser must accept both a single date and a `start → end` range on
+  indented lines following `Missing`, and must not assume `Window` is
+  always present (it's omitted when no `--start`/`--end` was given).
 - If output contains warnings or cannot be parsed, record `availability_status: unknown` and block promotion.
 - Current `data-check` support is limited to the datasets in Makalu `src/makalu/cli/common.py`; it does not cover feature and research datasets today.
 
