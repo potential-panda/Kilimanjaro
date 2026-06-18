@@ -4,6 +4,33 @@
 
 This contract defines the exact Makalu metadata and data-discovery behavior Kilimanjaro v1 may rely on. Any metadata not available through the commands below is treated as missing; exploratory scans may run, but promotion to backtest is blocked until the metadata is supplied or waived by a human where allowed.
 
+## Bronze-First Reliability Model
+
+This is the governing principle for everything else in this contract, confirmed against the real Makalu repo and data during the implementation-feasibility spike (see "Known Gap" below for the concrete finding that motivated it.)
+
+- **Bronze (`Trade`, `OrderBook`) is the only layer Kilimanjaro may assume is reliably present and queryable.** It is the raw capture; nothing about it depends on a derived pipeline having run correctly.
+- **Every other layer (silver, gold, feature, research) is a candidate, not a dependency.** Each existing derived dataset (`BookState`, `BookChange`, `MarketPrice`, `VolSpread`, `LeadLag`, `Feature_Mid`, `Feature_NearHFT`, the research labels) is something that *may* already be populated and *may* already be valuable for a given hypothesis — or may not be either. Kilimanjaro must not hard-depend on any specific derived dataset existing, being populated for the needed exchange/symbol, or having been validated as a useful signal. None of that is assumed; it's checked per spec.
+- **`catalog.yaml`'s declared `layer` and other metadata are a hint, not a guarantee of actual queryability.** They can drift from the real on-disk storage location (see "Known Gap"). Kilimanjaro must independently verify a non-bronze dataset is actually registered and queryable (`query --list` includes it, or a `DESCRIBE <view>` succeeds) before depending on it for a scan — not just check that the catalog entry exists.
+- **When a hypothesis needs a derived dataset/column that isn't currently usable, that is not a blocker — it's a routing decision**, in this priority order:
+  1. **Populate it.** If the dataset is a known Makalu pipeline output (it has a `populate` subcommand, e.g. `populate bookstate`, `populate bookchange`, `populate market-price`, `populate volspread`, `populate leadlag`) but is missing for the needed exchange/symbol/date range, run Makalu's existing populate command for those partitions. This is normal use of Makalu's framework, not a new pipeline.
+  2. **Derive it fresh from bronze instead.** If populating isn't worthwhile (e.g. the hypothesis only needs one exchange/symbol/date range once, or the existing derived dataset's definition doesn't quite match what the hypothesis needs), compute the needed feature directly from `Trade`/`OrderBook` inside the scanner's own feature-expression layer. Bronze is always sufficient to derive any of the documented families' raw mechanics (imbalance, microprice, pull/refill, aggression) — the existing silver/gold datasets are a precomputed convenience, not the only path to that signal.
+  3. **Define a new derived dataset, following Makalu's existing layer/pipeline conventions.** If a hypothesis needs a genuinely new derived signal that doesn't exist as any Makalu pipeline output, it is acceptable to add one — partitioned and stored the same way as existing silver/gold/feature datasets, implemented using Makalu's existing `feature_engineering`/pipeline code patterns as precedent, and registered in `catalog.yaml` with a `layer` that actually matches where it's stored on disk. This extends Makalu's own framework using its own idioms; it is not "duplicating Makalu" (the non-goal in `requirements.md` is about not building a parallel, competing data system — adding one more dataset through Makalu's established pipeline pattern is the opposite of that).
+  4. **If a populated, queryable dataset turns out not to carry signal once scanned, that's just a normal scan outcome** (`scan-failed`/`rejected`), not a data problem. Existing derived datasets earn their place by passing scans, not by being assumed valuable because they already exist.
+- A hypothesis is never blocked because a *specific* derived dataset is unpopulated, unqueryable, or has gone unused — it is only blocked if bronze itself can't support the needed window/coverage, since bronze has no fallback.
+
+## Known Gap: catalog-declared layer can disagree with actual storage
+
+Confirmed directly against the running Makalu instance (2026-06-18):
+
+- `catalog.yaml` declares `layer: bronze` for both `BookState` and `BookChange`.
+- The actual data lives on disk under `silver/dataset=BookState/` and `silver/dataset=BookChange/` (confirmed via `ls /panda/makalu-data/silver/`).
+- Makalu's query engine (`src/makalu/engine.py`) builds each dataset's view-registration path directly from `catalog.yaml`'s declared `layer` (`{root}/{layer}/dataset={name}`). Because the catalog says `bronze`, it looks in `bronze/dataset=BookState/`, finds nothing, and silently skips registering the view. Today, `query --sql "DESCRIBE bookstate"` fails with "table does not exist" even though the dataset has real, populated data.
+- `data-check` does **not** have this problem for these two datasets — it uses its own independent, correct layer map in `src/makalu/cli/common.py` (`BookState`/`BookChange` -> `silver`), so availability probing via `data-check` works fine; only the SQL query path is affected.
+- Only `BINANCE`/`BTC_USDT` currently has populated `BookState`/`BookChange` data (39 days); `GMO`/`BTC_JPY` — the example used throughout the phase-1/phase-2 docs — has none for either.
+- `Feature_Mid` has no populated data anywhere; only `Feature_NearHFT` exists on disk. This is a plain non-population gap, not a layer mismatch.
+
+Per the Bronze-First Reliability Model above, none of this blocks v1: `BookState`/`BookChange` are candidates to populate for `GMO`/`BTC_JPY` if the bootstrap hypotheses need them there, or the same imbalance/pull-refill mechanics can be derived directly from bronze `OrderBook` if populating isn't worth it. Kilimanjaro does not depend on `catalog.yaml`'s declared layer being correct — see "Catalog Contract" below for the verification rule this implies.
+
 ## Required Makalu Sources
 
 Kilimanjaro v1 reads these Makalu files and commands:
@@ -36,11 +63,7 @@ Kilimanjaro must treat these as read-only.
 
 If `layer`, `primary_timestamp`, `partition_columns`, or `path_template` is missing for a dataset, Kilimanjaro must mark the hypothesis `needs-tooling`, set the related metadata field to `missing`, and block promotion for hypotheses depending on it.
 
-Known catalog/code mismatch to handle explicitly:
-
-- Phase-1 direction treats `BookState` and `BookChange` as bronze because they are near-raw order-book derivatives.
-- Current Makalu `src/makalu/cli/common.py` maps `BookState` and `BookChange` under silver for `data-check`.
-- Kilimanjaro must preserve the catalog layer as the product-facing layer and record the CLI availability layer separately as `availability_probe_layer` when it differs.
+**Catalog `layer` is not trusted blindly for non-bronze datasets** (see "Known Gap" above). For any dataset other than `Trade`/`OrderBook`, Kilimanjaro must independently confirm the dataset is actually registered and queryable — via `query --list` containing it, or `DESCRIBE <view_name>` succeeding — before treating the catalog's declared layer as accurate. If the dataset is absent from `query --list` despite a catalog entry, record `availability_probe_layer` using `data-check`'s (or a direct filesystem probe's) resolved layer instead of the catalog's, and route through the Bronze-First populate/derive/build decision above rather than blocking.
 
 ## Query CLI Contract
 
@@ -52,25 +75,28 @@ Command:
 python /home/lulurun/workspace/Makalu/src/cli.py query --list
 ```
 
-Expected JSON shape:
+Actual JSON shape, confirmed against the running CLI (2026-06-18) — corrected from an earlier assumed shape that did not match:
 
 ```json
 {
   "datasets": [
     {
-      "dataset_name": "Trade",
-      "view_name": "trade",
+      "dataset": "Trade",
       "layer": "bronze",
-      "description": "Raw trade stream..."
+      "grain": "per trade",
+      "partitions": "exchange, symbol",
+      "source": ""
     }
   ]
 }
 ```
 
+There is no `dataset_name`, `view_name`, or `description` field. `source` lists the upstream dataset(s) it was derived from (empty for bronze).
+
 Implementation rule:
 
-- `datasets[*].view_name` is required for scanner SQL.
-- If `view_name` is absent, derive it as lowercase `dataset_name` only when that matches Makalu querying docs; record `view_name_source: derived`.
+- The queryable view name is not returned by `--list`; derive it as lowercase `dataset` (confirmed correct for every dataset actually returned, e.g. `Trade` -> `trade`).
+- **Only datasets that have at least one populated partition on disk, under the path implied by their (possibly wrong — see "Known Gap" above) catalog `layer`, appear in this list at all.** Absence from `--list` does not mean the dataset doesn't exist in the catalog or can't be populated — confirm against `catalog.yaml` and route through the Bronze-First decision above before treating it as unavailable.
 - If `query --list` returns `{"error": "..."}`, inventory refresh fails.
 
 ### Arbitrary Read Query
@@ -263,14 +289,17 @@ Deterministic rule:
 
 | Missing Item | Allowed Status | Promotion Allowed |
 |---|---|---|
-| catalog layer | `needs-tooling` | no |
+| catalog layer absent entirely | `needs-tooling` | no |
 | primary timestamp | `needs-tooling` | no |
 | partition columns | `needs-tooling` | no |
 | column existence | `invalid-spec` or `needs-tooling` | no |
-| data availability | `needs-more-data` | no |
+| data availability for a **bronze** dataset | `needs-more-data` (no fallback — bronze has no substitute) | no |
+| data availability / queryability for a **non-bronze** dataset | not a status by itself — apply the Bronze-First `population_action` routing (`populate`/`derive_from_bronze`/`new_dataset_needed`) first; only `needs-more-data`/`needs-tooling` if that routing can't resolve it (e.g. bronze itself lacks the coverage needed to derive the signal) | no, until routed |
 | research `param_id` | `invalid-spec` | no |
 | research `build_id` or `generated_at` | `needs-tooling` with `metadata_status: partial` | only limited waiver when research label is not primary target |
 | timestamp alignment for lead-lag | `needs-tooling` | no |
+
+"Catalog layer present but disagrees with actual storage" (the `BookState`/`BookChange` situation in "Known Gap") is not a missing-metadata case — it's handled by the verification + routing rules above, not this table.
 
 ## Inventory Output Contract
 
@@ -285,24 +314,28 @@ makalu:
 datasets:
   - dataset_name: BookState
     view_name: bookstate
-    layer: bronze
-    canonicality: canonical
-    availability_probe_layer: silver
+    catalog_declared_layer: bronze   # catalog.yaml's claim
+    resolved_layer: silver           # actual on-disk path, confirmed via data-check
+    query_verified: false            # `DESCRIBE bookstate` fails today — view not registered
+    reliability: candidate
+    population_action: derive_from_bronze
     primary_timestamp: ts
     partition_columns: [exchange, symbol]
     source_dataset: OrderBook
-    path_template: "/panda/makalu-data/bronze/dataset=BookState/exchange={exchange}/symbol={symbol}/date={date}/data.parquet"
+    path_template: "/panda/makalu-data/silver/dataset=BookState/exchange={exchange}/symbol={symbol}/date={date}/data.parquet"
     columns:
-      metadata_source: describe
+      metadata_source: dataset_definitions_md   # DESCRIBE unavailable since the view isn't registered
       names: ["ts", "best_mid", "vol_imb_k1"]
     availability:
-      status: available|partial|missing|unknown
-      method: data_check|path_template_filesystem|sql_distinct
+      status: missing
+      method: data_check
       exchange: GMO
       symbol: BTC_JPY
       start_date: "2026-01-01"
       end_date: "2026-01-31"
       existing_dates: []
-      missing_dates: []
-    metadata_warnings: []
+      missing_dates: ["2026-01-01"]
+    metadata_warnings:
+      - "catalog_declared_layer (bronze) disagrees with resolved_layer (silver); query engine does not register this view"
+      - "no populated data for GMO/BTC_JPY; only BINANCE/BTC_USDT is populated"
 ```

@@ -260,6 +260,22 @@ used as the base. Two things were folded in from the claude/claude run:
 The unmerged originals remain at their original dialogue locations under
 `~/.agent-dashboard/dialogues/` (not copied into this repo).
 
+After merging, two implementation-feasibility spikes were run against the
+real Makalu repo/data and `sqlglot`, surfacing a real gap: `sqlglot` parsing
+needs explicit AST-walk checks beyond "no parse error" (subqueries and
+multi-statement injection both parse silently), and `BookState`/`BookChange`
+are not currently queryable due to a `catalog.yaml`/on-disk layer mismatch.
+The second finding prompted a governing principle now in
+`makalu-integration-contract.md` and reflected throughout `requirements/`:
+**bronze (`Trade`, `OrderBook`) is the only dataset Kilimanjaro treats as
+guaranteed; every other Makalu layer is a candidate** — used if already
+populated and queryable, populated via Makalu's own CLI if its pipeline
+supports it, derived fresh from bronze if not, or implemented as a new
+dataset following Makalu's existing layer/pipeline conventions if no
+pipeline produces the needed signal. No hypothesis is blocked merely because
+a specific non-bronze dataset is missing, unqueryable, or unproven —
+that's a routing decision, not a blocker.
+
 ## Open Design Questions
 
 - Is Makalu bronze data queryable efficiently enough for repeated agent-driven

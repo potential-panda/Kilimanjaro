@@ -63,15 +63,22 @@ references, not just a partition/date check.
 
 ## Dataset Layers
 
-Kilimanjaro must represent all five Makalu layers:
+Kilimanjaro follows Makalu's five-layer structure and framework, but only
+depends on one of them. See `makalu-integration-contract.md`'s
+"Bronze-First Reliability Model" for the full principle; summary:
 
-| Layer | Dataset Examples | Contract Notes |
-|---|---|---|
-| bronze | `Trade`, `OrderBook`, `BookChange`, `BookState` | Canonical or near-raw. `BookState` already includes imbalance/microprice. `BookChange` includes pull/refill rates. |
-| silver | `MarketPrice`, `TradeAggression` | Point-in-time derived metrics. `MarketPrice` provides execution-aware mid/spread by `execution_size`. |
-| gold | `VolSpread`, `LeadLag`, chart datasets | Window/statistical signals. Used for regimes and cross-market diagnostics. |
-| feature | `Feature_Mid`, `Feature_NearHFT` | ML-ready tick-level feature tables. Prefer existing columns before deriving new expressions. |
-| research | `TripleBarrierLabel`, `TripleBarrierLabel_tmp`, `BuyLabel_tmp`, `BacktestPnL` | Ephemeral and rebuildable. Must be version-pinned when used. |
+| Layer | Reliability | Dataset Examples | Contract Notes |
+|---|---|---|---|
+| bronze | **Guaranteed.** The only layer Kilimanjaro may assume is present and queryable without per-spec verification. | `Trade`, `OrderBook` | Raw capture. Always sufficient on its own to derive imbalance, microprice, pull/refill, and aggression mechanics if nothing else is usable. |
+| silver | Candidate — verify before use. | `BookState`, `BookChange`, `MarketPrice`, `TradeAggression` | `BookState`/`BookChange` are precomputed imbalance/microprice/pull-refill outputs derived from bronze — useful if already populated and actually queryable for the target exchange/symbol, otherwise populate via Makalu's CLI or derive fresh from bronze. (Catalog currently mislabels both as `bronze`; their real on-disk layer is `silver` — confirm actual queryability, don't trust the catalog label. See "Known Gap" in `makalu-integration-contract.md`.) `MarketPrice` provides execution-aware mid/spread by `execution_size`. |
+| gold | Candidate — verify before use. | `VolSpread`, `LeadLag`, chart datasets | Window/statistical signals for regimes and cross-market diagnostics. Useful only once confirmed populated for the needed scope. |
+| feature | Candidate — verify before use. | `Feature_Mid`, `Feature_NearHFT` | ML-ready tick-level feature tables. Prefer existing columns over deriving new expressions only when the dataset is actually populated for the target exchange/symbol — `Feature_Mid` currently has no populated data anywhere. |
+| research | Candidate — verify before use; never canonical. | `TripleBarrierLabel`, `TripleBarrierLabel_tmp`, `BuyLabel_tmp`, `BacktestPnL` | Ephemeral and rebuildable. Must be version-pinned when used. |
+
+A hypothesis is never blocked because a specific silver/gold/feature/research
+dataset is unpopulated or unqueryable for the target scope — see the
+populate / derive-from-bronze / define-new-dataset decision order in
+`makalu-integration-contract.md`.
 
 ## Inventory Record
 
@@ -79,33 +86,46 @@ Each inventory entry must include:
 
 ```yaml
 dataset_name: BookState
-layer: bronze
+catalog_declared_layer: bronze    # catalog.yaml's claim — not trusted as-is
+resolved_layer: silver            # verified against actual on-disk path / data-check
+query_verified: false             # confirmed via `query --list` / `DESCRIBE`, not assumed from the catalog
+reliability: candidate            # bronze datasets are "guaranteed"; everything else is "candidate"
+population_action: derive_from_bronze   # none | populate | derive_from_bronze | new_dataset_needed
 exchange: GMO
 symbol: BTC_JPY
 start_date: "2026-01-01"
 end_date: "2026-01-31"
-available_dates:
-  - "2026-01-01"
+available_dates: []
 missing_dates:
-  - "2026-01-07"
+  - "2026-01-01"
 partition_keys:
   exchange: GMO
   symbol: BTC_JPY
   date: "2026-01-01"
-columns:
-  - ts
-  - mid
-  - imbalance_l3
+columns: []
 freshness_checked_at: "2026-06-18T00:00:00Z"
 source_catalog_path: "/home/lulurun/workspace/Makalu/doc/catalog.yaml"
-query_probe_command: "python src/cli.py query --list ..."
-canonicality: canonical
-notes: ""
+query_probe_command: "python src/cli.py query --sql \"DESCRIBE bookstate\""
+canonicality: candidate
+notes: "Not registered for query today (root cause: catalog says bronze, data lives under silver). GMO/BTC_JPY has zero populated dates; only BINANCE/BTC_USDT is populated. Routed to derive_from_bronze rather than blocking — see makalu-integration-contract.md."
 ```
+
+`reliability` values:
+
+- `guaranteed`: bronze (`Trade`, `OrderBook`) only;
+- `candidate`: everything else — silver, gold, feature, research. Existence in the catalog does not imply availability or query-readiness; each must be verified per spec.
+
+`population_action` values (only set when `query_verified: false` or coverage is insufficient for the spec's window):
+
+- `none`: dataset is already verified queryable and covers the needed scope;
+- `populate`: a known Makalu pipeline can produce it for the missing exchange/symbol/date — run it;
+- `derive_from_bronze`: compute the needed feature directly from `Trade`/`OrderBook` in the scanner instead of depending on this dataset;
+- `new_dataset_needed`: no existing Makalu pipeline produces this signal; define one following Makalu's conventions (see `makalu-integration-contract.md`).
 
 `canonicality` values:
 
-- `canonical`: bronze/silver/gold/feature data maintained by Makalu;
+- `canonical`: bronze data — Kilimanjaro's only guaranteed ground truth;
+- `candidate`: silver/gold/feature data that exists and is queryable for the target scope, but earns trust per spec, not by default;
 - `research-ephemeral`: research-layer outputs that are rebuildable and not stable ground truth.
 
 ## Required Metadata By Use Case

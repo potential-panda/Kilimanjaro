@@ -67,20 +67,59 @@ Acceptance:
 
 Dependencies: task 1.
 
+**Feasibility spike completed (2026-06-18)**, running the exact commands
+from `makalu-integration-contract.md` against the real Makalu repo and data.
+Findings folded into `makalu-integration-contract.md` and `data-contract.md`:
+
+- `query --list`'s actual JSON shape differs from what was originally
+  assumed (`dataset`/`layer`/`grain`/`partitions`/`source`, no
+  `dataset_name`/`view_name`/`description`) — doc corrected.
+- `catalog.yaml` declares `BookState`/`BookChange` as `layer: bronze`, but
+  their real on-disk storage is `silver/`. Makalu's query engine derives its
+  view-registration path from the catalog's declared layer, so it silently
+  fails to register either dataset — `DESCRIBE bookstate` errors today even
+  though populated data exists (39 days, `BINANCE`/`BTC_USDT` only;
+  `GMO`/`BTC_JPY` has none). `data-check` is unaffected (it uses its own
+  correct layer map). This is not a blocker — see the Bronze-First
+  Reliability Model — but it means inventory cannot trust `catalog.yaml`'s
+  `layer` field for non-bronze datasets and must verify queryability
+  directly.
+
 Deliver:
 
-- feasibility spike that runs the exact commands from `makalu-integration-contract.md` against current Makalu;
 - reader for Makalu `doc/catalog.yaml`;
-- probe wrapper for Makalu query CLI/date partition availability;
-- inventory output file.
+- queryability verifier: for every non-bronze dataset a spec references,
+  confirm it's actually registered (`query --list` / `DESCRIBE`) before
+  trusting the catalog's declared layer or treating it as available;
+- probe wrapper for Makalu query CLI/date partition availability
+  (`data-check` preferred, filesystem `path_template` fallback per
+  `makalu-integration-contract.md`);
+- routing logic implementing the Bronze-First decision order: dataset
+  already queryable and covers the scope -> `none`; known Makalu pipeline
+  but missing partitions -> `populate`; not worth populating or definition
+  mismatch -> `derive_from_bronze`; no existing pipeline produces the
+  signal -> `new_dataset_needed`;
+- inventory output file (see `data-contract.md`'s Inventory Record schema,
+  including `catalog_declared_layer`, `resolved_layer`, `query_verified`,
+  `reliability`, and `population_action` fields).
 
 Acceptance:
 
 - Inventory includes all five layers.
+- Bronze entries are marked `reliability: guaranteed`; every other layer's
+  entries are marked `reliability: candidate` and carry a `query_verified`
+  result that is independently checked, not inferred from the catalog.
 - Inventory distinguishes canonical and research-ephemeral datasets.
 - Missing dates are represented.
-- No writes occur to Makalu datasets.
-- Unsupported or unparseable Makalu metadata maps to `needs-tooling`; unavailable data maps to `needs-more-data`; both block promotion.
+- No writes occur to Makalu datasets from the inventory step itself; running
+  an existing Makalu populate command in response to a `populate` routing
+  decision is a separate, explicit action, not an inventory side effect.
+- A non-bronze dataset that is unpopulated, unqueryable, or mislabeled in
+  the catalog does not block the hypothesis by itself — it resolves to a
+  `population_action` per the Bronze-First model, not directly to
+  `needs-tooling`/`needs-more-data`. `needs-tooling`/`needs-more-data` apply
+  only when bronze itself can't support the needed window, or when a
+  `new_dataset_needed` routing hasn't been actioned yet.
 
 ### 5. Implement spec validation against inventory
 
@@ -220,7 +259,7 @@ kilimanjaro handoff create hyp-...
 
 ## Open Feasibility Items For Technical Review
 
-- Verify the `makalu-integration-contract.md` command assumptions against real Makalu output during task 4.
+- ~~Verify the `makalu-integration-contract.md` command assumptions against real Makalu output during task 4.~~ **Done (2026-06-18).** Findings: `query --list`'s JSON shape was wrong in the original doc (corrected); `BookState`/`BookChange` are not currently queryable due to a catalog/storage layer mismatch (not a blocker — see Bronze-First Reliability Model). Folded into `makalu-integration-contract.md` and `data-contract.md`.
+- ~~Confirm `sqlglot` compatibility with the exact DuckDB expressions needed by v1 scanner specs.~~ **Done (2026-06-18).** `sqlglot` (not yet a project dependency — installed ad hoc for the spike) parses every expression shape the SQL Safety Contract needs, but the validator cannot rely on "parses without error" alone: subqueries and multi-statement injection (`"1; DROP TABLE x;"`) both parse successfully into inspectable AST nodes rather than raising, so the validator must explicitly (a) reject anything that isn't a single bare expression/`Block`, (b) walk for disallowed node classes (`Subquery`, `Select`, `Join`, `Drop`, etc.), (c) check literal function-name strings on generic `Anonymous` nodes against the allowlist (e.g. `now()` has no distinct typed node in this dialect/version), and (d) inspect `WindowSpec` frame bounds directly rather than the presence of a `Window` node, since bounded and unbounded windows share the same top-level node type. `requirements.md`'s SQL Safety Contract section now flags the library choice itself as an open decision pending this validation working out in practice.
 - Decide whether missing research-layer `build_id`/`generated_at` requires a Makalu enhancement before any research-label-backed hypothesis can be promoted.
-- Confirm `sqlglot` compatibility with the exact DuckDB expressions needed by v1 scanner specs.
 - Confirm append-only `ledger/events.jsonl` is acceptable for concurrent agent sessions under repository lock or single-writer discipline.

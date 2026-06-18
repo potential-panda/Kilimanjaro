@@ -34,7 +34,7 @@ v1 must implement the smallest useful strategy discovery loop:
 
 Kilimanjaro v1 must not:
 
-- duplicate Makalu datasets, pipelines, exchange connectors, or query engine;
+- build a parallel/competing data system, exchange connector, or query engine outside Makalu;
 - duplicate Himalaya backtest simulation;
 - duplicate potential-panda-core strategy/runtime abstractions;
 - generate strategy implementation code automatically;
@@ -44,6 +44,22 @@ Kilimanjaro v1 must not:
 - accept mechanism-free feature mining or AutoML search;
 - hide fees, spread, slippage, latency, capacity, or liquidity assumptions;
 - run arbitrary Python feature transforms in the scanner.
+
+**Clarification on Makalu datasets**: "do not duplicate Makalu" means
+Kilimanjaro must not build a separate, parallel data store. It does **not**
+mean Kilimanjaro is limited to whatever silver/gold/feature datasets happen
+to exist today. Bronze (`Trade`, `OrderBook`) is the only dataset Kilimanjaro
+treats as a hard dependency. For everything else: if an existing derived
+dataset is already populated and queryable for the target scope, use it; if
+not but Makalu's pipeline can produce it, populate it via Makalu's own CLI;
+if no existing pipeline produces the needed signal, define a new derived
+dataset that follows Makalu's existing layer/pipeline conventions (using its
+`feature_engineering`/pipeline code as precedent) — this is reuse of
+Makalu's framework, not a new pipeline, and is explicitly allowed. See
+`makalu-integration-contract.md`'s Bronze-First Reliability Model for the
+full decision order and a concrete worked example (`BookState`/`BookChange`
+are currently unqueryable due to a catalog/storage mismatch, which is not a
+v1 blocker under this model).
 
 ## Workflow Stages
 
@@ -55,8 +71,9 @@ Acceptance criteria:
 
 - Inventory identifies available datasets across bronze, silver, gold, feature, and research layers.
 - Inventory reports exchange, symbol, date range, dataset name, and layer for each availability entry.
-- Inventory distinguishes canonical Makalu data from research-layer outputs that are ephemeral and rebuildable.
-- Inventory does not write to Makalu storage or create a new data pipeline.
+- Inventory distinguishes bronze (guaranteed) from every other layer (candidate — verified per dataset, not assumed from the catalog).
+- For each non-bronze dataset referenced by a spec, inventory independently confirms actual queryability (`query --list`/`DESCRIBE`) rather than trusting `catalog.yaml`'s declared `layer`, and records a `population_action` (`none`/`populate`/`derive_from_bronze`/`new_dataset_needed`) when it isn't already usable for the target scope — see `makalu-integration-contract.md`.
+- Inventory does not write to Makalu storage. Populating an existing Makalu pipeline dataset for missing partitions, or adding a new dataset that follows Makalu's existing layer/pipeline conventions, is in scope per the Bronze-First Reliability Model; building a new, separate pipeline or connector is not.
 
 ### 2. Hypothesis Generation
 
