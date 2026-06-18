@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+
+# Regenerable analytical artifacts (run tools/volatility_wave.py to rebuild)
+markets/waves/*.csv
+markets/graphs/*.png

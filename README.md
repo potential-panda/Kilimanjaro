@@ -207,6 +207,28 @@ and path patterns are defined once, in `requirements/data-contract.md`
 ("Canonical v1 Artifact Formats") — the per-directory READMEs link there
 rather than restating it.
 
+## Market Characterization (precedes the scanner loop)
+
+Before testing any signal, two questions have to be answered first: which
+markets are we actually targeting, and at any given time of day, what
+horizon X is even capable of moving price more than the spread? Testing a
+signal against a horizon that can't reliably clear the spread can't be
+profitable regardless of what the signal predicts.
+
+- `markets/registry.yaml` — the fixed, deliberately small tradeable
+  universe: 5 venue/instrument groups across COINCHECK, GMO, and BITBANK,
+  with fee and order-type constraints. Every entry is confirmed to exist as
+  bronze data in Makalu.
+- `markets/waves/`, `markets/graphs/` — the volatility-vs-spread "daily
+  wave": for each market, at each 30-minute JST bucket, the probability of
+  clearing 1x/2x/3x the spread at several tested horizons, computed
+  directly from bronze `OrderBook` via `tools/volatility_wave.py`. Answers
+  "what's the spread, volatility, and viable minimum horizon at this time
+  of day" for a market, plus a graph of the daily shape. See
+  `markets/README.md` for usage and a real data-coverage caveat (some
+  markets only have 7 days of history so far, not enough to call the daily
+  pattern stable yet).
+
 ## First Slice Recommendation
 
 Start with a workflow that does not generate strategy code yet.

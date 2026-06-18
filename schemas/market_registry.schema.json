@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kilimanjaro/schemas/market_registry.schema.json",
+  "title": "Kilimanjaro Market Registry",
+  "description": "The tradeable market universe in markets/registry.yaml. Every entry's exchange/symbol must exist as bronze data in Makalu.",
+  "type": "object",
+  "required": ["schema_version", "markets"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "markets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["exchange", "symbol", "asset", "quote", "leveraged", "order_type", "fee_bps"],
+        "properties": {
+          "exchange": { "type": "string", "minLength": 1 },
+          "symbol": { "type": "string", "minLength": 1 },
+          "asset": { "type": "string", "minLength": 1 },
+          "quote": { "type": "string", "minLength": 1 },
+          "leveraged": { "type": "boolean" },
+          "order_type": { "enum": ["any", "limit_only", "market_only"] },
+          "fee_bps": { "type": "number" }
+        }
+      }
+    }
+  }
+}
