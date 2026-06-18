@@ -66,19 +66,30 @@ Acceptance (all proven by `python -m unittest tests.test_validate_spec -v`):
 
 ### 3. Implement ledger schema and duplicate search
 
+**Done (2026-06-18).**
+
 Dependencies: task 2.
 
-Deliver:
+Delivered:
 
-- ledger entry format;
-- append/update convention;
-- search helper over family, mechanism, datasets, symbols, horizons, and decision reasons.
+- `schemas/ledger_event.schema.json` — JSON Schema for `ledger/events.jsonl`
+  lines, cross-referencing `hypothesis_spec.schema.json`'s `lifecycle_status`
+  and `decision_reason` enums rather than duplicating them.
+- `tools/ledger.py` — `append` (validates and appends one event, generating
+  `event_id`/`created_at`) and `search` (joins `specs/*.yaml` with
+  `ledger/events.jsonl` by `hypothesis_id`, since family/mechanism/dataset/
+  symbol/horizon live in the spec, not the ledger event — matches
+  `hypothesis-contract.md`'s "Duplicate Detection" search fields).
+- `tests/test_ledger.py` proving the acceptance criteria below.
 
-Acceptance:
+Acceptance (all proven by `python -m unittest tests.test_ledger -v`):
 
-- Agent can find prior rejected ideas.
-- Variants link to parent ids.
-- Duplicate entry can be marked without running a scan.
+- Agent can find prior rejected ideas. ✅ (`search(rejected_only=True)`,
+  matching on lifecycle status or any rejection-category `decision_reason`)
+- Variants link to parent ids. ✅ (`parent_id` round-trips through search)
+- Duplicate entry can be marked without running a scan. ✅
+  (`--to-status duplicate --decision-reason duplicate` with no
+  `scan_report_id` in `artifact_ids`)
 
 ### 4. Implement Makalu inventory snapshot
 

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kilimanjaro/schemas/ledger_event.schema.json",
+  "title": "Kilimanjaro Ledger Event",
+  "description": "One line of ledger/events.jsonl, per requirements/data-contract.md's Ledger Event Contract.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "hypothesis_id", "event_type", "actor_type", "actor_id", "created_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_id": { "type": "string", "pattern": "^evt-[0-9]{8}-[0-9]{3}$" },
+    "hypothesis_id": { "type": "string", "pattern": "^hyp-[0-9]{8}-[0-9]{3}(-v[0-9]{2})?$" },
+    "event_type": {
+      "enum": [
+        "status_transition",
+        "scan_attached",
+        "human_approval",
+        "waiver",
+        "correction",
+        "threshold_change",
+        "taxonomy_change"
+      ]
+    },
+    "actor_type": { "enum": ["agent", "human"] },
+    "actor_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "from_status": { "$ref": "hypothesis_spec.schema.json#/$defs/lifecycle_status" },
+    "to_status": { "$ref": "hypothesis_spec.schema.json#/$defs/lifecycle_status" },
+    "artifact_ids": {
+      "type": "object",
+      "properties": {
+        "spec_id": { "type": "string" },
+        "inventory_id": { "type": "string" },
+        "scan_report_id": { "type": "string" },
+        "handoff_id": { "type": "string" }
+      }
+    },
+    "decision_reason": { "$ref": "hypothesis_spec.schema.json#/$defs/decision_reason" },
+    "details": { "type": "object" }
+  }
+}

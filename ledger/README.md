@@ -15,3 +15,24 @@ Rules:
   "Duplicate Detection").
 - Under version-control conflict, preserve both valid event lines and order
   by `created_at`; duplicate `event_id`s are invalid.
+
+Use `tools/ledger.py`, not manual edits:
+
+```bash
+# Append an event (event_id and created_at are generated)
+python tools/ledger.py append \
+  --hypothesis-id hyp-20260618-001 --event-type status_transition \
+  --actor-type agent --actor-id agent-session-id \
+  --from-status scan-ready --to-status scan-failed \
+  --decision-reason failed-ic-threshold \
+  --artifact-ids '{"scan_report_id": "scan-20260618-001"}'
+
+# Search jointly across specs/ (family, mechanism, datasets, symbols) and
+# this ledger (decision reasons, status) -- ledger events alone don't carry
+# the descriptive fields, only the linked spec does.
+python tools/ledger.py search --family order_book_imbalance --rejected-only
+```
+
+A duplicate can be marked with `--to-status duplicate --decision-reason
+duplicate` and no `scan_report_id` in `--artifact-ids` — running a scan is
+not required to record a duplicate.
