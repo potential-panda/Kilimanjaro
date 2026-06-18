@@ -172,13 +172,16 @@ Brief:
 
 - `briefs/implementation-requirements.md`
 
-Expected outputs:
+Expected outputs (the canonical, approved set lives in `requirements/`; see
+the Requirements section below):
 
 - `requirements.md`
 - `data-contract.md`
+- `hypothesis-contract.md`
 - `agent-loop-design.md`
 - `implementation-tasks.md`
 - `test-plan.md`
+- `makalu-integration-contract.md`
 
 ### Phase 3: Code Agent
 
@@ -232,6 +235,30 @@ kept for reference (not committed) at `deliverables-a/` and `deliverables-b/`.
 
 `briefs/implementation-requirements.md` points at `direction/` as its
 Phase-1 source of truth.
+
+## Requirements
+
+`requirements/` holds the canonical, approved Phase 2 output. It was
+produced by merging two independent Phase 2 dialogue runs (claude/claude
+and codex/codex): the codex/codex run went further into concrete,
+implementation-ready detail (exact file/schema formats, a full SQL-safety
+AST allowlist, deterministic statistical methods, a CLI surface) and was
+used as the base. Two things were folded in from the claude/claude run:
+
+- the SQL-safety-library choice (`sqlglot`) and the autocorrelation-method
+  choice (block bootstrap over Newey-West/HAC) are flagged in
+  `requirements.md` as open decisions pending architect sign-off, not
+  settled requirements, since codex's version presented them with the same
+  confidence as requirements actually derived from phase-1 direction;
+- `data-contract.md`'s inventory recipe now requires confirming feature-layer
+  column existence per exchange/symbol, not just partition/date coverage —
+  `Feature_Mid`/`Feature_NearHFT` column sets can differ by exchange, and a
+  spec that passes a date-coverage check while referencing a nonexistent
+  column for that exchange should fail at discovery, not silently fail later
+  at scan time.
+
+The unmerged originals remain at their original dialogue locations under
+`~/.agent-dashboard/dialogues/` (not copied into this repo).
 
 ## Open Design Questions
 
