@@ -141,6 +141,15 @@ def _latest_status(hypothesis_id: str, spec: dict, events_by_hyp: dict[str, list
     return spec.get("hypothesis", {}).get("status", "draft")
 
 
+def current_status(hypothesis_id: str, spec: dict, ledger_path: Path = _DEFAULT_LEDGER_PATH) -> str:
+    """Public wrapper: the ledger's last to_status for this hypothesis, or
+    the spec's own status field if nothing's been recorded yet. The ledger
+    is authoritative once any event exists -- the spec's status field is
+    only an initial/illustrative value, never updated in place."""
+    events = [e for e in load_events(ledger_path) if e["hypothesis_id"] == hypothesis_id]
+    return _latest_status(hypothesis_id, spec, {hypothesis_id: events})
+
+
 def search(
     family: str | None = None,
     mechanism_keyword: str | None = None,

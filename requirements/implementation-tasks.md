@@ -359,17 +359,43 @@ Acceptance:
 
 ### 9. Implement ledger update workflow
 
+**Done (2026-06-18).**
+
 Dependencies: tasks 3, 7, 8.
 
-Deliver:
+Delivered:
 
-- command or documented procedure to attach scan reports and decisions to ledger entries.
+- `tools/scan_workflow.py` — `run_scan_workflow(spec_path, start_date,
+  end_date)` is the glue between all four prior tools: validates the spec
+  (refuses outright if invalid — never reaches the scanner or ledger),
+  runs the scan, evaluates thresholds, writes the report, and appends
+  exactly one `status_transition` ledger event mapping
+  `threshold_verdict.status` to a lifecycle status
+  (`pass`→`scan-passed`, `fail`→`scan-failed`, `needs-more-data`,
+  `needs-tooling`) with `decision_reason` set to the first failed rule
+  (or omitted on a clean pass) and `artifact_ids` linking the spec and
+  scan report.
+- Added `tools/ledger.py`'s `current_status()` (a thin public wrapper
+  around the existing `_latest_status` logic) so the workflow's
+  `from_status` always reflects the ledger's latest recorded state, not
+  the spec file's static (and potentially stale) `status` field — proven
+  by `tests/test_scan_workflow.py` re-running the same spec twice and
+  checking the second run's `from_status` matches the first run's
+  `to_status`.
+- The status map deliberately has no path to `backtest-approved` — that
+  only ever comes from a separate, explicit `human_approval` event this
+  workflow never writes itself, satisfying "scan-passed entries are
+  marked for human review, not auto-approved" structurally rather than
+  by convention.
+- `tests/test_scan_workflow.py` (6 tests, real integration against live
+  Makalu data): every acceptance criterion below, plus the invalid-spec
+  refusal and the ledger/spec-status precedence behavior above.
 
 Acceptance:
 
-- Every valid spec receives a ledger entry.
-- Failed scans preserve failed threshold reasons.
-- Scan-passed entries are marked for human review, not auto-approved.
+- Every valid spec receives a ledger entry. ✅
+- Failed scans preserve failed threshold reasons. ✅ (`decision_reason` set to the exact failed rule)
+- Scan-passed entries are marked for human review, not auto-approved. ✅
 
 ### 10. Implement handoff packet generator
 
