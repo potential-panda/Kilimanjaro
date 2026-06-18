@@ -37,6 +37,7 @@ from pathlib import Path
 import jsonschema
 import yaml
 
+from markets import find_market
 from sql_safety import validate_expression as _validate_sql_expression
 
 _SCHEMA_PATH = Path(__file__).parent.parent / "schemas" / "hypothesis_spec.schema.json"
@@ -136,6 +137,18 @@ def _business_rule_errors(spec: dict) -> list[str]:
             f"{target_market} instead requires cross_market_rationale explaining why BINANCE's "
             "signal isn't a better source for this specific hypothesis"
         )
+
+    target_exchange, target_symbol = target_market
+    if target_exchange and target_symbol:
+        registry_entry = find_market(target_exchange, target_symbol)
+        declared_fees_bps = (h.get("execution_assumptions") or {}).get("fees_bps")
+        if registry_entry is not None and declared_fees_bps != registry_entry["fee_bps"]:
+            errors.append(
+                f"execution_assumptions.fees_bps ({declared_fees_bps}) does not match "
+                f"markets/registry.yaml's fee_bps ({registry_entry['fee_bps']}) for "
+                f"{target_exchange}/{target_symbol} -- the registry is the authoritative fee "
+                "source; if the declared fee is intentionally different, say why"
+            )
 
     return errors
 

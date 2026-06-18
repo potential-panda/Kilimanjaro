@@ -81,8 +81,9 @@ hypothesis:
     timestamp_cutoff_rule: target window starts strictly after signal timestamp
   execution_assumptions:
     order_type: market
-    fees_bps: 1.0
-    half_spread_included: true
+    fees_bps: 0
+    half_spread_included: false
+    half_spread_bps: 0.92
     slippage_bps: 0.5
     latency_ms: 100
     liquidity_capacity_assumption: single-unit notional, no capacity scaling in v1

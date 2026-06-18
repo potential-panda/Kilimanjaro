@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "id": "scan-20260618-008",
+  "hypothesis_id": "hyp-20260618-003",
+  "scanner_version": "v1",
+  "config_hash": "",
+  "created_at": "2026-06-18T23:50:16Z",
+  "data_window": {
+    "exchange": "GMO",
+    "symbol": "BTC_JPY",
+    "start_date": "2026-05-01",
+    "end_date": "2026-05-15",
+    "distinct_days": 16
+  },
+  "metrics": {
+    "primary_horizon_seconds": 120,
+    "ic_method": "spearman",
+    "ic_pooled": 0.02973646960342592,
+    "ic_by_day": {
+      "2026-05-01 00:00:00+09": 0.02849640731990864,
+      "2026-05-02 00:00:00+09": 0.025463032853629598,
+      "2026-05-03 00:00:00+09": 0.02047830690406155,
+      "2026-05-04 00:00:00+09": 0.02867159874553041,
+      "2026-05-05 00:00:00+09": 0.03491630636456051,
+      "2026-05-06 00:00:00+09": 0.028369119391729033,
+      "2026-05-07 00:00:00+09": 0.028033794364232232,
+      "2026-05-08 00:00:00+09": 0.02825855824115773,
+      "2026-05-09 00:00:00+09": 0.026427514447080636,
+      "2026-05-10 00:00:00+09": 0.016941083501346807,
+      "2026-05-11 00:00:00+09": 0.027777196054456582,
+      "2026-05-12 00:00:00+09": 0.029662206115555236,
+      "2026-05-13 00:00:00+09": 0.03037729433067173,
+      "2026-05-14 00:00:00+09": 0.036100827138685135,
+      "2026-05-15 00:00:00+09": 0.04006719052043617,
+      "2026-05-16 00:00:00+09": 0.03615410215953093
+    },
+    "hit_rate": 0.5634648882814386,
+    "bucketed_returns": [
+      {
+        "bucket": 0,
+        "n": 12716316,
+        "mean_target_return": 3.131658912756898e-06
+      },
+      {
+        "bucket": 1,
+        "n": 208752,
+        "mean_target_return": 0.0001165571395120996
+      }
+    ],
+    "decay_by_horizon": [
+      {
+        "horizon_seconds": 30,
+        "ic_pooled": 0.055862476815915135,
+        "hit_rate": 0.6186577457638484,
+        "n": 12925968
+      },
+      {
+        "horizon_seconds": 120,
+        "ic_pooled": 0.02973646960342592,
+        "hit_rate": 0.5634648882814386,
+        "n": 12925068
+      },
+      {
+        "horizon_seconds": 300,
+        "ic_pooled": 0.01919041179849028,
+        "hit_rate": 0.5405638513917095,
+        "n": 12923268
+      }
+    ],
+    "raw_sample_count": 12925068,
+    "effective_sample_count": 12925068.0,
+    "signal_autocorrelation_lag1": 0.0,
+    "significance_method": "newey_west_hac",
+    "hac_bandwidth": 54,
+    "bootstrap_resamples": null,
+    "bootstrap_seed": null,
+    "bootstrap_ci_low": 0.02865586939254157,
+    "bootstrap_ci_high": 0.030817069814310052,
+    "stability_by_regime": {}
+  },
+  "threshold_verdict": {
+    "status": "fail",
+    "failed_rules": [
+      "failed-cost-buffer"
+    ],
+    "yellow_flags": [
+      "regime-stability-unproven"
+    ],
+    "verdict_text": "edge 0.567bps does not exceed required cost buffer 1.775bps (fees 0 + half_spread 0.92 + slippage 0.5, x1.25) stability_by_regime is not yet computed (scanner v1 gap)"
+  }
+}

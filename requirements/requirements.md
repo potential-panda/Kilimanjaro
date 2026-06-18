@@ -281,8 +281,8 @@ Disallowed AST node categories:
 Window policy:
 
 - v1 specs should prefer precomputed Makalu rolling columns.
-- If window functions are allowed in a later v1 increment, the frame must be `ROWS BETWEEN <finite N> PRECEDING AND CURRENT ROW` or an equivalent time-safe preceding-only frame.
-- Frames ending after current row, centered windows, `FOLLOWING`, or omitted/unbounded frames are rejected.
+- The frame must be finite and strictly backward-looking: `ROWS BETWEEN <finite N> PRECEDING AND CURRENT ROW`, or an equivalent time-safe preceding-only frame — including `<finite N> PRECEDING AND <finite M> PRECEDING` (M <= N), which is also strictly in the past despite not ending at `CURRENT ROW`. This is how a one-row lag ("the previous tick's value") is expressed using only the allowed window-aggregate functions, with no separate `LAG()`/`LEAD()` needed — confirmed real and useful while building the first bootstrap hypotheses (task 11).
+- Frames ending after current row, centered windows, `FOLLOWING`, or omitted/unbounded frames on either side are rejected.
 
 Join policy:
 

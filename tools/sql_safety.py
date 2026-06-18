@@ -92,18 +92,31 @@ def _func_name(node: exp.Func) -> str:
 
 
 def _window_frame_errors(node: exp.Window) -> list[str]:
-    """Per the contract's "Window policy": the frame must be a finite,
-    preceding-only window ending at CURRENT ROW. An omitted frame, an
-    UNBOUNDED start, or anything ending with FOLLOWING is rejected."""
+    """Per the contract's "Window policy": the frame must be finite and
+    strictly backward-looking -- never reach into the future relative to
+    the current row. An omitted frame, an UNBOUNDED bound on either side,
+    or anything ending with FOLLOWING is rejected.
+
+    The end bound doesn't have to be the literal CURRENT ROW: "N PRECEDING
+    AND M PRECEDING" (M <= N) is also strictly in the past -- e.g. it's
+    exactly how a one-row lag ("the previous tick's value") is expressed
+    using only the allowed window-aggregate functions, with no separate
+    LAG()/LEAD() function needed. Confirmed this shape is real and useful
+    while building the first bootstrap hypotheses (task 11) that needed a
+    point-in-time-safe lag, not just a rolling current-inclusive average.
+    """
     spec = node.args.get("spec")
     if spec is None:
-        return ["window function has no explicit frame (omitted frames are rejected; must be bounded PRECEDING ... CURRENT ROW)"]
+        return ["window function has no explicit frame (omitted frames are rejected; must be bounded and preceding-only)"]
 
     errors = []
     if spec.args.get("start_side") != "PRECEDING" or spec.args.get("start") == "UNBOUNDED":
         errors.append("window frame start must be a finite N PRECEDING, not UNBOUNDED or FOLLOWING")
-    if spec.args.get("end") != "CURRENT ROW":
-        errors.append("window frame end must be CURRENT ROW, not FOLLOWING or UNBOUNDED")
+
+    end, end_side = spec.args.get("end"), spec.args.get("end_side")
+    end_is_safe = end == "CURRENT ROW" or (end_side == "PRECEDING" and end != "UNBOUNDED")
+    if not end_is_safe:
+        errors.append("window frame end must be CURRENT ROW or a finite N PRECEDING, not FOLLOWING or UNBOUNDED")
     return errors
 
 

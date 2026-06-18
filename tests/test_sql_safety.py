@@ -38,6 +38,15 @@ class TestAllowedExpressions(unittest.TestCase):
         # The contract allows ROWS "or an equivalent time-safe preceding-only frame".
         self.assertTrue(_is_safe("avg(x) OVER (ORDER BY ts RANGE BETWEEN 30 PRECEDING AND CURRENT ROW)"))
 
+    def test_preceding_to_preceding_lag_pattern_is_allowed(self):
+        # "N PRECEDING AND M PRECEDING" is still strictly backward-looking
+        # (no FOLLOWING, no UNBOUNDED) -- this is how a one-row lag ("the
+        # previous tick's value") is expressed with only the allowed
+        # window-aggregate functions, found while building the first
+        # bootstrap hypotheses (task 11) that needed it.
+        self.assertTrue(_is_safe("avg(x) OVER (ORDER BY ts ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING)"))
+        self.assertTrue(_is_safe("avg(x) OVER (ORDER BY ts ROWS BETWEEN 5 PRECEDING AND 2 PRECEDING)"))
+
     def test_count_star_in_window(self):
         self.assertTrue(_is_safe("count(*) OVER (ORDER BY ts ROWS BETWEEN 10 PRECEDING AND CURRENT ROW)"))
 

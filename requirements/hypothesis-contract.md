@@ -220,7 +220,8 @@ A spec is invalid when:
 - duplicate search was not performed;
 - data requirements cannot be matched to Makalu inventory;
 - a research-layer target is missing `param_id`;
-- a feature is sourced from a different market than the target and `cross_market_rationale` is empty.
+- a feature is sourced from a different market than the target and `cross_market_rationale` is empty;
+- `execution_assumptions.fees_bps` doesn't match `markets/registry.yaml`'s `fee_bps` for the target market. Found for real during task 11's bootstrap validation: every one of the first 5 hypotheses declared `fees_bps: 1.0` against `GMO BTC_JPY`/`ETH_JPY`, whose registry fee is actually `0` -- an arbitrary guess silently overriding the project's own authoritative source, which would have understated the cost-buffer margin in every one of those reports. The registry is authoritative; a spec that intentionally deviates from it needs to say why.
 
 For research-layer targets, missing `param_id` is invalid. Missing `build_id` or `generated_at` sets `research_metadata.metadata_status: partial`, maps the lifecycle to `needs-tooling`, and blocks `scan-passed` / `backtest-approved` unless the narrow non-primary-target waiver in the Makalu integration contract applies.
 

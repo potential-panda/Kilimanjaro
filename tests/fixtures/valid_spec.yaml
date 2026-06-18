@@ -70,10 +70,10 @@ hypothesis:
     timestamp_cutoff_rule: "target window starts strictly after signal timestamp"
   execution_assumptions:
     order_type: market
-    fees_bps: 1.0
+    fees_bps: 0  # markets/registry.yaml: GMO BTC_JPY fee_bps=0 -- authoritative, not a guess
     half_spread_included: false
-    half_spread_bps: 1.6  # GMO/BTC_JPY avg_spread ~3,900 JPY on a ~12,000,000 JPY price, per markets/waves/GMO_BTC_JPY.csv
-    slippage_bps: 0.5
+    half_spread_bps: 0.92  # avg_spread/avg_mid for GMO/BTC_JPY computed directly over 2026-05-01..15 (the exact window this fixture is scanned against), not a stale full-history estimate
+    slippage_bps: 0.5  # NOT data-derived -- a placeholder assumption; no real slippage measurement exists yet
     latency_ms: 100
     liquidity_capacity_assumption: "single-unit notional, no capacity scaling in v1 scan"
   falsification_tests:

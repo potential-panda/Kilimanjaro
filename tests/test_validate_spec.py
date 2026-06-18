@@ -75,6 +75,31 @@ class TestValidateSpec(unittest.TestCase):
         errors = validate_file(str(_FIXTURES / "invalid_unsafe_sql_expression.yaml"))
         self.assertTrue(any("feature.sql_expression:" in e for e in errors), errors)
 
+    def test_fees_bps_mismatched_with_registry_fails(self):
+        # Found for real while running task 11's bootstrap hypotheses: every
+        # one of them declared fees_bps: 1.0 against GMO BTC_JPY/ETH_JPY,
+        # whose markets/registry.yaml fee_bps is actually 0 -- an arbitrary
+        # guess silently overriding the project's own authoritative source.
+        import copy
+
+        import yaml
+
+        from validate_spec import validate
+
+        spec = copy.deepcopy(yaml.safe_load((_FIXTURES / "valid_spec.yaml").read_text()))
+        spec["hypothesis"]["execution_assumptions"]["fees_bps"] = 1.0  # registry says GMO BTC_JPY is 0
+        errors = validate(spec)
+        self.assertTrue(any("does not match markets/registry.yaml's fee_bps" in e for e in errors), errors)
+
+    def test_fees_bps_matching_registry_passes(self):
+        import yaml
+
+        from validate_spec import validate
+
+        spec = yaml.safe_load((_FIXTURES / "valid_spec.yaml").read_text())
+        errors = validate(spec)
+        self.assertFalse(any("fee_bps" in e for e in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main()

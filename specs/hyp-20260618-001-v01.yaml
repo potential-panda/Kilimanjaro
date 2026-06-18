@@ -1,0 +1,93 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260618-001-v01
+  parent_id: hyp-20260618-001
+  title: "BINANCE ETH_USDT order book imbalance predicts GMO ETH_JPY 120s mid return"
+  status: draft
+  family: order_book_imbalance
+  family_label: "Order book imbalance"
+  custom_family_justification: null
+  created_at: "2026-06-19T00:00:00Z"
+  owner: agent
+  summary: >
+    Same mechanism as hyp-20260618-001 (BINANCE order book imbalance
+    predicting the GMO follower's return), replicated on ETH instead of
+    BTC to test whether the finding generalizes across assets or was
+    specific to BTC.
+  expected_edge_mechanism: >
+    Identical mechanism to hyp-20260618-001: BINANCE leads GMO ETH_JPY
+    (lead-lag wave currently only validated for BTC in
+    markets/waves/leadlag_BINANCE_GMO_BTC.csv; ETH/XRP pairs are supported
+    by the same Makalu LeadLag pipeline per tools/lead_lag_wave.py's
+    _SUPPORTED_PAIRS, but this run does not separately recompute the ETH
+    lead-lag wave -- assumed to hold given the same BINANCE/GMO market
+    structure, flagged here rather than silently assumed).
+  economic_rationale: "Liquidity providers reprice GMO with a lag after BINANCE order flow moves price -- same mechanism as hyp-20260618-001, different asset."
+  duplicate_search:
+    searched_at: "2026-06-19T00:00:00Z"
+    query_terms:
+      - imbalance
+      - order_book_imbalance
+      - BINANCE
+      - ETH_JPY
+    possible_duplicates: ["hyp-20260618-001"]
+    conclusion: variant
+  data_requirements:
+    markets:
+      - exchange: BINANCE
+        symbol: ETH_USDT
+      - exchange: GMO
+        symbol: ETH_JPY
+    datasets:
+      - layer: bronze
+        dataset: OrderBook
+    minimum_distinct_days: 5
+    required_columns: ["bid0_price", "bid0_qty", "ask0_price", "ask0_qty"]
+    unavailable_data_policy: needs-more-data
+    research_metadata: null
+  feature:
+    sql_expression: "(bid0_qty - ask0_qty) / (bid0_qty + ask0_qty)"
+    source_datasets:
+      - layer: bronze
+        dataset: OrderBook
+        exchange: BINANCE
+        symbol: ETH_USDT
+    primary_timestamp_column: ts
+    point_in_time_rule: "feature computed strictly from BINANCE OrderBook rows at or before signal ts"
+  cross_market_rationale: >
+    Same rationale as hyp-20260618-001, applied to ETH: feature is
+    computed on BINANCE:ETH_USDT, target return is on GMO:ETH_JPY.
+  target:
+    type: next_return
+    primary_horizon_seconds: 120
+    comparison_horizons_seconds: [30, 120, 300]
+    source_dataset:
+      layer: bronze
+      dataset: OrderBook
+      exchange: GMO
+      symbol: ETH_JPY
+    timestamp_cutoff_rule: "target window starts strictly after signal timestamp"
+  execution_assumptions:
+    order_type: market
+    fees_bps: 0  # markets/registry.yaml: GMO ETH_JPY fee_bps=0 -- authoritative, not a guess
+    half_spread_included: false
+    half_spread_bps: 2.55  # avg_spread/avg_mid for GMO/ETH_JPY computed directly over 2026-05-01..15 (the exact scanned window)
+    slippage_bps: 0.5  # NOT data-derived -- a placeholder assumption; no real slippage measurement exists yet
+    latency_ms: 100
+    liquidity_capacity_assumption: "single-unit notional, no capacity scaling in v1 scan"
+  falsification_tests:
+    - name: "btc-finding-does-not-replicate-on-eth"
+      expected_failure_meaning: "IC/hit-rate on ETH are materially weaker or sign-flipped relative to hyp-20260618-001, indicating the BTC result doesn't generalize"
+  scan_plan:
+    primary_horizon_seconds: 120
+    threshold_grid: [30, 120, 300]
+    regime_buckets: ["low_vol", "mid_vol", "high_vol"]
+    significance_method: block_bootstrap_by_day
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: "qate.trading.strategy variant, imbalance-threshold entry"
+    himalaya_config_notes: "GMO/ETH_JPY, execution_size TBD from capacity scan"
+  decisions:
+    - at: "2026-06-19T00:00:00Z"
+      actor: agent
+      decision: draft
+      reason: "variant of hyp-20260618-001 testing the same mechanism on ETH instead of BTC"
