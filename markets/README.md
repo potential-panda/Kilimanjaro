@@ -1,6 +1,6 @@
 # Markets
 
-Three things live here, all upstream of the hypothesis-scanning loop in
+Four things live here, all upstream of the hypothesis-scanning loop in
 `specs/`/`ledger/`/`scan-reports/` — a strategy is only as good as the
 market reality it's tested against.
 
@@ -74,3 +74,32 @@ Confirmed on real data: BINANCE leads GMO/BTC_JPY 81-97% of the time across
 every 30-minute bucket of the day — consistently high, with a real dip
 during 09:00-10:30 JST, matching the expected "stable but wave-shaped"
 pattern.
+
+## Limit-order fill probability
+
+On the negative-fee (maker rebate) markets in `registry.yaml`
+(`order_type: limit_only` — GMO spot, BITBANK ETH/XRP spot), only limit
+orders are ever explored, so the key question isn't "will the market move
+past the spread" but "will a resting limit order placed X basis points away
+from the best bid/ask actually fill within Y seconds." Closer to the touch
+fills more often but earns a worse price; farther away earns a better price
+but may not fill at all.
+
+`tools/fill_probability.py` answers this from bronze `Trade`+`OrderBook`
+directly: a hypothetical buy limit at `best_bid * (1 - X/10000)` is treated
+as filled within Y seconds if any subsequent trade prints at or below that
+price (symmetric for sell limits above `best_ask`). **This is a proxy, not
+a true fill simulation** — it ignores queue position ahead of the
+hypothetical order, so it's an upper bound on the real fill probability,
+not an unbiased estimate. Documented in the module docstring, not hidden.
+
+```bash
+python tools/fill_probability.py compute --exchange GMO --symbol BTC_SPOT --plot
+python tools/fill_probability.py query --wave-csv markets/waves/fillprob_GMO_BTC_SPOT.csv --time 09:00 --horizon 30
+```
+
+Confirmed on real data (`GMO/BTC_SPOT`): fill probability decreases
+monotonically with distance as expected (e.g. ~20-30% at 1bps vs. 0% at
+20bps+ within 30s), and follows the same low-activity dip around 09:00 JST
+seen in the volatility wave — consistent with both being driven by the same
+underlying trading-activity pattern.

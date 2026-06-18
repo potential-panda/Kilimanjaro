@@ -236,6 +236,14 @@ profitable regardless of what the signal predicts.
   BINANCE leads 81-97% of the time across every bucket of the day. See
   `markets/README.md` for two real data-quality findings about that
   dataset's documented-vs-actual column behavior.
+- On the negative-fee, limit-only markets (GMO spot, BITBANK ETH/XRP spot),
+  only limit orders are ever explored, so `tools/fill_probability.py`
+  answers a different question: at distance X (bps) from the best bid/ask,
+  what's the probability a resting limit order fills within Y seconds?
+  Computed from bronze `Trade`+`OrderBook` as a documented upper-bound proxy
+  (ignores queue position ahead of the order). Confirmed on real data
+  (`GMO/BTC_SPOT`): fill probability decreases monotonically with distance,
+  and dips during the same low-activity window seen in the volatility wave.
 
 ## First Slice Recommendation
 
