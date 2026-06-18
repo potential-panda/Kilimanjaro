@@ -256,21 +256,54 @@ Acceptance (all proven by `python -m unittest tests.test_sql_safety -v`):
 
 ### 7. Implement signal scanner
 
+**Done (2026-06-18).**
+
 Dependencies: task 6.
 
-Deliver:
+Delivered:
 
-- scanner accepting SQL feature expression, target, window, and grid;
-- Makalu query integration;
-- metric computation.
+- `tools/scanner.py` — `run_scan(spec, start_date, end_date)` reads the
+  feature and target source datasets directly via DuckDB (same pattern as
+  `tools/volatility_wave.py`/`lead_lag_wave.py`/`fill_probability.py`:
+  ASOF joins against bronze `OrderBook`, not Makalu's 200-row-capped query
+  CLI), substitutes the spec's `feature.sql_expression` (after re-checking
+  it with `tools/sql_safety.py` — the scanner refuses to run an expression
+  that wasn't already validated safe), and computes every metric in
+  `requirements.md`'s "Deterministic Scanner Metrics": pooled + per-day
+  Spearman IC, hit rate, 5 quantile-bucketed returns, decay across the full
+  horizon grid (not just the primary horizon), raw and autocorrelation-
+  corrected effective sample size, and a significance confidence interval.
+- `schemas/scan_report.schema.json` and `tests/test_scanner.py` (16 tests:
+  fast unit tests on synthetic data for each metric function, plus a real
+  integration test re-running the canonical BINANCE-imbalance-predicts-
+  GMO-return spec and checking the result matches the manually-computed
+  walkthrough this whole task was based on).
+- **Real finding that changed the default significance method**: running
+  block bootstrap (the original v1 pick) against real tick-level data
+  (~13M rows for a 15-day BINANCE/BTC_USDT window) took on the order of
+  tens of minutes for 1,000 resamples — directly contradicting the
+  scanner's cheap/fast design goal. Switched the default to Newey-West/HAC,
+  exactly the fallback `evaluation-framework.md` already named for this
+  case; full 3-horizon scan over that same window now completes in well
+  under a minute. Block bootstrap remains available (and was fixed to stop
+  rebuilding DataFrames per resample) for smaller, non-tick-level datasets.
+  See `requirements.md`'s updated "Deterministic Scanner Metrics" section.
 
-Acceptance:
+v1 scope notes (documented limitations in the module's own docstring, not
+silently assumed): supports exactly one feature source dataset and one
+target source dataset, both bronze `OrderBook`; `target.type:
+research_label` is not implemented; `stability_by_regime` is always
+emitted empty (regime-bucket joining against `VolSpread` is deferred);
+`threshold_verdict.status` is always `"not_evaluated"` — applying the v1
+pass/fail thresholds is task 8's job.
 
-- Computes IC, hit rate, bucketed returns, decay, raw/effective sample counts, autocorrelation, corrected significance, and stability.
-- Uses effective sample size, not naive IID row count.
-- Emits full grid.
-- Does not run order simulation.
-- Refuses arbitrary Python transforms.
+Acceptance (all proven by `python -m unittest tests.test_scanner -v`):
+
+- Computes IC, hit rate, bucketed returns, decay, raw/effective sample counts, autocorrelation, corrected significance, and stability. ✅ (stability by regime is the one documented v1 gap above)
+- Uses effective sample size, not naive IID row count. ✅
+- Emits full grid. ✅ (`decay_by_horizon` covers every tested horizon)
+- Does not run order simulation. ✅
+- Refuses arbitrary Python transforms. ✅ (only ever evaluates the spec's already-AST-validated SQL expression)
 
 ### 8. Implement threshold evaluator
 

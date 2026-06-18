@@ -294,15 +294,26 @@ Join policy:
 
 ## Deterministic Scanner Metrics
 
-**Open decision, not yet architect-approved**: `evaluation-framework.md`
-allows block bootstrap, Newey-West/HAC, "or an equivalent predeclared
-method" for the autocorrelation correction — it does not mandate block
-bootstrap specifically. This section picks block bootstrap (1,000
-resamples, fixed seed) as the v1 default because it makes fewer distributional
-assumptions, at the cost of being more expensive to compute than Newey-West/HAC.
-That tradeoff is worth a second opinion before implementation locks it in;
-Newey-West/HAC is the documented fallback if bootstrap cost becomes a
-bottleneck at scan volume.
+**Resolved (2026-06-18, task 7), with the default flipped from the original
+v1 pick.** `evaluation-framework.md` allows block bootstrap, Newey-West/HAC,
+"or an equivalent predeclared method" — it never mandated block bootstrap.
+This section originally picked block bootstrap (1,000 resamples) as the
+default on the theory that it makes fewer distributional assumptions.
+Implementing it against real tick-level data (`tools/scanner.py`,
+BINANCE/BTC_USDT, ~13M rows for a 15-day window) confirmed the documented
+risk: 1,000 resamples, each re-concatenating and re-ranking that much data,
+takes on the order of tens of minutes per scan — directly contradicting the
+scanner's whole design goal of being cheap and fast per hypothesis. The v1
+default is now **Newey-West/HAC**, exactly the fallback `evaluation-framework.md`
+already anticipated for this situation: a vectorized, closed-form long-run-
+variance estimate of the (rank-standardized) signal-target product series,
+using the standard Newey-West (1994) automatic bandwidth rule. No resampling,
+no loop over the data more than a constant number of times — the full
+3-horizon scan over a 15-day, ~13M-row window completes in well under a
+minute. `tools/scanner.py`'s `_block_bootstrap_ci` is kept available (and
+correctly implemented, no longer rebuilding DataFrames per resample) as an
+option for smaller, non-tick-level datasets where its slightly weaker
+distributional assumptions matter more than speed.
 
 v1 defaults:
 
@@ -310,7 +321,7 @@ v1 defaults:
 - Hit rate: `sign(feature)` equals `sign(target)` after dropping rows where either sign is zero. Thresholded features may define a neutral band; neutral rows are excluded and the threshold must be predeclared.
 - Buckets: 5 quantile buckets by feature value per day. Report count and mean target return per bucket; duplicate quantile edges collapse with a warning.
 - Effective sample size: `n_eff = n * (1 - rho1) / (1 + rho1)`, where `rho1` is lag-1 autocorrelation of the feature within each day, clipped to `[0, 0.99]`; report summed day-level `n_eff`.
-- Significance: v1 uses a block bootstrap by day with 1,000 resamples and fixed random seed recorded in the scan report. Primary statistic is pooled Spearman IC; pass requires the 95% bootstrap confidence interval to exclude zero with the claimed sign.
+- Significance: v1 uses Newey-West/HAC on the rank-standardized signal-target product series (bandwidth via the standard automatic rule, recorded in the scan report as `hac_bandwidth`). Primary statistic is pooled Spearman IC; pass requires the 95% HAC confidence interval to exclude zero with the claimed sign. Block bootstrap by day (1,000 resamples, fixed seed) remains an available method for smaller, non-tick-level datasets, recorded the same way (`bootstrap_ci_low`/`bootstrap_ci_high`) when used instead.
 - Stability by day: primary-horizon IC sign must match claimed direction on at least 3 days and at least 60% of scanned days.
 - Stability by regime: effect must have same sign in at least 2 of 3 `VolSpread` buckets. If fewer than 3 buckets exist, mark `regime-stability-unproven`.
 - Isolated grid cell: primary cell passes only if at least 2 adjacent cells in the horizon/threshold grid have same-sign IC and at least 50% of the primary cell's absolute IC.
@@ -323,7 +334,7 @@ v1 threshold defaults:
 - minimum effective tick-level observations: 1,000;
 - primary pooled absolute Spearman IC: at least 0.02;
 - primary hit rate: at least 51% where sign prediction is applicable;
-- bootstrap confidence interval: excludes zero with claimed sign;
+- significance confidence interval (Newey-West/HAC by default, or block bootstrap if used instead): excludes zero with claimed sign;
 - cost buffer: positive after 25% safety multiplier;
 - yellow flag: regime-stability-unproven, single symbol only, or human waiver used;
 - automatic reject: look-ahead leakage, missing timestamp alignment, missing cost assumptions, missing required research `param_id`, or effect failing autocorrelation-adjusted significance.

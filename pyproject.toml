@@ -11,6 +11,8 @@ dependencies = [
     "pandas>=2.0",
     "matplotlib>=3.9",
     "sqlglot>=25.0",
+    "scipy>=1.11",
+    "numpy>=1.24",
 ]
 
 [build-system]

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kilimanjaro/schemas/scan_report.schema.json",
+  "title": "Kilimanjaro Scan Report",
+  "description": "Output of tools/scanner.py (task 7), per requirements/data-contract.md's Scan Report Output. threshold_verdict.status is 'not_evaluated' until task 8's threshold evaluator runs.",
+  "type": "object",
+  "required": ["schema_version", "id", "hypothesis_id", "scanner_version", "created_at", "data_window", "metrics", "threshold_verdict"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^scan-[0-9]{8}-[0-9]{3}$" },
+    "hypothesis_id": { "type": "string", "pattern": "^hyp-[0-9]{8}-[0-9]{3}(-v[0-9]{2})?$" },
+    "scanner_version": { "type": "string" },
+    "config_hash": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "data_window": {
+      "type": "object",
+      "required": ["exchange", "symbol", "start_date", "end_date", "distinct_days"],
+      "properties": {
+        "exchange": { "type": "string" },
+        "symbol": { "type": "string" },
+        "start_date": { "type": "string" },
+        "end_date": { "type": "string" },
+        "distinct_days": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "primary_horizon_seconds", "ic_method", "ic_pooled", "ic_by_day", "hit_rate",
+        "bucketed_returns", "decay_by_horizon", "raw_sample_count", "effective_sample_count",
+        "signal_autocorrelation_lag1", "significance_method", "hac_bandwidth",
+        "bootstrap_resamples", "bootstrap_seed", "stability_by_regime"
+      ],
+      "properties": {
+        "primary_horizon_seconds": { "type": "number" },
+        "ic_method": { "const": "spearman" },
+        "ic_pooled": { "type": ["number", "null"] },
+        "ic_by_day": { "type": "object" },
+        "hit_rate": { "type": ["number", "null"] },
+        "bucketed_returns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["bucket", "n", "mean_target_return"],
+            "properties": {
+              "bucket": { "type": "integer" },
+              "n": { "type": "integer" },
+              "mean_target_return": { "type": "number" }
+            }
+          }
+        },
+        "decay_by_horizon": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["horizon_seconds", "ic_pooled", "hit_rate", "n"],
+            "properties": {
+              "horizon_seconds": { "type": "number" },
+              "ic_pooled": { "type": ["number", "null"] },
+              "hit_rate": { "type": ["number", "null"] },
+              "n": { "type": "integer" }
+            }
+          }
+        },
+        "raw_sample_count": { "type": "integer", "minimum": 0 },
+        "effective_sample_count": { "type": "number", "minimum": 0 },
+        "signal_autocorrelation_lag1": { "type": ["number", "null"] },
+        "significance_method": {
+          "enum": ["block_bootstrap_by_day", "newey_west_hac"],
+          "description": "v1 default is newey_west_hac -- confirmed against real tick-level data (~13M rows/15-day window) that 1,000-resample block bootstrap takes on the order of tens of minutes, contradicting the scanner's cheap/fast design goal. block_bootstrap_by_day remains available for smaller datasets."
+        },
+        "hac_bandwidth": { "type": ["integer", "null"], "description": "Newey-West automatic bandwidth used; null when significance_method is block_bootstrap_by_day." },
+        "bootstrap_resamples": { "type": ["integer", "null"], "description": "null when significance_method is newey_west_hac." },
+        "bootstrap_seed": { "type": ["integer", "null"], "description": "null when significance_method is newey_west_hac." },
+        "bootstrap_ci_low": { "type": ["number", "null"] },
+        "bootstrap_ci_high": { "type": ["number", "null"] },
+        "stability_by_regime": { "type": "object" }
+      }
+    },
+    "threshold_verdict": {
+      "type": "object",
+      "required": ["status", "failed_rules", "yellow_flags", "verdict_text"],
+      "properties": {
+        "status": { "enum": ["pass", "fail", "not_evaluated"] },
+        "failed_rules": { "type": "array", "items": { "type": "string" } },
+        "yellow_flags": { "type": "array", "items": { "type": "string" } },
+        "verdict_text": { "type": "string" }
+      }
+    }
+  }
+}
