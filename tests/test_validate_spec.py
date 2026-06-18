@@ -14,6 +14,11 @@ direction/hypothesis-taxonomy.md and requirements/hypothesis-contract.md:
   lead-lag leader (per direct user instruction) -- sourcing from the
   target's own market instead also requires justification, except for the
   local-execution-mechanics families where BINANCE has no analogue.
+
+Plus task 6's SQL safety check (tools/sql_safety.py) wired into
+feature.sql_expression validation -- see tests/test_sql_safety.py for the
+full battery of allowed/rejected SQL cases; this file only proves it's
+actually invoked from validate_spec.
 """
 
 import sys
@@ -65,6 +70,10 @@ class TestValidateSpec(unittest.TestCase):
 
         errors = validate(spec)
         self.assertFalse(any("BINANCE is the default feature source" in e for e in errors), errors)
+
+    def test_unsafe_sql_expression_fails(self):
+        errors = validate_file(str(_FIXTURES / "invalid_unsafe_sql_expression.yaml"))
+        self.assertTrue(any("feature.sql_expression:" in e for e in errors), errors)
 
 
 if __name__ == "__main__":

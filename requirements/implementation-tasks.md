@@ -210,21 +210,49 @@ Acceptance:
 
 ### 6. Implement SQL AST allowlist
 
-Dependencies: tasks 4 and 5.
+**Done (2026-06-18).**
 
-Deliver:
+Dependencies: tasks 4 and 5 listed originally, but turned out not to be
+real — this task only parses and inspects the `sql_expression` string
+itself; it needs no live inventory or schema data, so it was implemented
+before task 5 with no issue. (Confirming a referenced *column* actually
+exists in Makalu still depends on task 5/4 — that check remains deferred,
+unchanged from the original scope.)
 
-- `sqlglot` DuckDB-dialect expression parser validation;
-- allowlist for AST nodes and scalar functions;
-- explicit rejection for subqueries, DDL/DML, UDFs, file/network functions, non-deterministic functions, and arbitrary joins;
-- point-in-time join/window validation.
+Delivered:
 
-Acceptance:
+- `tools/sql_safety.py` — parses with `sqlglot`'s DuckDB dialect, then
+  walks the AST (not just checks for a parse exception — confirmed during
+  the spike and re-confirmed here that subqueries and multi-statement
+  strings parse without error) and rejects: any disallowed node type
+  (`Select`, `Subquery`, `With`/`CTE`, `Join`, `Drop`, `Insert`, `Update`,
+  `Delete`, `Create`, `Alter`, `Pragma`, `Copy`, `Attach`, `Command`,
+  `Block`/multi-statement); any function call whose name isn't on the
+  scalar-function allowlist (checked by literal call name for generic
+  `Anonymous` nodes like `now()`/`clip()`, not just by node class); any
+  window function whose frame is missing, unbounded, or ends after the
+  current row.
+- Two corrections found and fixed while building it, beyond what the
+  spike predicted: `CASE WHEN` parses to `exp.Case`/`exp.If`, both
+  subclasses of `exp.Func`, so they had to be explicitly exempted from the
+  function-name check (the first version wrongly rejected every `CASE
+  WHEN`); and aggregate functions used as the windowed function
+  (`avg`/`min`/`max`/`sum`/`count` inside `OVER (...)`) needed their own
+  separate allowlist from the scalar-function one (the first version
+  wrongly rejected `avg(x) OVER (...)`, which the Window policy clearly
+  expects to be usable). Both are now reflected in `requirements.md`'s
+  Scanner SQL Safety Contract.
+- Wired into `tools/validate_spec.py`: `feature.sql_expression` is now
+  checked for safety, not just non-emptiness.
+- `tests/test_sql_safety.py` (18 cases) plus a dedicated unsafe-expression
+  fixture in `tests/test_validate_spec.py`.
 
-- Safe scalar expressions pass.
-- Unsafe SQL constructs fail before query execution.
-- Window frames ending after current row fail.
-- Feature specs cannot provide complete SELECT statements.
+Acceptance (all proven by `python -m unittest tests.test_sql_safety -v`):
+
+- Safe scalar expressions pass. ✅
+- Unsafe SQL constructs fail before query execution. ✅
+- Window frames ending after current row fail. ✅
+- Feature specs cannot provide complete SELECT statements. ✅
 
 ### 7. Implement signal scanner
 
@@ -333,6 +361,6 @@ kilimanjaro handoff create hyp-...
 ## Open Feasibility Items For Technical Review
 
 - ~~Verify the `makalu-integration-contract.md` command assumptions against real Makalu output during task 4.~~ **Done (2026-06-18).** Findings: `query --list`'s JSON shape was wrong in the original doc (corrected); `BookState`/`BookChange` are not currently queryable due to a catalog/storage layer mismatch (not a blocker — see Bronze-First Reliability Model). Folded into `makalu-integration-contract.md` and `data-contract.md`.
-- ~~Confirm `sqlglot` compatibility with the exact DuckDB expressions needed by v1 scanner specs.~~ **Done (2026-06-18).** `sqlglot` (not yet a project dependency — installed ad hoc for the spike) parses every expression shape the SQL Safety Contract needs, but the validator cannot rely on "parses without error" alone: subqueries and multi-statement injection (`"1; DROP TABLE x;"`) both parse successfully into inspectable AST nodes rather than raising, so the validator must explicitly (a) reject anything that isn't a single bare expression/`Block`, (b) walk for disallowed node classes (`Subquery`, `Select`, `Join`, `Drop`, etc.), (c) check literal function-name strings on generic `Anonymous` nodes against the allowlist (e.g. `now()` has no distinct typed node in this dialect/version), and (d) inspect `WindowSpec` frame bounds directly rather than the presence of a `Window` node, since bounded and unbounded windows share the same top-level node type. `requirements.md`'s SQL Safety Contract section now flags the library choice itself as an open decision pending this validation working out in practice.
+- ~~Confirm `sqlglot` compatibility with the exact DuckDB expressions needed by v1 scanner specs.~~ **Done (2026-06-18), implemented in task 6.** `sqlglot` is now a real project dependency (`pyproject.toml`) and `tools/sql_safety.py` does exactly the AST-walk validation the spike said would be needed — see task 6 above for the two additional corrections found while implementing it (`CASE WHEN`/`exp.If` are `exp.Func` subclasses needing exemption; window-aggregate functions need their own allowlist separate from scalar functions).
 - Decide whether missing research-layer `build_id`/`generated_at` requires a Makalu enhancement before any research-label-backed hypothesis can be promoted.
 - Confirm append-only `ledger/events.jsonl` is acceptable for concurrent agent sessions under repository lock or single-writer discipline.

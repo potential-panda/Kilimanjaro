@@ -14,11 +14,13 @@ Two layers, matching requirements/hypothesis-contract.md:
    requires cross_market_rationale, except for the local-execution-mechanics
    families where BINANCE has no analogue.
 
-Two checks from the contract are intentionally not enforced here because
-they require data this script doesn't have:
-  - "feature expression is not SQL over whitelisted Makalu datasets" -- the
-    SQL AST allowlist is task 6's scope; this only checks the expression is
-    non-empty.
+"feature expression is not SQL over whitelisted Makalu datasets" is checked
+in two halves: the *structural/safety* half (single scalar expression, no
+joins/subqueries/DDL, allowlisted functions, bounded windows) is enforced
+here via tools/sql_safety.py (task 6). The *column-whitelist* half --
+confirming every referenced column actually resolves to a real Makalu
+dataset column -- requires live schema knowledge and is deferred to task 5
+alongside the other check intentionally not enforced here:
   - "data requirements cannot be matched to Makalu inventory" -- requires a
     live inventory snapshot (task 4); not checked here.
   - "target horizon is selected after scanning" is a procedural rule about
@@ -34,6 +36,8 @@ from pathlib import Path
 
 import jsonschema
 import yaml
+
+from sql_safety import validate_expression as _validate_sql_expression
 
 _SCHEMA_PATH = Path(__file__).parent.parent / "schemas" / "hypothesis_spec.schema.json"
 
@@ -87,8 +91,11 @@ def _business_rule_errors(spec: dict) -> list[str]:
             "query_terms, and conclusion must all be set"
         )
 
-    if not (h.get("feature", {}).get("sql_expression") or "").strip():
+    sql_expression = h.get("feature", {}).get("sql_expression") or ""
+    if not sql_expression.strip():
         errors.append("feature.sql_expression is empty")
+    else:
+        errors.extend(f"feature.sql_expression: {e}" for e in _validate_sql_expression(sql_expression))
 
     if not h.get("falsification_tests"):
         errors.append("falsification_tests is empty")

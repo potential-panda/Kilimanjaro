@@ -233,15 +233,20 @@ Acceptance criteria:
 
 ## Scanner SQL Safety Contract
 
-**Open decision, not yet architect-approved**: this section names `sqlglot`
-as the AST validation library. That choice is a starting recommendation, not
-a requirement derived from phase-1 direction — `evaluation-framework.md`
-only requires that SQL input be safely whitelisted, not which library
-enforces it. Confirm `sqlglot`'s DuckDB-dialect coverage against the exact
-expressions needed by the first 3-5 bootstrap hypotheses (see
-`implementation-tasks.md`'s open feasibility items) before treating this as
-settled; a hand-rolled allowlist parser is an acceptable fallback if
-`sqlglot` proves too permissive or too strict for a real expression.
+**Resolved and implemented (2026-06-18, task 6).** `sqlglot`'s DuckDB
+dialect was confirmed adequate, with three real corrections to how it must
+be used — `sqlglot.parse_one()` does not raise for a subquery or a
+multi-statement string like `"1; DROP TABLE trade;"`, so the validator
+walks the parsed AST and rejects disallowed node types explicitly rather
+than treating "no parse error" as "safe"; unrecognized functions (`now()`)
+and several allowed functions with no dedicated node type (`clip`) both
+surface as a generic `Anonymous` node, so the function allowlist checks the
+literal call name, not the node's class; and `CASE WHEN` parses to
+`exp.Case`/`exp.If`, both of which are themselves subclasses of `exp.Func`,
+so they must be explicitly exempted from the function-name check or every
+`CASE WHEN` would be wrongly rejected. See `tools/sql_safety.py` and
+`tests/test_sql_safety.py` for the implementation and the full battery of
+allowed/rejected cases, including the canonical BINANCE-imbalance example.
 
 v1 scanner expressions must be parsed and validated through `sqlglot` using the DuckDB dialect before they are interpolated into any query. If Kilimanjaro later calls Makalu internals directly, the same AST validation remains required before execution.
 
@@ -260,7 +265,8 @@ Allowed AST node categories:
 - boolean operations `AND`, `OR`, `NOT`;
 - `CASE WHEN ... THEN ... ELSE ... END`;
 - casts between numeric types where the target type is allowlisted;
-- scalar functions: `abs`, `sqrt`, `ln`, `log`, `exp`, `least`, `greatest`, `coalesce`, `nullif`, `sign`, `clip` where supported by the execution engine.
+- scalar functions: `abs`, `sqrt`, `ln`, `log`, `exp`, `least`, `greatest`, `coalesce`, `nullif`, `sign`, `clip` where supported by the execution engine;
+- window-aggregate functions, only as the function directly being windowed (see Window policy below), separately allowlisted from the scalar functions above: `avg`, `min`, `max`, `sum`, `count`. A scalar function used as the windowed function (e.g. `sqrt(x) OVER (...)`) is rejected — the two lists are not interchangeable.
 
 Disallowed AST node categories:
 
