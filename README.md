@@ -228,6 +228,14 @@ profitable regardless of what the signal predicts.
   `markets/README.md` for usage and a real data-coverage caveat (some
   markets only have 7 days of history so far, not enough to call the daily
   pattern stable yet).
+- BINANCE isn't traded but is the industry-leading exchange; a prior
+  strategy generated signal there and traded on GMO. `tools/lead_lag_wave.py`
+  builds an equivalent daily wave for how strongly/stably BINANCE leads each
+  GMO JPY pair, reusing Makalu's existing gold-layer `LeadLag` dataset rather
+  than recomputing cross-correlation from scratch. Confirmed on real data:
+  BINANCE leads 81-97% of the time across every bucket of the day. See
+  `markets/README.md` for two real data-quality findings about that
+  dataset's documented-vs-actual column behavior.
 
 ## First Slice Recommendation
 
