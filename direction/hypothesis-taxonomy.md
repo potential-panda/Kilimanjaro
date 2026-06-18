@@ -6,6 +6,27 @@ running a scan). All families are testable against existing Makalu bronze
 (`Trade`, `OrderBook`) and silver (`BookChange`, feature_engineering outputs)
 without new pipelines.
 
+## Addendum: cross-market sourcing and horizon selection (2026-06-18)
+
+Added after the market-characterization layer (`markets/`) was built, based
+on direct user guidance — applies to every family below, not just #1 and #9:
+
+- **A feature is not assumed to be computed on the same market as the
+  target.** Where a lead-lag relationship exists (e.g. BINANCE leads GMO
+  BTC_JPY 81-97% of the time, per `markets/waves/leadlag_BINANCE_GMO_BTC.csv`),
+  the follower market's own order-book/flow signals are largely a lagged
+  copy of the leader's and are not independently informative. Compute the
+  signal on the leader; measure the target return on the market actually
+  traded. See `requirements/hypothesis-contract.md`'s "Cross-Market Signal
+  Sourcing" section for the schema-level rule (`cross_market_rationale`).
+- **The tested horizon must be justified by the volatility-vs-spread wave**
+  (`markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`), not
+  picked by convention. A horizon where price rarely clears the spread on
+  the target market cannot be profitable regardless of what the signal
+  predicts — e.g. 5s is too short for GMO BTC_JPY at most times of day; ~120s
+  reaches a much more reasonable spread-clearing probability. This applies
+  per time-of-day bucket, not just as a single global default.
+
 ## 1. Order book imbalance
 - **Data**: bronze `BookState` — already computes volume imbalance at
   multiple depth levels per snapshot; no need to derive from raw `OrderBook`
@@ -17,6 +38,12 @@ without new pipelines.
 - **Reject if**: imbalance only "works" on one symbol/day, or effect
   disappears once spread/fee-equivalent move is required (i.e., it predicts
   direction but not enough magnitude to clear costs).
+- **Cross-market note**: if the target market is a known follower (see
+  addendum above), compute the imbalance on the leader's `OrderBook`, not
+  the follower's — e.g. BINANCE imbalance predicting GMO BTC_JPY return, not
+  GMO's own imbalance. Also prefer a horizon long enough to clear the
+  target market's spread per its volatility wave; 1-5s is too short for
+  GMO BTC_JPY at most times of day.
 
 ## 2. Weighted imbalance and microprice
 - **Data**: bronze `BookState` — already computes microprice at multiple
@@ -102,15 +129,25 @@ without new pipelines.
 ## 9. Lead-lag between venues or execution sizes
 - **Data**: gold `LeadLag` — already computes cross-market correlation
   structure, optimal lag, and lag stability between two markets
-  (`market_a` leads `market_b`), built from silver `MarketPrice`.
+  (`market_a` leads `market_b`), built from silver `MarketPrice`. Currently
+  populated only for `market_a=BINANCE:*_USDT` / `market_b=GMO:*_JPY`
+  (btc/eth/xrp, ~33 days) — confirmed 2026-06-18, see `tools/lead_lag_wave.py`.
 - **Mechanism**: price discovery happens first on a more liquid/faster venue
   and propagates with a lag to others; the lag is exploitable if it's larger
   than execution latency + costs.
-- **Example**: GMO mid-price move predicts COINCHECK mid-price move over the
-  next K ms.
+- **Example**: BINANCE BTC_USDT mid-price move predicts GMO BTC_JPY
+  mid-price move over the next K ms — confirmed on real data: BINANCE leads
+  81-97% of the time across every 30-minute JST bucket (corrected from an
+  earlier draft example, "GMO predicts COINCHECK," which named the wrong
+  direction and a pair with no populated lead-lag data at all).
 - **Reject if**: lag is smaller than realistic execution latency for the
   lagging venue (no exploitable mechanism) or clock skew between sources is
   not verified.
+- **Also see**: this family's leader/follower relationship is the basis for
+  the cross-market sourcing rule in the addendum above — it's not limited to
+  predicting the follower's *price*, it also governs which market other
+  families (e.g. #1 imbalance) should source their *feature* from when the
+  target is a follower market.
 
 ## 10. Volatility/spread regime filters
 - **Data**: gold `VolSpread` (same dataset as family #5).

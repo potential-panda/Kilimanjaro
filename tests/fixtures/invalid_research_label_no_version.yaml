@@ -2,30 +2,40 @@ schema_version: 1
 hypothesis:
   id: hyp-20260618-001
   parent_id: null
-  title: Depth imbalance predicts 5s mid return on GMO BTC_JPY
+  title: BINANCE BTC_USDT order book imbalance predicts GMO BTC_JPY 120s mid return
   status: draft
   family: order_book_imbalance
   family_label: Order book imbalance
   custom_family_justification: null
   created_at: '2026-06-18T00:00:00Z'
   owner: agent
-  summary: Top-of-book volume imbalance as a short-horizon directional signal.
-  expected_edge_mechanism: 'Persistent bid/ask depth imbalance reflects near-term
-    net order flow pressure that has not yet been arbitraged into price.
+  summary: 'Top-of-book volume imbalance on BINANCE (the leading market) as a directional
+    signal for GMO BTC_JPY (the following market), at a horizon long enough to clear
+    GMO''s spread.
 
     '
-  economic_rationale: Liquidity providers reprice with a lag after large one-sided
-    flow.
+  expected_edge_mechanism: 'BINANCE leads GMO BTC_JPY 81-97% of the time across every
+    30-minute JST bucket (markets/waves/leadlag_BINANCE_GMO_BTC.csv). GMO''s own order
+    book imbalance is largely a lagged copy of BINANCE''s, not an independent signal,
+    so the informative imbalance is computed on BINANCE; it predicts GMO''s future
+    return because GMO has not yet caught up to BINANCE''s price discovery.
+
+    '
+  economic_rationale: Liquidity providers reprice GMO with a lag after BINANCE order
+    flow moves price.
   duplicate_search:
     searched_at: '2026-06-18T00:00:00Z'
     query_terms:
     - imbalance
-    - BookState
+    - BINANCE
     - BTC_JPY
+    - lead_lag
     possible_duplicates: []
     conclusion: new
   data_requirements:
     markets:
+    - exchange: BINANCE
+      symbol: BTC_USDT
     - exchange: GMO
       symbol: BTC_JPY
     datasets:
@@ -50,21 +60,30 @@ hypothesis:
     source_datasets:
     - layer: bronze
       dataset: OrderBook
+      exchange: BINANCE
+      symbol: BTC_USDT
       alias: ob
     primary_timestamp_column: ts
-    point_in_time_rule: feature computed strictly from OrderBook rows at or before
-      signal ts
+    point_in_time_rule: feature computed strictly from BINANCE OrderBook rows at or
+      before signal ts
+  cross_market_rationale: 'Feature is computed on BINANCE:BTC_USDT; target return
+    is on GMO:BTC_JPY. See expected_edge_mechanism: BINANCE leads GMO 81-97% of the
+    time per the lead-lag wave, so GMO''s own book is not an independently informative
+    source for this family.
+
+    '
   target:
     type: research_label
-    primary_horizon_seconds: 5
+    primary_horizon_seconds: 120
     comparison_horizons_seconds:
-    - 1
-    - 5
     - 30
     - 120
+    - 300
     source_dataset:
       layer: research
       dataset: TripleBarrierLabel
+      exchange: GMO
+      symbol: BTC_JPY
     timestamp_cutoff_rule: target window starts strictly after signal timestamp
   execution_assumptions:
     order_type: market
@@ -78,12 +97,11 @@ hypothesis:
   - name: imbalance-only-on-one-day
     expected_failure_meaning: effect disappears once tested across >=5 distinct days
   scan_plan:
-    primary_horizon_seconds: 5
+    primary_horizon_seconds: 120
     threshold_grid:
-    - 1
-    - 5
     - 30
     - 120
+    - 300
     regime_buckets:
     - low_vol
     - mid_vol

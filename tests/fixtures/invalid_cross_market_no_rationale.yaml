@@ -1,0 +1,107 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260618-001
+  parent_id: null
+  title: BINANCE BTC_USDT order book imbalance predicts GMO BTC_JPY 120s mid return
+  status: draft
+  family: order_book_imbalance
+  family_label: Order book imbalance
+  custom_family_justification: null
+  created_at: '2026-06-18T00:00:00Z'
+  owner: agent
+  summary: 'Top-of-book volume imbalance on BINANCE (the leading market) as a directional
+    signal for GMO BTC_JPY (the following market), at a horizon long enough to clear
+    GMO''s spread.
+
+    '
+  expected_edge_mechanism: 'BINANCE leads GMO BTC_JPY 81-97% of the time across every
+    30-minute JST bucket (markets/waves/leadlag_BINANCE_GMO_BTC.csv). GMO''s own order
+    book imbalance is largely a lagged copy of BINANCE''s, not an independent signal,
+    so the informative imbalance is computed on BINANCE; it predicts GMO''s future
+    return because GMO has not yet caught up to BINANCE''s price discovery.
+
+    '
+  economic_rationale: Liquidity providers reprice GMO with a lag after BINANCE order
+    flow moves price.
+  duplicate_search:
+    searched_at: '2026-06-18T00:00:00Z'
+    query_terms:
+    - imbalance
+    - BINANCE
+    - BTC_JPY
+    - lead_lag
+    possible_duplicates: []
+    conclusion: new
+  data_requirements:
+    markets:
+    - exchange: BINANCE
+      symbol: BTC_USDT
+    - exchange: GMO
+      symbol: BTC_JPY
+    datasets:
+    - layer: bronze
+      dataset: OrderBook
+    minimum_distinct_days: 5
+    required_columns:
+    - bid0_price
+    - bid0_qty
+    - ask0_price
+    - ask0_qty
+    unavailable_data_policy: needs-more-data
+    research_metadata: null
+  feature:
+    sql_expression: (bid0_qty - ask0_qty) / (bid0_qty + ask0_qty)
+    source_datasets:
+    - layer: bronze
+      dataset: OrderBook
+      exchange: BINANCE
+      symbol: BTC_USDT
+      alias: ob
+    primary_timestamp_column: ts
+    point_in_time_rule: feature computed strictly from BINANCE OrderBook rows at or
+      before signal ts
+  cross_market_rationale: null
+  target:
+    type: next_return
+    primary_horizon_seconds: 120
+    comparison_horizons_seconds:
+    - 30
+    - 120
+    - 300
+    source_dataset:
+      layer: bronze
+      dataset: OrderBook
+      exchange: GMO
+      symbol: BTC_JPY
+    timestamp_cutoff_rule: target window starts strictly after signal timestamp
+  execution_assumptions:
+    order_type: market
+    fees_bps: 1.0
+    half_spread_included: true
+    slippage_bps: 0.5
+    latency_ms: 100
+    liquidity_capacity_assumption: single-unit notional, no capacity scaling in v1
+      scan
+  falsification_tests:
+  - name: imbalance-only-on-one-day
+    expected_failure_meaning: effect disappears once tested across >=5 distinct days
+  scan_plan:
+    primary_horizon_seconds: 120
+    threshold_grid:
+    - 30
+    - 120
+    - 300
+    regime_buckets:
+    - low_vol
+    - mid_vol
+    - high_vol
+    significance_method: block_bootstrap_by_day
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: qate.trading.strategy variant, imbalance-threshold
+      entry
+    himalaya_config_notes: GMO/BTC_JPY, execution_size TBD from capacity scan
+  decisions:
+  - at: '2026-06-18T00:00:00Z'
+    actor: agent
+    decision: draft
+    reason: initial spec drafted

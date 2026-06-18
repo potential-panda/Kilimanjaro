@@ -80,7 +80,11 @@ A hypothesis spec resolves to:
 ### Pass / promote-to-backtest thresholds (v1 defaults — tunable, but changes
 must be logged and treated as a meta-decision per `workflow-strategy.md`)
 - The primary horizon was declared before scanning, not chosen after seeing
-  results.
+  results — and must be justified by the target market's volatility-vs-spread
+  wave (`markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`),
+  not picked by convention. A horizon where price rarely clears the spread
+  on the target market cannot be profitable regardless of what the signal
+  predicts; see `hypothesis-taxonomy.md`'s 2026-06-18 addendum.
 - Scan window covers at least 5 distinct trading days; if fewer are
   available, the ledger records `needs-more-data` instead of a promotion
   decision.

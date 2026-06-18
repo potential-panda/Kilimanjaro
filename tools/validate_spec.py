@@ -78,6 +78,19 @@ def _business_rule_errors(spec: dict) -> list[str]:
                 "target.type is 'research_label' but data_requirements.research_metadata.param_id is missing"
             )
 
+    target_market = (target.get("source_dataset") or {}).get("exchange"), (target.get("source_dataset") or {}).get("symbol")
+    feature_markets = {
+        (ds.get("exchange"), ds.get("symbol")) for ds in h.get("feature", {}).get("source_datasets", [])
+    }
+    if feature_markets - {target_market} and not (h.get("cross_market_rationale") or "").strip():
+        errors.append(
+            "feature is sourced from a different market than the target "
+            f"({target_market}) but cross_market_rationale is empty -- name which market the "
+            "feature is actually computed on and why that market's signal is informative for "
+            "the target market (e.g. a follower market's own order book is not independently "
+            "informative when a lead-lag relationship makes it largely a copy of the leader's book)"
+        )
+
     return errors
 
 

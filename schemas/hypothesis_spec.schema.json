@@ -14,7 +14,7 @@
         "created_at", "owner", "expected_edge_mechanism",
         "duplicate_search", "data_requirements", "feature", "target",
         "execution_assumptions", "falsification_tests", "scan_plan",
-        "backtest_handoff_intent", "decisions"
+        "backtest_handoff_intent", "decisions", "cross_market_rationale"
       ],
       "properties": {
         "id": { "type": "string", "pattern": "^hyp-[0-9]{8}-[0-9]{3}(-v[0-9]{2})?$" },
@@ -27,6 +27,10 @@
         "family": { "$ref": "#/$defs/family" },
         "family_label": { "type": "string", "minLength": 1 },
         "custom_family_justification": { "type": ["string", "null"] },
+        "cross_market_rationale": {
+          "type": ["string", "null"],
+          "description": "Required non-empty when any feature.source_datasets[].exchange/symbol differs from target.source_dataset.exchange/symbol. Must say which market the feature is actually computed on and why that market's signal is informative for the target market's return -- e.g. a follower market's own order-book imbalance is not independently informative when a lead-lag relationship makes it largely a copy of the leader's book."
+        },
         "created_at": { "type": "string", "format": "date-time" },
         "owner": { "enum": ["agent", "human"] },
         "summary": { "type": "string" },
@@ -91,14 +95,28 @@
           "required": ["sql_expression", "source_datasets", "primary_timestamp_column"],
           "properties": {
             "sql_expression": { "type": "string" },
-            "source_datasets": { "type": "array", "items": { "type": "object" } },
+            "source_datasets": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["layer", "dataset", "exchange", "symbol"],
+                "properties": {
+                  "layer": { "enum": ["bronze", "silver", "gold", "feature", "research"] },
+                  "dataset": { "type": "string", "minLength": 1 },
+                  "exchange": { "type": "string", "minLength": 1 },
+                  "symbol": { "type": "string", "minLength": 1 },
+                  "alias": { "type": "string" }
+                }
+              }
+            },
             "primary_timestamp_column": { "type": "string", "minLength": 1 },
             "point_in_time_rule": { "type": "string" }
           }
         },
         "target": {
           "type": "object",
-          "required": ["type", "primary_horizon_seconds", "comparison_horizons_seconds"],
+          "required": ["type", "primary_horizon_seconds", "comparison_horizons_seconds", "source_dataset"],
           "properties": {
             "type": { "enum": ["next_return", "spread_adjusted_return", "research_label"] },
             "primary_horizon_seconds": { "type": "number", "exclusiveMinimum": 0 },
@@ -107,7 +125,16 @@
               "minItems": 1,
               "items": { "type": "number", "exclusiveMinimum": 0 }
             },
-            "source_dataset": { "type": "object" },
+            "source_dataset": {
+              "type": "object",
+              "required": ["layer", "dataset", "exchange", "symbol"],
+              "properties": {
+                "layer": { "enum": ["bronze", "silver", "gold", "feature", "research"] },
+                "dataset": { "type": "string", "minLength": 1 },
+                "exchange": { "type": "string", "minLength": 1 },
+                "symbol": { "type": "string", "minLength": 1 }
+              }
+            },
             "timestamp_cutoff_rule": { "type": "string" }
           }
         },

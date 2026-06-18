@@ -5,6 +5,11 @@ hypothesis schema/validator:
 - Missing mechanism fails.
 - Missing duplicate search fails.
 - Research-layer target without version metadata fails.
+
+Plus the cross-market rationale rule added after the lead-lag-aware
+signal-sourcing guidance in direction/hypothesis-taxonomy.md and
+requirements/hypothesis-contract.md: a feature sourced from a different
+market than the target must justify why (e.g. BINANCE leading GMO).
 """
 
 import sys
@@ -34,6 +39,10 @@ class TestValidateSpec(unittest.TestCase):
     def test_research_label_without_version_metadata_fails(self):
         errors = validate_file(str(_FIXTURES / "invalid_research_label_no_version.yaml"))
         self.assertTrue(any("research_metadata.param_id is missing" in e for e in errors), errors)
+
+    def test_cross_market_feature_without_rationale_fails(self):
+        errors = validate_file(str(_FIXTURES / "invalid_cross_market_no_rationale.yaml"))
+        self.assertTrue(any("cross_market_rationale is empty" in e for e in errors), errors)
 
 
 if __name__ == "__main__":
