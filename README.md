@@ -189,6 +189,24 @@ No dialogue unless the requirements are unclear.
 
 Give the phase-2 docs to a code agent and implement the smallest useful slice.
 
+Phase 3 task 1 (v1 artifact layout) is done — see Artifacts below.
+
+## Artifacts
+
+The v1 file layout from `requirements/implementation-tasks.md` task 1:
+
+- `specs/` — hypothesis specs (`hyp-YYYYMMDD-NNN.yaml`)
+- `ledger/` — append-only research memory (`events.jsonl`)
+- `scan-reports/` — signal scan outputs (`scan-YYYYMMDD-NNN.json`)
+- `handoffs/` — human-approved backtest handoff packages (`hyp-YYYYMMDD-NNN.yaml`/`.md`)
+- `inventory/` — Makalu data inventory snapshots (`inventory-YYYYMMDDTHHMMSSZ.yaml`)
+
+Each directory has its own `README.md` with the exact naming convention and
+a pointer to the authoritative schema in `requirements/`. Canonical formats
+and path patterns are defined once, in `requirements/data-contract.md`
+("Canonical v1 Artifact Formats") — the per-directory READMEs link there
+rather than restating it.
+
 ## First Slice Recommendation
 
 Start with a workflow that does not generate strategy code yet.
