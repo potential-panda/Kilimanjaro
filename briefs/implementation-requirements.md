@@ -23,7 +23,12 @@ Use the completed phase-1 dialogue deliverables as source of truth:
 
 Phase-1 dialogue folder:
 
-`<PASTE_PHASE_1_DIALOGUE_FOLDER_HERE>`
+`/home/lulurun/workspace/Kilimanjaro/direction`
+
+(Merged output of two independent Phase 1 dialogues — a claude/claude run
+grounded in the actual Makalu catalog/codebase, merged with a codex/codex
+run's concrete numeric promotion thresholds. The unmerged originals are kept
+for reference at `deliverables-a/` and `deliverables-b/` in the same repo.)
 
 Project paths:
 

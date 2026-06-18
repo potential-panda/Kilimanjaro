@@ -154,12 +154,14 @@ Brief:
 
 - `briefs/strategy-discovery-workflow.md`
 
-Expected outputs:
+Expected outputs (the canonical, approved set lives in `direction/`; see the
+Direction section below):
 
 - `workflow-strategy.md`
 - `tool-gap-analysis.md`
 - `hypothesis-taxonomy.md`
 - `evaluation-framework.md`
+- `autonomous-readiness-plan.md`
 
 ### Phase 2: Implementation Requirements Dialogue
 
@@ -217,6 +219,19 @@ Current briefs:
 
 - `briefs/strategy-discovery-workflow.md`
 - `briefs/implementation-requirements.md`
+
+## Direction
+
+`direction/` holds the canonical, approved Phase 1 output — the source of
+truth for Phase 2 and for restarting work later. It was produced by merging
+two independent Phase 1 dialogue runs (claude/claude and codex/codex): the
+claude/claude run was more grounded in the actual Makalu catalog/codebase and
+was used as the base, with the codex/codex run's concrete numeric promotion
+thresholds folded into `evaluation-framework.md`. The unmerged originals are
+kept for reference (not committed) at `deliverables-a/` and `deliverables-b/`.
+
+`briefs/implementation-requirements.md` points at `direction/` as its
+Phase-1 source of truth.
 
 ## Open Design Questions
 
