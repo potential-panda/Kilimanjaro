@@ -33,19 +33,36 @@ Acceptance:
 
 ### 2. Implement hypothesis schema
 
+**Done (2026-06-18).**
+
 Dependencies: task 1.
 
-Deliver:
+Delivered:
 
-- machine-readable schema or template for hypothesis specs;
-- enum definitions for family, status, decision reason, target type, and significance method.
+- `schemas/hypothesis_spec.schema.json` — JSON Schema (2020-12) for the spec
+  structure in `hypothesis-contract.md`, with enums for `family`,
+  lifecycle `status`/`decision`, target `type`, and `significance_method`
+  (`decision_reason` enum is also defined there for reuse once the ledger
+  event writer is built in task 3/9, even though specs themselves don't use
+  it directly).
+- `tools/validate_spec.py` — loads a YAML spec, validates it against the
+  schema, then applies the cross-field business rules from
+  hypothesis-contract.md's "Validation Rules" that JSON Schema can't express
+  cleanly (duplicate search actually performed, `custom` family requires
+  justification, research-layer target requires `param_id`). Two rules from
+  that section are explicitly deferred (noted in the script): SQL-expression
+  safety (task 6) and matching data requirements against a live inventory
+  (task 4) — both need data this script doesn't have yet.
+- `tests/fixtures/` + `tests/test_validate_spec.py` proving the acceptance
+  criteria below; `pyproject.toml` declaring `pyyaml`/`jsonschema` as the
+  project's first real dependencies.
 
-Acceptance:
+Acceptance (all proven by `python -m unittest tests.test_validate_spec -v`):
 
-- Valid sample spec passes.
-- Missing mechanism fails.
-- Missing duplicate search fails.
-- Research-layer target without version metadata fails.
+- Valid sample spec passes. ✅
+- Missing mechanism fails. ✅
+- Missing duplicate search fails. ✅
+- Research-layer target without version metadata fails. ✅
 
 ### 3. Implement ledger schema and duplicate search
 

@@ -1,0 +1,91 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260618-001
+  parent_id: null
+  title: Depth imbalance predicts 5s mid return on GMO BTC_JPY
+  status: draft
+  family: order_book_imbalance
+  family_label: Order book imbalance
+  custom_family_justification: null
+  created_at: '2026-06-18T00:00:00Z'
+  owner: agent
+  summary: Top-of-book volume imbalance as a short-horizon directional signal.
+  expected_edge_mechanism: ''
+  economic_rationale: Liquidity providers reprice with a lag after large one-sided
+    flow.
+  duplicate_search:
+    searched_at: '2026-06-18T00:00:00Z'
+    query_terms:
+    - imbalance
+    - BookState
+    - BTC_JPY
+    possible_duplicates: []
+    conclusion: new
+  data_requirements:
+    markets:
+    - exchange: GMO
+      symbol: BTC_JPY
+    datasets:
+    - layer: bronze
+      dataset: OrderBook
+    minimum_distinct_days: 5
+    required_columns:
+    - bid0_price
+    - bid0_qty
+    - ask0_price
+    - ask0_qty
+    unavailable_data_policy: needs-more-data
+    research_metadata: null
+  feature:
+    sql_expression: (bid0_qty - ask0_qty) / (bid0_qty + ask0_qty)
+    source_datasets:
+    - layer: bronze
+      dataset: OrderBook
+      alias: ob
+    primary_timestamp_column: ts
+    point_in_time_rule: feature computed strictly from OrderBook rows at or before
+      signal ts
+  target:
+    type: next_return
+    primary_horizon_seconds: 5
+    comparison_horizons_seconds:
+    - 1
+    - 5
+    - 30
+    - 120
+    source_dataset:
+      layer: bronze
+      dataset: OrderBook
+    timestamp_cutoff_rule: target window starts strictly after signal timestamp
+  execution_assumptions:
+    order_type: market
+    fees_bps: 1.0
+    half_spread_included: true
+    slippage_bps: 0.5
+    latency_ms: 100
+    liquidity_capacity_assumption: single-unit notional, no capacity scaling in v1
+      scan
+  falsification_tests:
+  - name: imbalance-only-on-one-day
+    expected_failure_meaning: effect disappears once tested across >=5 distinct days
+  scan_plan:
+    primary_horizon_seconds: 5
+    threshold_grid:
+    - 1
+    - 5
+    - 30
+    - 120
+    regime_buckets:
+    - low_vol
+    - mid_vol
+    - high_vol
+    significance_method: block_bootstrap_by_day
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: qate.trading.strategy variant, imbalance-threshold
+      entry
+    himalaya_config_notes: GMO/BTC_JPY, execution_size TBD from capacity scan
+  decisions:
+  - at: '2026-06-18T00:00:00Z'
+    actor: agent
+    decision: draft
+    reason: initial spec drafted

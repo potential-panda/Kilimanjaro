@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kilimanjaro/schemas/hypothesis_spec.schema.json",
+  "title": "Kilimanjaro Hypothesis Spec",
+  "description": "Structural shape and enums for the hypothesis spec format defined in requirements/hypothesis-contract.md. Cross-field business rules (missing-mechanism, duplicate-search-not-performed, research-layer-target-without-version-metadata, etc.) are enforced by tools/validate_spec.py, not by this schema alone.",
+  "type": "object",
+  "required": ["schema_version", "hypothesis"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "hypothesis": {
+      "type": "object",
+      "required": [
+        "id", "parent_id", "title", "status", "family", "family_label",
+        "created_at", "owner", "expected_edge_mechanism",
+        "duplicate_search", "data_requirements", "feature", "target",
+        "execution_assumptions", "falsification_tests", "scan_plan",
+        "backtest_handoff_intent", "decisions"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^hyp-[0-9]{8}-[0-9]{3}(-v[0-9]{2})?$" },
+        "parent_id": {
+          "type": ["string", "null"],
+          "pattern": "^hyp-[0-9]{8}-[0-9]{3}$"
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/lifecycle_status" },
+        "family": { "$ref": "#/$defs/family" },
+        "family_label": { "type": "string", "minLength": 1 },
+        "custom_family_justification": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "owner": { "enum": ["agent", "human"] },
+        "summary": { "type": "string" },
+        "expected_edge_mechanism": { "type": "string" },
+        "economic_rationale": { "type": "string" },
+        "duplicate_search": {
+          "type": "object",
+          "required": ["searched_at", "query_terms", "possible_duplicates", "conclusion"],
+          "properties": {
+            "searched_at": { "type": ["string", "null"], "format": "date-time" },
+            "query_terms": { "type": "array", "items": { "type": "string" } },
+            "possible_duplicates": { "type": "array", "items": { "type": "string" } },
+            "conclusion": { "enum": ["new", "variant", "duplicate", null] }
+          }
+        },
+        "data_requirements": {
+          "type": "object",
+          "required": ["markets", "datasets", "minimum_distinct_days", "unavailable_data_policy"],
+          "properties": {
+            "markets": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["exchange", "symbol"],
+                "properties": {
+                  "exchange": { "type": "string", "minLength": 1 },
+                  "symbol": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "datasets": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["layer", "dataset"],
+                "properties": {
+                  "layer": { "enum": ["bronze", "silver", "gold", "feature", "research"] },
+                  "dataset": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "minimum_distinct_days": { "type": "integer", "minimum": 1 },
+            "required_columns": { "type": "array", "items": { "type": "string" } },
+            "unavailable_data_policy": { "enum": ["needs-more-data", "needs-tooling"] },
+            "research_metadata": {
+              "type": ["object", "null"],
+              "properties": {
+                "dataset": { "type": ["string", "null"] },
+                "param_id": { "type": ["string", "null"] },
+                "build_id": { "type": ["string", "null"] },
+                "generated_at": { "type": ["string", "null"], "format": "date-time" },
+                "label_assumptions": { "type": "object" },
+                "metadata_status": { "enum": ["complete", "partial", "missing", null] }
+              }
+            }
+          }
+        },
+        "feature": {
+          "type": "object",
+          "required": ["sql_expression", "source_datasets", "primary_timestamp_column"],
+          "properties": {
+            "sql_expression": { "type": "string" },
+            "source_datasets": { "type": "array", "items": { "type": "object" } },
+            "primary_timestamp_column": { "type": "string", "minLength": 1 },
+            "point_in_time_rule": { "type": "string" }
+          }
+        },
+        "target": {
+          "type": "object",
+          "required": ["type", "primary_horizon_seconds", "comparison_horizons_seconds"],
+          "properties": {
+            "type": { "enum": ["next_return", "spread_adjusted_return", "research_label"] },
+            "primary_horizon_seconds": { "type": "number", "exclusiveMinimum": 0 },
+            "comparison_horizons_seconds": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "number", "exclusiveMinimum": 0 }
+            },
+            "source_dataset": { "type": "object" },
+            "timestamp_cutoff_rule": { "type": "string" }
+          }
+        },
+        "execution_assumptions": {
+          "type": "object",
+          "required": ["order_type"],
+          "properties": {
+            "order_type": { "enum": ["market", "limit", "passive", "not_applicable"] },
+            "fees_bps": { "type": ["number", "null"], "minimum": 0 },
+            "half_spread_included": { "type": "boolean" },
+            "slippage_bps": { "type": ["number", "null"], "minimum": 0 },
+            "latency_ms": { "type": ["number", "null"], "minimum": 0 },
+            "liquidity_capacity_assumption": { "type": "string" }
+          }
+        },
+        "falsification_tests": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "expected_failure_meaning"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "expected_failure_meaning": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "scan_plan": {
+          "type": "object",
+          "required": ["primary_horizon_seconds", "significance_method"],
+          "properties": {
+            "primary_horizon_seconds": { "type": "number", "exclusiveMinimum": 0 },
+            "threshold_grid": { "type": "array" },
+            "regime_buckets": { "type": "array" },
+            "significance_method": { "$ref": "#/$defs/significance_method" }
+          }
+        },
+        "backtest_handoff_intent": {
+          "type": "object",
+          "properties": {
+            "potential_panda_core_strategy_pattern": { "type": "string" },
+            "himalaya_config_notes": { "type": "string" }
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["at", "actor", "decision"],
+            "properties": {
+              "at": { "type": "string", "format": "date-time" },
+              "actor": { "enum": ["agent", "human"] },
+              "decision": { "$ref": "#/$defs/lifecycle_status" },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "family": {
+      "enum": [
+        "order_book_imbalance",
+        "weighted_imbalance_microprice",
+        "top_of_book_reset",
+        "depth_pull_refill_asymmetry",
+        "spread_regime",
+        "trade_aggression_burst",
+        "buy_sell_pressure_exhaustion",
+        "queue_depletion",
+        "lead_lag",
+        "volatility_spread_filter",
+        "liquidity_shock_mean_reversion",
+        "adverse_selection_avoidance",
+        "custom"
+      ]
+    },
+    "lifecycle_status": {
+      "enum": [
+        "draft",
+        "invalid-spec",
+        "duplicate",
+        "needs-more-data",
+        "needs-tooling",
+        "scan-ready",
+        "scan-failed",
+        "scan-passed",
+        "backtest-approved",
+        "backtest-running",
+        "backtest-passed",
+        "awaiting-promotion-decision",
+        "promoted",
+        "retired"
+      ]
+    },
+    "decision_reason": {
+      "enum": [
+        "missing-mechanism",
+        "duplicate",
+        "insufficient-data",
+        "unsupported-feature-transform",
+        "lookahead-risk",
+        "timestamp-alignment-risk",
+        "failed-ic-threshold",
+        "failed-hit-rate-threshold",
+        "failed-cost-buffer",
+        "autocorrelation-adjustment-failed",
+        "regime-fragile",
+        "parameter-overfit",
+        "latency-infeasible",
+        "liquidity-infeasible",
+        "human-rejected-backtest-cost",
+        "backtest-overfit",
+        "promotion-approved",
+        "promotion-declined"
+      ]
+    },
+    "significance_method": {
+      "description": "block_bootstrap_by_day is the v1 default; newey_west_hac is the documented fallback. Both are open per requirements.md pending architect sign-off.",
+      "enum": ["block_bootstrap_by_day", "newey_west_hac"]
+    }
+  }
+}
