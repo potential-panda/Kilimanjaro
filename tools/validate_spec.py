@@ -6,7 +6,13 @@ Two layers, matching requirements/hypothesis-contract.md:
 1. Structural shape and enums - schemas/hypothesis_spec.schema.json (JSON Schema).
 2. Cross-field business rules from the contract's "Validation Rules" section
    that JSON Schema can't express cleanly (e.g. "duplicate search was
-   performed" spans three fields with no single type/enum check).
+   performed" spans three fields with no single type/enum check). This
+   includes the BINANCE-default-for-JP-targets rule: per direct user
+   instruction, BINANCE is the default feature source for any target with a
+   confirmed lead-lag leader (see _KNOWN_LEAD_LAG_LEADER below), not merely
+   an allowed option -- sourcing from the target's own market instead
+   requires cross_market_rationale, except for the local-execution-mechanics
+   families where BINANCE has no analogue.
 
 Two checks from the contract are intentionally not enforced here because
 they require data this script doesn't have:
@@ -30,6 +36,23 @@ import jsonschema
 import yaml
 
 _SCHEMA_PATH = Path(__file__).parent.parent / "schemas" / "hypothesis_spec.schema.json"
+
+# Confirmed BINANCE-leads-JP-market pairs, per tools/lead_lag_wave.py's
+# _SUPPORTED_PAIRS. BINANCE leads 81-97% of the time across every 30-minute
+# JST bucket (markets/waves/leadlag_BINANCE_GMO_*.csv) -- per direct user
+# instruction, BINANCE is now the *default* feature source for predicting
+# these targets, not merely an allowed option requiring justification.
+_KNOWN_LEAD_LAG_LEADER = {
+    ("GMO", "BTC_JPY"): ("BINANCE", "BTC_USDT"),
+    ("GMO", "ETH_JPY"): ("BINANCE", "ETH_USDT"),
+    ("GMO", "XRP_JPY"): ("BINANCE", "XRP_USDT"),
+}
+
+# Families inherently about the target market's own local execution
+# mechanics (how OUR resting order interacts with that market's own queue) --
+# BINANCE has no analogue for these, so same-market sourcing is expected by
+# default, not an exception needing justification.
+_LOCAL_MECHANICS_FAMILIES = {"queue_depletion", "adverse_selection_avoidance"}
 
 
 class ValidationError(Exception):
@@ -82,13 +105,29 @@ def _business_rule_errors(spec: dict) -> list[str]:
     feature_markets = {
         (ds.get("exchange"), ds.get("symbol")) for ds in h.get("feature", {}).get("source_datasets", [])
     }
-    if feature_markets - {target_market} and not (h.get("cross_market_rationale") or "").strip():
+    cross_market_rationale = (h.get("cross_market_rationale") or "").strip()
+    if feature_markets - {target_market} and not cross_market_rationale:
         errors.append(
             "feature is sourced from a different market than the target "
             f"({target_market}) but cross_market_rationale is empty -- name which market the "
             "feature is actually computed on and why that market's signal is informative for "
             "the target market (e.g. a follower market's own order book is not independently "
             "informative when a lead-lag relationship makes it largely a copy of the leader's book)"
+        )
+
+    leader_market = _KNOWN_LEAD_LAG_LEADER.get(target_market)
+    if (
+        leader_market is not None
+        and h.get("family") not in _LOCAL_MECHANICS_FAMILIES
+        and leader_market not in feature_markets
+        and not cross_market_rationale
+    ):
+        errors.append(
+            f"target {target_market} has a confirmed lead-lag leader {leader_market} "
+            f"({leader_market[0]} leads 81-97% of the time, per tools/lead_lag_wave.py) -- "
+            "BINANCE is the default feature source for predicting this target; sourcing from "
+            f"{target_market} instead requires cross_market_rationale explaining why BINANCE's "
+            "signal isn't a better source for this specific hypothesis"
         )
 
     return errors

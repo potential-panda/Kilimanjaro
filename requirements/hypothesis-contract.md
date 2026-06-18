@@ -157,20 +157,42 @@ follower market's own order-book/flow signals are largely a lagged copy of
 the leader's and are not independently informative — the informative
 signal is computed on the leader, predicting the follower's future return.
 
-Worked example: BINANCE leads GMO BTC_JPY 81-97% of the time across every
-30-minute JST bucket. A hypothesis like "order book imbalance predicts GMO
+**BINANCE is the default feature source for any JP-market target with a
+confirmed lead-lag leader, not merely an allowed option.** Per direct user
+instruction: BINANCE leads GMO BTC_JPY/ETH_JPY/XRP_JPY 81-97% of the time
+across every 30-minute JST bucket (`tools/lead_lag_wave.py`'s
+`_SUPPORTED_PAIRS`), so in theory and in practice its own order book/flow
+state is a more informative signal than the follower's lagged copy of it —
+this is the default expectation for those targets, not a choice that needs
+defending case by case.
+
+Worked example: a hypothesis like "order book imbalance predicts GMO
 BTC_JPY return" should compute the imbalance feature on `BINANCE:BTC_USDT`
 (`feature.source_datasets`), not `GMO:BTC_JPY`, while the target return is
 still measured on `GMO:BTC_JPY` (`target.source_dataset`) — that market is
 where the strategy actually trades.
 
-Whenever any `feature.source_datasets[].exchange`/`symbol` differs from
-`target.source_dataset.exchange`/`symbol`, `cross_market_rationale` is
-required and must name which market the feature is computed on and why
-that market's signal is informative for the target market's return. This
-applies beyond the `lead_lag` family — any family whose mechanism depends
-on order flow or book state should consider whether the target market is a
-follower before assuming its own book is the right feature source.
+**Exception**: families that are inherently about the target market's own
+local execution mechanics — queue depletion (#8) and adverse selection /
+passive-fill risk (#12), and by extension the limit-order fill-probability
+question (`tools/fill_probability.py`) — test how *our own resting order*
+interacts with that specific market's queue. BINANCE has no analogue for
+that, so same-market sourcing is the expected default there, not an
+exception requiring justification.
+
+`cross_market_rationale` is required whenever the spec's sourcing choice
+isn't the default for its situation:
+- the feature is sourced from a market different from the target (state
+  which market and why it's informative for the target's return — e.g. the
+  BINANCE-leads-GMO case above), **or**
+- the target has a confirmed lead-lag leader, the family isn't one of the
+  local-mechanics exceptions, and the feature is sourced from the target's
+  own market instead of the leader (state why BINANCE's signal isn't a
+  better source for this specific hypothesis).
+
+This applies beyond the `lead_lag` family — any family whose mechanism
+depends on order flow or book state should default to the leader when one
+exists, not assume the target's own book is the right feature source.
 
 ## Horizon Selection Must Be Justified By The Volatility Wave
 

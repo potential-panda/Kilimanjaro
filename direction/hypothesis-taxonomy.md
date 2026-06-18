@@ -11,14 +11,21 @@ without new pipelines.
 Added after the market-characterization layer (`markets/`) was built, based
 on direct user guidance — applies to every family below, not just #1 and #9:
 
-- **A feature is not assumed to be computed on the same market as the
-  target.** Where a lead-lag relationship exists (e.g. BINANCE leads GMO
-  BTC_JPY 81-97% of the time, per `markets/waves/leadlag_BINANCE_GMO_BTC.csv`),
-  the follower market's own order-book/flow signals are largely a lagged
-  copy of the leader's and are not independently informative. Compute the
-  signal on the leader; measure the target return on the market actually
-  traded. See `requirements/hypothesis-contract.md`'s "Cross-Market Signal
-  Sourcing" section for the schema-level rule (`cross_market_rationale`).
+- **BINANCE is the default feature source for predicting any JP market with
+  a confirmed lead-lag leader — always, not just "consider it."** Per direct
+  user instruction (2026-06-18, repeated for emphasis): BINANCE leads GMO
+  BTC_JPY/ETH_JPY/XRP_JPY 81-97% of the time across every 30-minute JST
+  bucket (`markets/waves/leadlag_BINANCE_GMO_*.csv`), so in theory and in
+  practice its own order-book/flow state is more informative than the
+  follower's lagged copy of it. Compute the signal on BINANCE; measure the
+  target return on the market actually traded (GMO). The only exceptions
+  are families inherently about the target market's own local execution
+  mechanics, where BINANCE has no analogue: queue depletion (#8), adverse
+  selection (#12), and limit-order fill probability
+  (`tools/fill_probability.py`). See `requirements/hypothesis-contract.md`'s
+  "Cross-Market Signal Sourcing" section for the schema-level rule
+  (`cross_market_rationale`, now required to justify *not* using BINANCE,
+  not just to justify using it).
 - **The tested horizon must be justified by the volatility-vs-spread wave**
   (`markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`), not
   picked by convention. A horizon where price rarely clears the spread on
