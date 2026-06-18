@@ -81,7 +81,7 @@
       "type": "object",
       "required": ["status", "failed_rules", "yellow_flags", "verdict_text"],
       "properties": {
-        "status": { "enum": ["pass", "fail", "not_evaluated"] },
+        "status": { "enum": ["pass", "fail", "needs-more-data", "needs-tooling", "not_evaluated"] },
         "failed_rules": { "type": "array", "items": { "type": "string" } },
         "yellow_flags": { "type": "array", "items": { "type": "string" } },
         "verdict_text": { "type": "string" }

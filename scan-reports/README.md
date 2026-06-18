@@ -20,10 +20,25 @@ python tools/validate_spec.py specs/hyp-20260618-001.yaml
 python tools/scanner.py --spec specs/hyp-20260618-001.yaml --start 2026-05-01 --end 2026-05-15
 ```
 
-`threshold_verdict.status` is always `"not_evaluated"` in a freshly
-generated report — applying the pass/fail thresholds is a separate step
-(task 8), not something `scanner.py` does itself. v1 scope notes (see
-`tools/scanner.py`'s module docstring): one feature source dataset and one
-target source dataset, both bronze `OrderBook`; `target.type:
-research_label` is not implemented; regime-bucket stability
-(`stability_by_regime`) is always empty.
+`threshold_verdict.status` is always `"not_evaluated"` straight out of
+`scanner.py` — apply the v1 pass/fail thresholds with
+`tools/threshold_evaluator.py`:
+
+```bash
+python tools/threshold_evaluator.py --report scan-reports/scan-20260618-001.json --spec specs/hyp-20260618-001.yaml --write
+```
+
+Status is one of `pass`, `fail`, `needs-more-data` (fewer than 5 distinct
+days), or `needs-tooling` (the cost buffer can't be computed without
+`execution_assumptions.half_spread_bps` declared in the spec).
+`failed_rules` use the exact `decision_reason` codes from
+`../requirements/hypothesis-contract.md`'s enum, ready to record directly
+in a ledger event (`../ledger/`) once task 9 wires that up.
+
+v1 scope notes (see `tools/scanner.py`'s and `tools/threshold_evaluator.py`'s
+module docstrings): one feature source dataset and one target source
+dataset, both bronze `OrderBook`; `target.type: research_label` is not
+implemented; regime-bucket stability (`stability_by_regime`) is always
+empty and always disclosed as the `regime-stability-unproven` yellow flag,
+never silently assumed fine; look-ahead/timestamp-alignment/missing-
+`param_id` checks are spec-validation concerns, not re-verified here.

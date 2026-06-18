@@ -145,6 +145,11 @@
             "order_type": { "enum": ["market", "limit", "passive", "not_applicable"] },
             "fees_bps": { "type": ["number", "null"], "minimum": 0 },
             "half_spread_included": { "type": "boolean" },
+            "half_spread_bps": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "description": "The magnitude half_spread_included only flags as included/excluded -- needed for the cost-buffer check in task 8's threshold evaluator. Estimate from the target market's volatility wave (markets/waves/<exchange>_<symbol>.csv avg_spread), declared statically here like fees_bps/slippage_bps, not derived live at evaluation time."
+            },
             "slippage_bps": { "type": ["number", "null"], "minimum": 0 },
             "latency_ms": { "type": ["number", "null"], "minimum": 0 },
             "liquidity_capacity_assumption": { "type": "string" }

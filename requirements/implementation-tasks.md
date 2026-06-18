@@ -307,19 +307,55 @@ Acceptance (all proven by `python -m unittest tests.test_scanner -v`):
 
 ### 8. Implement threshold evaluator
 
+**Done (2026-06-18).**
+
 Dependencies: task 7.
 
-Deliver:
+Delivered:
 
-- pass/fail/yellow-flag evaluator using v1 defaults.
+- `tools/threshold_evaluator.py` — `evaluate(report, spec)` fills in a scan
+  report's `threshold_verdict` (always `"not_evaluated"` straight out of
+  the scanner) by checking every v1 rule from `requirements.md`'s
+  "Deterministic Scanner Metrics" and `evaluation-framework.md`'s
+  "Pass / promote-to-backtest thresholds": distinct days, raw/effective
+  sample counts, IC magnitude, hit rate, the HAC significance interval,
+  day-by-day sign stability, single-cell overfit across the horizon grid,
+  and the cost buffer (with the 25% safety margin). `failed_rules` use the
+  exact `decision_reason` codes from `hypothesis-contract.md`'s enum, so
+  task 9's ledger write-back can use them directly with no re-mapping.
+- A real schema gap found and fixed while implementing the cost-buffer
+  check: `execution_assumptions.half_spread_included` was only ever a
+  boolean (included or not), with no field carrying the actual magnitude
+  needed to compute the buffer. Added `half_spread_bps` to
+  `schemas/hypothesis_spec.schema.json`, populated the canonical example
+  spec with a real value derived from `markets/waves/GMO_BTC_JPY.csv`'s
+  `avg_spread`, and caught a latent inconsistency in that same fixture
+  (`half_spread_included: true` on a `next_return` target, which doesn't
+  subtract spread — should have been `false`).
+- `tests/test_threshold_evaluator.py` (15 tests): one synthetic case per
+  rule, plus a real integration test re-running the scanner against the
+  canonical BINANCE-imbalance-predicts-GMO-return spec — confirms the
+  evaluator reaches exactly the conclusion worked through by hand earlier:
+  every statistical threshold clears, only `failed-cost-buffer` fires.
+- `threshold_verdict.status` extended beyond pass/fail to
+  `needs-more-data` (too few distinct days) and `needs-tooling` (cost
+  buffer can't be computed without a declared `half_spread_bps`) —
+  schema updated to match.
+
+v1 scope notes (documented in the module's own docstring): look-ahead
+leakage, timestamp alignment, and missing-`param_id` checks are not
+re-verified here (spec-validation concerns, not derivable from the scan
+report's numbers); regime-bucket stability is always disclosed as the
+`regime-stability-unproven` yellow flag, since `tools/scanner.py` always
+emits `stability_by_regime` empty in v1 — never silently treated as fine.
 
 Acceptance:
 
-- Requires at least 5 distinct trading days for promotion unless waived.
-- Requires at least 10,000 raw and 1,000 effective samples for tick scans unless waived.
-- Checks declared primary horizon.
-- Checks cost buffer with 25% safety margin.
-- Detects single-cell overfit across neighboring grid cells.
+- Requires at least 5 distinct trading days for promotion unless waived. ✅ (`needs-more-data`; a human waiver is a separate, later ledger action, not part of this evaluator)
+- Requires at least 10,000 raw and 1,000 effective samples for tick scans unless waived. ✅
+- Checks declared primary horizon. ✅ (against the decay grid's matching entry)
+- Checks cost buffer with 25% safety margin. ✅
+- Detects single-cell overfit across neighboring grid cells. ✅
 
 ### 9. Implement ledger update workflow
 
