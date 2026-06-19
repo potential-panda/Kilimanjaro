@@ -3,6 +3,9 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# Regenerable analytical artifacts (run tools/volatility_wave.py to rebuild)
+# Regenerable analytical artifacts (run tools/volatility_wave.py,
+# tools/lead_lag_wave.py, tools/fill_probability.py, tools/regime_window.py
+# to rebuild -- see markets/README.md)
 markets/waves/*.csv
 markets/graphs/*.png
+markets/regimes/*.json

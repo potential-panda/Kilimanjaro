@@ -14,7 +14,7 @@ hypothesis:
     directional signal for GMO BTC_JPY (the following market), at a horizon
     long enough to clear GMO's spread.
   expected_edge_mechanism: >
-    BINANCE leads GMO BTC_JPY 81-97% of the time across every 30-minute JST
+    BINANCE leads GMO BTC_JPY 49-82% of the time depending on time of day across every 30-minute JST
     bucket (markets/waves/leadlag_BINANCE_GMO_BTC.csv). GMO's own order book
     imbalance is largely a lagged copy of BINANCE's, not an independent
     signal, so the informative imbalance is computed on BINANCE; it predicts
@@ -54,7 +54,7 @@ hypothesis:
     point_in_time_rule: "feature computed strictly from BINANCE OrderBook rows at or before signal ts"
   cross_market_rationale: >
     Feature is computed on BINANCE:BTC_USDT; target return is on GMO:BTC_JPY.
-    See expected_edge_mechanism: BINANCE leads GMO 81-97% of the time per the
+    See expected_edge_mechanism: BINANCE leads GMO 49-82% of the time depending on time of day per the
     lead-lag wave, so GMO's own book is not an independently informative
     source for this family.
   target:

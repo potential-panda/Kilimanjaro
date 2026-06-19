@@ -52,36 +52,78 @@ intraday structure but is not yet enough data to call the daily pattern
 statistically stable day-over-day — treat early spot-market waves as a
 first look, not a settled answer, until more history accumulates.
 
-## BINANCE→GMO lead-lag wave
+## Lead-lag wave
 
 BINANCE isn't traded directly but is the leading exchange industry-wide; a
 prior successful strategy generated signal from BINANCE and traded on GMO.
-This answers, at each time of day, how strongly and stably BINANCE leads
-the corresponding GMO JPY pair, and at what lag.
+This answers, at each time of day, how strongly and stably one market
+leads another, and at what lag.
 
-Uses Makalu's existing gold-layer `LeadLag` dataset (already populated for
-BINANCE→GMO btc/eth/xrp, ~33 days, with EWM-decayed multi-window
-cross-correlation and optimal-lag search) rather than recomputing
-cross-correlation from scratch — see `../tools/lead_lag_wave.py`'s module
-docstring for two real data-quality findings worth knowing before reading
-the numbers: `ll_alpha_gain` isn't actually clipped to [1,100] as documented
-(use the log version or the binary leading-fraction instead), and
-`ll_opt_lag_ms` is a value normalized to [0,1], not literal milliseconds
-(the tool denormalizes it using the param_id's encoded max lag).
+**Revised 2026-06-19.** Originally read Makalu's gold-layer `LeadLag`
+dataset. Found for real while building `tools/scanner.py`'s
+`market_context`: that dataset only covers 2025-12-30..2026-01-31, which
+doesn't overlap any window this project has actually scanned. Rewritten to
+compute cross-correlation directly from bronze `OrderBook` (1-second
+resampled mid-price series, per-day peak-lag search over [-10s, +10s]) --
+the same Bronze-First principle as the volatility wave. Also generalized
+beyond the original BINANCE→GMO-JPY-margin scope: `compute_wave()` takes
+any `(feature_exchange, feature_symbol, target_exchange, target_symbol)`;
+`--asset` remains a convenience shorthand for the three originally-known
+pairs.
 
 ```bash
 python tools/lead_lag_wave.py compute --asset BTC --plot
+python tools/lead_lag_wave.py compute --feature-exchange BINANCE --feature-symbol BTC_USDT --target-exchange GMO --target-symbol BTC_SPOT
 python tools/lead_lag_wave.py query --wave-csv markets/waves/leadlag_BINANCE_GMO_BTC.csv --time 09:00
 ```
 
-**COINCHECK/BITBANK lead-lag is out of scope for now** — Makalu's
-`populate LeadLag` pipeline only supports GMO as the lag market today
-(confirmed 2026-06-18). Revisit if a strategy needs it.
+Confirmed on real data (60-day window, BINANCE→GMO/BTC_JPY): BINANCE leads
+**49-82%** of the time depending on bucket -- not the "81-97%" figure the
+old gold-dataset-derived number gave (computed over a different period and
+methodology). Peak correlation strength is at 23:30-01:00 JST (~0.40-0.46),
+decaying to a trough around 13:00-19:00 (~0.12-0.18) -- the low-activity
+daytime hours are measurably less reliably led, not just less volatile.
 
-Confirmed on real data: BINANCE leads GMO/BTC_JPY 81-97% of the time across
-every 30-minute bucket of the day — consistently high, with a real dip
-during 09:00-10:30 JST, matching the expected "stable but wave-shaped"
-pattern.
+## Static favorable trading window (`regimes/`)
+
+`tools/regime_window.py` combines the waves above into a single, static,
+history-derived answer to "which 30-minute JST buckets are actually good
+to trade in for this market (or feature/target pair)" -- the intersection
+of top-tercile volatility/spread, top-tercile lead-lag strength (if
+cross-market), and top-tercile fill ease (if the target is `limit_only`).
+A bucket only counts as favorable if every *provided* criterion agrees --
+a criterion that doesn't apply (e.g. no lead-lag for a same-market
+hypothesis) is omitted, never silently assumed favorable.
+
+**Deliberately static — built once from a separate wave artifact, never
+computed live on the window being scored.** Two reasons: (1) the whole
+value of the wave indicators is that the pattern is knowable *in advance*,
+before the trading day starts -- a live filter only tells you "today
+looked good" after part of it already happened; (2) picking the favorable
+window from the same data the signal is scored on would be a
+regime-selection analogue of the single-cell-overfit problem
+`tools/threshold_evaluator.py` already guards against for horizon and
+threshold choice.
+
+```bash
+python tools/regime_window.py --key BINANCE_BTC_USDT__GMO_BTC_JPY \
+  --vol-wave markets/waves/GMO_BTC_JPY.csv \
+  --lead-lag-wave markets/waves/leadlag_BINANCE_GMO_BTC.csv
+```
+
+`tools/scanner.py` looks up the artifact automatically (by feature/target
+market) and reports a parallel `regime_restricted` view in every scan
+report, alongside (never replacing) the full-window result --
+`threshold_verdict.regime_restricted_cost_buffer` is informational only
+and never affects the official `status`.
+
+**Coverage is currently limited to the markets this project has already
+tested in depth**: `BINANCE_BTC_USDT__GMO_BTC_JPY` (long history, ~340
+days), `BINANCE_BTC_USDT__GMO_BTC_SPOT` and `BITBANK_XRP_SPOT` (only the
+7-8 days those markets have bronze data for -- noisier, a first look, not
+a settled answer, same caveat as the spot-market waves above). A
+hypothesis on any other market correctly reports
+`regime_restricted.available: false` with a reason, not a silent guess.
 
 ## Limit-order fill probability
 

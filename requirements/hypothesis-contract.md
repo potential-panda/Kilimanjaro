@@ -159,7 +159,7 @@ signal is computed on the leader, predicting the follower's future return.
 
 **BINANCE is the default feature source for any JP-market target with a
 confirmed lead-lag leader, not merely an allowed option.** Per direct user
-instruction: BINANCE leads GMO BTC_JPY/ETH_JPY/XRP_JPY 81-97% of the time
+instruction: BINANCE leads GMO BTC_JPY/ETH_JPY/XRP_JPY 49-82% of the time depending on time of day
 across every 30-minute JST bucket (`tools/lead_lag_wave.py`'s
 `_SUPPORTED_PAIRS`), so in theory and in practice its own order book/flow
 state is a more informative signal than the follower's lagged copy of it —

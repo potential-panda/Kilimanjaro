@@ -4,7 +4,7 @@
   "title": "Kilimanjaro Scan Report",
   "description": "Output of tools/scanner.py (task 7), per requirements/data-contract.md's Scan Report Output. threshold_verdict.status is 'not_evaluated' until task 8's threshold evaluator runs.",
   "type": "object",
-  "required": ["schema_version", "id", "hypothesis_id", "scanner_version", "created_at", "data_window", "market_context", "metrics", "threshold_verdict"],
+  "required": ["schema_version", "id", "hypothesis_id", "scanner_version", "created_at", "data_window", "market_context", "regime_restricted", "metrics", "threshold_verdict"],
   "properties": {
     "schema_version": { "const": 1 },
     "id": { "type": "string", "pattern": "^scan-[0-9]{8}-[0-9]{3}$" },
@@ -40,6 +40,37 @@
             "mean_best_lag_seconds": { "type": "number" },
             "mean_best_corr": { "type": "number" },
             "mean_corr_at_zero": { "type": "number", "description": "Correlation with no lag applied, for comparison against mean_best_corr." }
+          }
+        }
+      }
+    },
+    "regime_restricted": {
+      "type": "object",
+      "description": "A second, parallel view of the same scan restricted to a static, history-derived favorable trading window (tools/regime_window.py), disclosed alongside the full-window result above -- never silently replacing it, and never computed live on the window being scored (see requirements.md for why). available=false (with a reason) when no precomputed artifact exists for this market, or too few rows fall in the favorable window to report.",
+      "required": ["available", "regime_key"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "regime_key": { "type": "string" },
+        "reason": { "type": "string" },
+        "favorable_buckets": { "type": "array", "items": { "type": "integer" } },
+        "criteria": { "type": "object" },
+        "fraction_of_rows": { "type": "number", "minimum": 0, "maximum": 1 },
+        "market_context": {
+          "type": "object",
+          "properties": {
+            "avg_half_spread_bps": { "type": ["number", "null"] },
+            "realized_volatility_bps": { "type": ["number", "null"] }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "ic_pooled": { "type": ["number", "null"] },
+            "hit_rate": { "type": ["number", "null"] },
+            "bucketed_returns": { "type": "array" },
+            "raw_sample_count": { "type": "integer" },
+            "effective_sample_count": { "type": "number" },
+            "signal_autocorrelation_lag1": { "type": ["number", "null"] }
           }
         }
       }

@@ -60,6 +60,7 @@ class Verdict:
         self.needs_more_data = False
         self.needs_tooling = False
         self.cost_buffer: dict | None = None
+        self.regime_restricted_cost_buffer: dict | None = None
 
     def fail(self, reason: str, note: str) -> None:
         self.failed_rules.append(reason)
@@ -84,6 +85,7 @@ class Verdict:
             "yellow_flags": self.yellow_flags,
             "verdict_text": " ".join(self.notes) if self.notes else "all v1 thresholds cleared",
             "cost_buffer": self.cost_buffer,
+            "regime_restricted_cost_buffer": self.regime_restricted_cost_buffer,
         }
 
 
@@ -163,6 +165,41 @@ def _check_single_cell_overfit(report: dict, v: Verdict) -> None:
         v.fail(_REASON_PARAMETER_OVERFIT, f"only {matching}/{len(neighbors)} neighboring horizon cells share the primary cell's sign")
 
 
+def _compute_cost_buffer(target_type: str, ea: dict, half_spread_bps: float, bucketed_returns: list[dict]) -> dict | None:
+    """Pure cost-buffer arithmetic, shared between the official full-window
+    check below and the informational regime-restricted view -- same
+    formula, different input rows. Returns None if there aren't enough
+    buckets to estimate an edge."""
+    buckets = sorted(bucketed_returns, key=lambda b: b["bucket"])
+    if len(buckets) < 2:
+        return None
+
+    edge_fraction = (buckets[-1]["mean_target_return"] - buckets[0]["mean_target_return"]) / 2
+    edge_bps = abs(edge_fraction) * 10000
+
+    fees_bps = ea.get("fees_bps") or 0
+    slippage_bps = ea.get("slippage_bps") or 0
+    # half_spread_bps is measured directly from the target market over the
+    # relevant window (tools/scanner.py's market_context), not declared in
+    # the spec -- removes the staleness risk a spec-declared value had (see
+    # requirements.md's 2026-06-19 cost-buffer note).
+    half_spread_cost_bps = 0 if (target_type == "spread_adjusted_return") else half_spread_bps
+    # latency_penalty_bps (observed adverse mid movement over latency_ms) is
+    # not computed in v1 -- documented gap, not assumed zero-cost beyond
+    # what's already in fees/spread/slippage.
+    required_bps = (fees_bps + half_spread_cost_bps + slippage_bps) * _COST_BUFFER_SAFETY_MULTIPLIER
+
+    return {
+        "edge_bps": edge_bps,
+        "fee_bps": fees_bps,
+        "half_spread_bps": half_spread_cost_bps,
+        "slippage_bps": slippage_bps,
+        "safety_multiplier": _COST_BUFFER_SAFETY_MULTIPLIER,
+        "required_bps": required_bps,
+        "cleared": edge_bps > required_bps,
+    }
+
+
 def _check_cost_buffer(report: dict, spec: dict, v: Verdict) -> None:
     h = spec["hypothesis"]
     ea = h.get("execution_assumptions", {})
@@ -177,42 +214,41 @@ def _check_cost_buffer(report: dict, spec: dict, v: Verdict) -> None:
         )
         return
 
-    buckets = sorted(report["metrics"]["bucketed_returns"], key=lambda b: b["bucket"])
-    if len(buckets) < 2:
+    cb = _compute_cost_buffer(h["target"]["type"], ea, half_spread_bps, report["metrics"]["bucketed_returns"])
+    if cb is None:
         v.flag("insufficient-buckets-for-cost-buffer", "fewer than 2 buckets; cost buffer not evaluated")
         return
 
-    edge_fraction = (buckets[-1]["mean_target_return"] - buckets[0]["mean_target_return"]) / 2
-    edge_bps = abs(edge_fraction) * 10000
-
-    fees_bps = ea.get("fees_bps") or 0
-    slippage_bps = ea.get("slippage_bps") or 0
-    # half_spread_bps is measured directly from the target market over this
-    # exact scan window (tools/scanner.py's market_context), not declared in
-    # the spec -- removes the staleness risk a spec-declared value had (see
-    # requirements.md's 2026-06-19 cost-buffer note).
-    half_spread_cost_bps = 0 if (h["target"]["type"] == "spread_adjusted_return") else half_spread_bps
-    # latency_penalty_bps (observed adverse mid movement over latency_ms) is
-    # not computed in v1 -- documented gap, not assumed zero-cost beyond
-    # what's already in fees/spread/slippage.
-    required_bps = (fees_bps + half_spread_cost_bps + slippage_bps) * _COST_BUFFER_SAFETY_MULTIPLIER
-
-    v.cost_buffer = {
-        "edge_bps": edge_bps,
-        "fee_bps": fees_bps,
-        "half_spread_bps": half_spread_cost_bps,
-        "slippage_bps": slippage_bps,
-        "safety_multiplier": _COST_BUFFER_SAFETY_MULTIPLIER,
-        "required_bps": required_bps,
-        "cleared": edge_bps > required_bps,
-    }
-
-    if edge_bps <= required_bps:
+    v.cost_buffer = cb
+    if not cb["cleared"]:
         v.fail(
             _REASON_FAILED_COST_BUFFER,
-            f"edge {edge_bps:.3f}bps does not exceed required cost buffer {required_bps:.3f}bps "
-            f"(fees {fees_bps} + half_spread {half_spread_cost_bps:.3f} (measured) + slippage {slippage_bps}, x{_COST_BUFFER_SAFETY_MULTIPLIER})",
+            f"edge {cb['edge_bps']:.3f}bps does not exceed required cost buffer {cb['required_bps']:.3f}bps "
+            f"(fees {cb['fee_bps']} + half_spread {cb['half_spread_bps']:.3f} (measured) + slippage {cb['slippage_bps']}, x{cb['safety_multiplier']})",
         )
+
+
+def _check_regime_restricted_cost_buffer(report: dict, spec: dict, v: Verdict) -> None:
+    """Informational only -- never affects failed_rules/status. Reports
+    what the cost buffer would look like restricted to the static,
+    history-derived favorable trading window (tools/regime_window.py),
+    disclosed alongside the official full-window verdict, not replacing
+    it. None of this project's specs yet declare an intended trading-hours
+    restriction as part of their design, so this stays informational
+    until one does."""
+    rr = report.get("regime_restricted") or {}
+    if not rr.get("available"):
+        return
+
+    h = spec["hypothesis"]
+    ea = h.get("execution_assumptions", {})
+    half_spread_bps = (rr.get("market_context") or {}).get("avg_half_spread_bps")
+    if half_spread_bps is None:
+        return
+
+    cb = _compute_cost_buffer(h["target"]["type"], ea, half_spread_bps, rr["metrics"]["bucketed_returns"])
+    if cb is not None:
+        v.regime_restricted_cost_buffer = cb
 
 
 def evaluate(report: dict, spec: dict) -> dict:
@@ -226,6 +262,7 @@ def evaluate(report: dict, spec: dict) -> dict:
     _check_day_stability(report, v)
     _check_single_cell_overfit(report, v)
     _check_cost_buffer(report, spec, v)
+    _check_regime_restricted_cost_buffer(report, spec, v)
     # stability_by_regime is always empty per tools/scanner.py's documented
     # v1 gap -- always disclosed as unproven, never silently assumed fine.
     v.flag("regime-stability-unproven", "stability_by_regime is not yet computed (scanner v1 gap)")

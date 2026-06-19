@@ -74,6 +74,33 @@ class TestThresholdEvaluator(unittest.TestCase):
         self.assertAlmostEqual(cb["required_bps"], (0.1 + 0.1 + 0.1) * 1.25)
         self.assertTrue(cb["cleared"])
 
+    def test_regime_restricted_cost_buffer_none_when_unavailable(self):
+        report = _base_report()
+        report["regime_restricted"] = {"available": False, "regime_key": "X", "reason": "no artifact"}
+        verdict = evaluate(report, _base_spec())
+        self.assertIsNone(verdict["regime_restricted_cost_buffer"])
+
+    def test_regime_restricted_cost_buffer_computed_when_available_but_never_affects_status(self):
+        report = _base_report()
+        # Deliberately a much WORSE regime-restricted result than the
+        # full-window one -- if this leaked into the official status, the
+        # full-window "pass" would flip to "fail". It must not.
+        report["regime_restricted"] = {
+            "available": True,
+            "regime_key": "X",
+            "market_context": {"avg_half_spread_bps": 100.0},
+            "metrics": {"bucketed_returns": [
+                {"bucket": 0, "n": 10, "mean_target_return": -0.0001},
+                {"bucket": 4, "n": 10, "mean_target_return": 0.0001},
+            ]},
+        }
+        verdict = evaluate(report, _base_spec())
+        self.assertEqual(verdict["status"], "pass")
+        rcb = verdict["regime_restricted_cost_buffer"]
+        self.assertIsNotNone(rcb)
+        self.assertFalse(rcb["cleared"])
+        self.assertAlmostEqual(rcb["half_spread_bps"], 100.0)
+
     def test_too_few_distinct_days_yields_needs_more_data(self):
         report = _base_report()
         report["data_window"]["distinct_days"] = 3

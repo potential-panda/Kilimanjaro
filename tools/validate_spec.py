@@ -44,10 +44,16 @@ from sql_safety import validate_expression as _validate_sql_expression
 _SCHEMA_PATH = Path(__file__).parent.parent / "schemas" / "hypothesis_spec.schema.json"
 
 # Confirmed BINANCE-leads-JP-market pairs, per tools/lead_lag_wave.py's
-# _SUPPORTED_PAIRS. BINANCE leads 81-97% of the time across every 30-minute
-# JST bucket (markets/waves/leadlag_BINANCE_GMO_*.csv) -- per direct user
-# instruction, BINANCE is now the *default* feature source for predicting
-# these targets, not merely an allowed option requiring justification.
+# _SUPPORTED_PAIRS. BINANCE leads 49-82% of the time depending on time of
+# day (markets/waves/leadlag_BINANCE_GMO_*.csv, recomputed 2026-06-19
+# directly from bronze OrderBook -- the original "81-97%" figure was from
+# Makalu's gold LeadLag dataset, whose only covered window
+# (2025-12-30..2026-01-31) didn't match any window this project actually
+# scanned) -- per direct user instruction, BINANCE is still the *default*
+# feature source for predicting these targets, not merely an allowed
+# option requiring justification, but the daytime hours (per the wave's
+# bucket-by-bucket breakdown) are measurably less reliably led than the
+# overnight hours.
 _KNOWN_LEAD_LAG_LEADER = {
     ("GMO", "BTC_JPY"): ("BINANCE", "BTC_USDT"),
     ("GMO", "ETH_JPY"): ("BINANCE", "ETH_USDT"),
@@ -133,7 +139,7 @@ def _business_rule_errors(spec: dict) -> list[str]:
     ):
         errors.append(
             f"target {target_market} has a confirmed lead-lag leader {leader_market} "
-            f"({leader_market[0]} leads 81-97% of the time, per tools/lead_lag_wave.py) -- "
+            f"({leader_market[0]} leads 49-82% of the time depending on time of day, per tools/lead_lag_wave.py) -- "
             "BINANCE is the default feature source for predicting this target; sourcing from "
             f"{target_market} instead requires cross_market_rationale explaining why BINANCE's "
             "signal isn't a better source for this specific hypothesis"

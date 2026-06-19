@@ -41,6 +41,7 @@ import yaml
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).parent))
+from regime_window import bucket_of_jst_second, load_regime_artifact, regime_key  # noqa: E402
 from sql_safety import validate_expression  # noqa: E402
 
 _ROOT = Path(__file__).parent.parent
@@ -89,6 +90,74 @@ def _realized_volatility_bps(primary_df: pd.DataFrame) -> float | None:
     if len(primary_df) < 2:
         return None
     return float(primary_df["target_return"].std() * 10000)
+
+
+def _regime_restricted_block(
+    con: duckdb.DuckDBPyConnection,
+    primary_df: pd.DataFrame,
+    target_glob: str,
+    feature_exchange: str,
+    feature_symbol: str,
+    target_exchange: str,
+    target_symbol: str,
+    start_date: str,
+    end_date: str,
+) -> dict:
+    """A second, parallel view of the same scan restricted to a static,
+    history-derived favorable trading window (tools/regime_window.py) --
+    disclosed alongside the full-window result, never silently replacing
+    it. Returns {"available": False, "regime_key": ..., "reason": ...} if
+    no precomputed artifact exists for this market; never assumes one."""
+    key = regime_key(feature_exchange, feature_symbol, target_exchange, target_symbol)
+    artifact = load_regime_artifact(key)
+    if artifact is None:
+        return {"available": False, "regime_key": key, "reason": "no precomputed regime artifact for this market"}
+
+    favorable_buckets = set(artifact["favorable_buckets"])
+    bucket_minutes = artifact["bucket_minutes"]
+    jst_second_of_day = (primary_df["ts"] + _JST_OFFSET_SECONDS) % 86400
+    bucket_of_row = jst_second_of_day.apply(lambda s: bucket_of_jst_second(int(s), bucket_minutes))
+    mask = bucket_of_row.isin(favorable_buckets)
+    sub = primary_df[mask]
+
+    if len(sub) < 100:
+        return {"available": False, "regime_key": key, "reason": f"only {len(sub)} rows fall in the favorable window -- too few to report"}
+
+    bucket_seconds = bucket_minutes * 60
+    favorable_clause = ",".join(str(b) for b in sorted(favorable_buckets))
+    spread_sql = f"""
+    SELECT avg(ask0_price - bid0_price) AS avg_spread, avg((bid0_price + ask0_price) / 2.0) AS avg_mid
+    FROM read_parquet('{target_glob}', hive_partitioning=true)
+    WHERE ask0_price > bid0_price AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+      AND CAST(floor((ts + {_JST_OFFSET_SECONDS}) % 86400 / {bucket_seconds}) AS INT) IN ({favorable_clause})
+    """
+    spread_row = con.sql(spread_sql).df().iloc[0]
+    avg_half_spread_bps = (
+        float((spread_row["avg_spread"] / 2.0) / spread_row["avg_mid"] * 10000)
+        if spread_row["avg_mid"] not in (None, 0) and not pd.isna(spread_row["avg_mid"])
+        else None
+    )
+
+    raw_n, effective_n = _effective_sample_count(sub)
+    return {
+        "available": True,
+        "regime_key": key,
+        "favorable_buckets": sorted(favorable_buckets),
+        "criteria": artifact["criteria"],
+        "fraction_of_rows": float(mask.mean()),
+        "market_context": {
+            "avg_half_spread_bps": avg_half_spread_bps,
+            "realized_volatility_bps": _realized_volatility_bps(sub),
+        },
+        "metrics": {
+            "ic_pooled": _spearman_ic(sub["signal"].to_numpy(), sub["target_return"].to_numpy()),
+            "hit_rate": _hit_rate(sub["signal"].to_numpy(), sub["target_return"].to_numpy()),
+            "bucketed_returns": _bucketed_returns(sub),
+            "raw_sample_count": raw_n,
+            "effective_sample_count": effective_n,
+            "signal_autocorrelation_lag1": _lag1_autocorr(sub["signal"].to_numpy()),
+        },
+    }
 
 
 _LEAD_LAG_MAX_LAG_SECONDS = 10
@@ -439,6 +508,13 @@ def run_scan(
         "lead_lag": _measured_lead_lag(con, feature_glob, target_glob, start_date, end_date),
     }
 
+    regime_restricted = _regime_restricted_block(
+        con, primary_df, target_glob,
+        feature_source["exchange"], feature_source["symbol"],
+        target_source["exchange"], target_source["symbol"],
+        start_date, end_date,
+    )
+
     created_at = datetime.now(timezone.utc)
     report = {
         "schema_version": 1,
@@ -455,6 +531,7 @@ def run_scan(
             "distinct_days": primary_df["jst_date"].nunique(),
         },
         "market_context": market_context,
+        "regime_restricted": regime_restricted,
         "metrics": {
             "primary_horizon_seconds": primary_horizon,
             "ic_method": "spearman",

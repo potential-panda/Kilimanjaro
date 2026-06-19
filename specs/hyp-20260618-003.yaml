@@ -18,7 +18,7 @@ hypothesis:
     Price discovery happens first on BINANCE; a price move there has not
     yet propagated to GMO. The most recent realized 1-tick return on
     BINANCE is therefore informative about GMO's near-future return,
-    because BINANCE leads GMO BTC_JPY 81-97% of the time
+    because BINANCE leads GMO BTC_JPY 49-82% of the time depending on time of day
     (markets/waves/leadlag_BINANCE_GMO_BTC.csv) and the lag has not fully
     closed within the 120s horizon.
   economic_rationale: "GMO market makers reprice with a lag after observing (or being arbitraged against) BINANCE price moves."
@@ -59,7 +59,7 @@ hypothesis:
   cross_market_rationale: >
     Same rationale as hyp-20260618-001: feature is computed on
     BINANCE:BTC_USDT, target return is on GMO:BTC_JPY, because BINANCE
-    leads GMO 81-97% of the time. This hypothesis tests momentum transfer
+    leads GMO 49-82% of the time depending on time of day. This hypothesis tests momentum transfer
     specifically, not order-book state, as a structurally different
     mechanism within the same cross-market relationship.
   target:

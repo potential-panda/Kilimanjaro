@@ -147,6 +147,29 @@ class TestRunScanIntegration(unittest.TestCase):
         self.assertGreater(lead_lag["mean_best_lag_seconds"], 0)
         self.assertGreaterEqual(lead_lag["mean_best_corr"], lead_lag["mean_corr_at_zero"])
 
+    def test_regime_restricted_available_for_a_market_with_a_precomputed_artifact(self):
+        # markets/regimes/BINANCE_BTC_USDT__GMO_BTC_JPY.json exists --
+        # should be picked up and used, not silently skipped.
+        rr = self.report["regime_restricted"]
+        self.assertTrue(rr["available"])
+        self.assertEqual(rr["regime_key"], "BINANCE_BTC_USDT__GMO_BTC_JPY")
+        self.assertGreater(rr["fraction_of_rows"], 0)
+        self.assertLess(rr["fraction_of_rows"], 1)
+        self.assertIsNotNone(rr["metrics"]["ic_pooled"])
+
+    def test_regime_restricted_unavailable_for_a_market_with_no_artifact(self):
+        import yaml
+
+        from scanner import run_scan
+
+        spec = yaml.safe_load((_ROOT / "tests" / "fixtures" / "valid_spec.yaml").read_text())
+        spec["hypothesis"]["target"]["source_dataset"]["symbol"] = "ETH_JPY"  # no regime artifact exists for this
+        spec["hypothesis"]["feature"]["source_datasets"][0]["symbol"] = "ETH_USDT"
+        report = run_scan(spec, "2026-05-01", "2026-05-02")
+        rr = report["regime_restricted"]
+        self.assertFalse(rr["available"])
+        self.assertIn("reason", rr)
+
     def test_ic_and_hit_rate_are_positive_and_modest(self):
         # Matches the manually-computed result for this exact case: IC ~0.05,
         # hit rate ~0.52 -- a real but small effect, not a fluke and not huge.
