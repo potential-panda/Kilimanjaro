@@ -9,6 +9,11 @@
 # in a hypothesis spec's execution_assumptions should be combined with this
 # fee when computing the cost buffer in evaluation-framework.md.
 schema_version: 1
+# Real market-order slippage from ~1 year of actual trading (user-provided,
+# 2026-06-19) -- not a guess, this is the authoritative source every
+# hypothesis spec's execution_assumptions.slippage_bps must match (checked
+# by tools/validate_spec.py), the same way fee_bps is authoritative below.
+default_slippage_bps: 0.5
 markets:
   - exchange: COINCHECK
     symbol: BTC_SPOT

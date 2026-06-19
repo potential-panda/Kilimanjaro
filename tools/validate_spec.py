@@ -37,6 +37,7 @@ from pathlib import Path
 import jsonschema
 import yaml
 
+from markets import default_slippage_bps as _default_slippage_bps
 from markets import find_market
 from sql_safety import validate_expression as _validate_sql_expression
 
@@ -149,6 +150,16 @@ def _business_rule_errors(spec: dict) -> list[str]:
                 f"{target_exchange}/{target_symbol} -- the registry is the authoritative fee "
                 "source; if the declared fee is intentionally different, say why"
             )
+
+    declared_slippage_bps = (h.get("execution_assumptions") or {}).get("slippage_bps")
+    registry_slippage_bps = _default_slippage_bps()
+    if declared_slippage_bps != registry_slippage_bps:
+        errors.append(
+            f"execution_assumptions.slippage_bps ({declared_slippage_bps}) does not match "
+            f"markets/registry.yaml's default_slippage_bps ({registry_slippage_bps}) -- that "
+            "value is from ~1 year of real trading, the authoritative source; if the declared "
+            "slippage is intentionally different, say why"
+        )
 
     return errors
 

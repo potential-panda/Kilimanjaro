@@ -4,9 +4,14 @@
   "title": "Kilimanjaro Market Registry",
   "description": "The tradeable market universe in markets/registry.yaml. Every entry's exchange/symbol must exist as bronze data in Makalu.",
   "type": "object",
-  "required": ["schema_version", "markets"],
+  "required": ["schema_version", "markets", "default_slippage_bps"],
   "properties": {
     "schema_version": { "const": 1 },
+    "default_slippage_bps": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Market-order slippage in basis points, from ~1 year of real trading (user-provided, 2026-06-19) -- not a per-market measurement, a single empirical default applied uniformly until per-market data justifies splitting it out."
+    },
     "markets": {
       "type": "array",
       "minItems": 1,

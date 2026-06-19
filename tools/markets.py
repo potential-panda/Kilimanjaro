@@ -33,6 +33,10 @@ def find_market(exchange: str, symbol: str, path: Path = _DEFAULT_REGISTRY_PATH)
     return None
 
 
+def default_slippage_bps(path: Path = _DEFAULT_REGISTRY_PATH) -> float:
+    return load_registry(path)["default_slippage_bps"]
+
+
 def main() -> int:
     reg = load_registry()
     print(json.dumps(reg, indent=2))

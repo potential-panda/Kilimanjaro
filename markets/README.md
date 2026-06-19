@@ -8,11 +8,19 @@ market reality it's tested against.
 
 The tradeable market universe: exchange, symbol, asset/quote, whether it's
 leveraged, the order-type constraint, and the fee (negative = maker rebate).
-Schema: `../schemas/market_registry.schema.json`. Loader: `../tools/markets.py`.
+Also holds `default_slippage_bps` — real market-order slippage from ~1 year
+of actual trading (not a per-market measurement, a single empirical default
+used uniformly until per-market data justifies splitting it out). Schema:
+`../schemas/market_registry.schema.json`. Loader: `../tools/markets.py`.
 
 Every entry's exchange/symbol must exist as bronze data in Makalu — this is
 the fixed, deliberately small set of markets Kilimanjaro targets, not an
 open-ended list.
+
+Both `fee_bps` and `default_slippage_bps` here are the single source of
+truth for a hypothesis spec's `execution_assumptions.fees_bps`/
+`slippage_bps` — `tools/validate_spec.py` rejects a spec that declares a
+different number without explanation, so this can't silently drift.
 
 ## `waves/` and `graphs/`
 

@@ -100,6 +100,22 @@ class TestValidateSpec(unittest.TestCase):
         errors = validate(spec)
         self.assertFalse(any("fee_bps" in e for e in errors), errors)
 
+    def test_slippage_bps_mismatched_with_registry_fails(self):
+        # markets/registry.yaml's default_slippage_bps is a real, user-
+        # provided number (~1 year of actual trading), not a placeholder --
+        # a spec silently using a different value should be caught the same
+        # way a mismatched fees_bps is.
+        import copy
+
+        import yaml
+
+        from validate_spec import validate
+
+        spec = copy.deepcopy(yaml.safe_load((_FIXTURES / "valid_spec.yaml").read_text()))
+        spec["hypothesis"]["execution_assumptions"]["slippage_bps"] = 5.0
+        errors = validate(spec)
+        self.assertTrue(any("does not match markets/registry.yaml's default_slippage_bps" in e for e in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main()
