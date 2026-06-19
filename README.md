@@ -230,12 +230,16 @@ profitable regardless of what the signal predicts.
   pattern stable yet).
 - BINANCE isn't traded but is the industry-leading exchange; a prior
   strategy generated signal there and traded on GMO. `tools/lead_lag_wave.py`
-  builds an equivalent daily wave for how strongly/stably BINANCE leads each
-  GMO JPY pair, reusing Makalu's existing gold-layer `LeadLag` dataset rather
-  than recomputing cross-correlation from scratch. Confirmed on real data:
-  BINANCE leads 81-97% of the time across every bucket of the day. See
-  `markets/README.md` for two real data-quality findings about that
-  dataset's documented-vs-actual column behavior.
+  builds an equivalent daily wave for how strongly/stably one market leads
+  another, computed directly from bronze `OrderBook` (1-second resampled
+  cross-correlation) -- Makalu's own gold-layer `LeadLag` dataset only
+  covered a window that didn't match any period this project actually
+  scanned, so Kilimanjaro recomputes it directly per the Bronze-First
+  principle, and Makalu's `populate LeadLag` CLI was separately extended
+  (see "Makalu Population" below) to reach any market pair, not just the
+  original fixed BINANCE-to-GMO-JPY set. Confirmed on real data: BINANCE
+  leads GMO/BTC_JPY 49-82% of the time depending on time of day (peak
+  23:30-01:00 JST), not a flat 81-97%. See `markets/README.md`.
 - On the negative-fee, limit-only markets (GMO spot, BITBANK ETH/XRP spot),
   only limit orders are ever explored, so `tools/fill_probability.py`
   answers a different question: at distance X (bps) from the best bid/ask,
@@ -331,6 +335,43 @@ dataset following Makalu's existing layer/pipeline conventions if no
 pipeline produces the needed signal. No hypothesis is blocked merely because
 a specific non-bronze dataset is missing, unqueryable, or unproven —
 that's a routing decision, not a blocker.
+
+## Viewer
+
+`src/api.py` (Flask, port 9777) + `web/` (vanilla HTML/CSS/JS, no build
+step) -- the same file layout convention as Makalu's own `src/api.py`/`web/`.
+Read-only: lists every hypothesis (joining `specs/`, `ledger/`, and the
+latest `scan-reports/` entry), and a detail view per hypothesis with its
+full spec, ledger event history, and scan report metrics. Nothing here
+writes to any of those directories -- mutating the research loop stays in
+`tools/*.py`/the CLI, on purpose.
+
+```bash
+python src/api.py   # serves http://localhost:9777
+```
+
+## Makalu Population
+
+Kilimanjaro never recomputes something Makalu already implements as a
+`populate` pipeline -- it checks Makalu's coverage for the needed
+exchange/symbol/date range first, calls Makalu's `populate` CLI if missing,
+then reads the result. Two real additions made to Makalu's own pipeline to
+support this (in `/home/lulurun/workspace/Makalu`, not this repo):
+
+- **`populate Return`** -- forward mid-price returns at fixed horizons
+  (e.g. `return_30s`, `return_120s`, `return_300s`) from `MarketPrice`, the
+  same shared, reusable quantity many different signal-scanning purposes
+  would otherwise each recompute independently via their own ASOF join.
+- **`populate LeadLag --lead-market/--lag-market`** -- an explicit-market
+  path alongside the original `--pair` shorthand (`btc`/`eth`/`xrp`/`sol`,
+  fixed to GMO as the lag market), for any other pair, e.g.
+  `BINANCE:BTC_USDT` &rarr; `GMO:BTC_SPOT`.
+- **Gap-skip fix in `pipeline/framework.py`/`stages.py`** -- Makalu's
+  pipeline used to crash outright (`KeyError: 'ts'`) on any chunk with no
+  underlying data; confirmed for real that several markets have scattered
+  raw-data gaps (e.g. `BINANCE/ETH_USDT` is missing an entire month). Fixed
+  to log a warning and skip the gap instead of crashing the whole populate
+  command.
 
 ## Open Design Questions
 
