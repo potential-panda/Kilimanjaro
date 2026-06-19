@@ -32,13 +32,14 @@
         "realized_volatility_bps": { "type": ["number", "null"], "description": "Stdev of the target's realized return at the primary horizon, over the scanned window." },
         "lead_lag": {
           "type": ["object", "null"],
-          "description": "null when the feature/target pair isn't one of the confirmed BINANCE-leads-GMO relationships (not applicable). When it is, status distinguishes 'ok' (real numbers below) from 'no-data-for-window' (the pair is confirmed in general, but Makalu's precomputed gold LeadLag dataset has no rows for this exact date range).",
-          "required": ["asset", "status", "leader_share", "avg_max_corr"],
+          "description": "Computed directly from bronze OrderBook for exactly the scanned window (not Makalu's gold LeadLag dataset, whose coverage was found to not match every scanned period). null when feature and target are the same market (not applicable) or there's too little overlapping data.",
+          "required": ["distinct_days", "feature_leads_fraction", "mean_best_lag_seconds", "mean_best_corr", "mean_corr_at_zero"],
           "properties": {
-            "asset": { "type": "string" },
-            "status": { "enum": ["ok", "no-data-for-window"] },
-            "leader_share": { "type": ["number", "null"], "description": "Fraction of the window where BINANCE led, per tools/lead_lag_wave.py's per-30min-bucket computation." },
-            "avg_max_corr": { "type": ["number", "null"] }
+            "distinct_days": { "type": "integer", "minimum": 1 },
+            "feature_leads_fraction": { "type": "number", "minimum": 0, "maximum": 1, "description": "Fraction of days where the feature market's peak cross-correlation lag was positive (feature led)." },
+            "mean_best_lag_seconds": { "type": "number" },
+            "mean_best_corr": { "type": "number" },
+            "mean_corr_at_zero": { "type": "number", "description": "Correlation with no lag applied, for comparison against mean_best_corr." }
           }
         }
       }

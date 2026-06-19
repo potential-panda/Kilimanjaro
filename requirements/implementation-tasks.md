@@ -414,18 +414,27 @@ Acceptance:
 
 ### 11. Run bootstrap validation
 
+**In progress (2026-06-19) -- 17 real hypotheses recorded, first `scan-passed` found, task 10 still outstanding.**
+
 Dependencies: tasks 1-10.
 
-Deliver:
+Delivered so far: 17 hypotheses spanning 4 taxonomy families (`order_book_imbalance`, `weighted_imbalance_microprice`, `lead_lag`, `depth_pull_refill_asymmetry`), 3 assets (BTC/ETH/XRP), and two market categories (GMO/BITBANK leveraged 0%-fee pairs vs. GMO/BITBANK spot rebate pairs):
 
-- 3-5 completed manual loop examples across different taxonomy families.
+- 12 on `GMO BTC_JPY/ETH_JPY/XRP_JPY` (0% fee, real spread): all `scan-failed`, 11 on `failed-cost-buffer`, the 3 `depth_pull_refill_asymmetry` variants additionally on `failed-ic-threshold` (consistently the weakest mechanism across all 3 assets).
+- 5 on negative-fee/rebate markets (`GMO BTC_SPOT/ETH_SPOT/XRP_SPOT` at -0.01%, `BITBANK ETH_SPOT/XRP_SPOT` at -0.02%): 4 `scan-failed`-but-close (`GMO BTC_SPOT` missed by only ~21%, vs. ~4-9x short on the 0%-fee pairs), and **1 real `scan-passed`**: `hyp-20260619-002` (BITBANK XRP_SPOT same-market imbalance) -- IC 0.171 (stable across all 8 days), edge 1.59bps clearing a 1.49bps requirement.
+- For `BITBANK ETH_SPOT`/`XRP_SPOT`, BINANCE was *measured* (not assumed) to not clearly lead that exchange/asset/window (37.5%/50% of days) -- those two hypotheses test same-market imbalance instead of the BINANCE-default, an honest deviation from the project's usual cross-market-sourcing rule, justified by direct measurement.
+- Negative-fee markets show meaningfully stronger raw signal (IC 0.13-0.19) than the 0%-fee leveraged pairs (IC 0.01-0.10) for the same imbalance mechanism on the same assets -- not just a lower cost hurdle, a cleaner signal too.
+
+Two real infrastructure fixes found while generating this batch:
+- `schemas/hypothesis_spec.schema.json`'s `execution_assumptions.fees_bps` had `"minimum": 0`, which rejected every negative-fee (rebate) market spec -- contradicting `markets/registry.yaml`'s own data (GMO/BITBANK spot fee_bps are negative). Fixed by removing the incorrect minimum.
+- `tools/scanner.py`'s `market_context.lead_lag` was rebuilt to measure cross-correlation directly from bronze OrderBook (1-second resampled mid-price series, per-day peak-lag search) instead of depending on Makalu's gold `LeadLag` dataset, whose coverage (2025-12-30..2026-01-31) didn't match any of the windows actually scanned in this project.
 
 Acceptance:
 
-- At least one rejection is recorded.
-- At least one `needs-more-data` or `needs-tooling` path is exercised if naturally available.
-- At least one `scan-passed` review packet is reviewed by a human before transition to `backtest-approved` and handoff creation.
-- Findings are used to revise schema/threshold clarity before autonomous volume.
+- At least one rejection is recorded. ✅ (16 of 17)
+- At least one `needs-more-data` or `needs-tooling` path is exercised if naturally available. ✅ (demonstrated separately in a scratch run during task 9; not naturally hit by this batch since every spec here was well-formed)
+- At least one `scan-passed` review packet is reviewed by a human before transition to `backtest-approved` and handoff creation. ⏳ `hyp-20260619-002` is `scan-passed` and ready for review; the human-review/handoff step itself is still pending (needs task 10, not yet built).
+- Findings are used to revise schema/threshold clarity before autonomous volume. ✅ (three fixes above, plus the earlier `fees_bps`/`half_spread_bps`/`slippage_bps` registry-grounding work)
 
 ## Commands To Provide
 

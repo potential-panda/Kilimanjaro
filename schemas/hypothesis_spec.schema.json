@@ -143,7 +143,7 @@
           "required": ["order_type"],
           "properties": {
             "order_type": { "enum": ["market", "limit", "passive", "not_applicable"] },
-            "fees_bps": { "type": ["number", "null"], "minimum": 0 },
+            "fees_bps": { "type": ["number", "null"], "description": "Negative is a real, valid case -- a maker rebate on limit-only markets (see markets/registry.yaml's GMO/BITBANK spot fee_bps entries). No minimum: 0 here, that would contradict the registry's own data." },
             "slippage_bps": { "type": ["number", "null"], "minimum": 0 },
             "latency_ms": { "type": ["number", "null"], "minimum": 0 },
             "liquidity_capacity_assumption": { "type": "string" }

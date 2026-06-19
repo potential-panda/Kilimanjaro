@@ -26,8 +26,9 @@ from scanner import (  # noqa: E402
     _effective_sample_count,
     _hit_rate,
     _lag1_autocorr,
-    _lead_lag_context,
+    _measured_lead_lag,
     _newey_west_hac_ci,
+    _peak_lag_corr,
     _spearman_ic,
     run_scan,
 )
@@ -94,11 +95,26 @@ class TestMetricFunctions(unittest.TestCase):
         self.assertIsNone(ci_low)
         self.assertIsNone(bandwidth)
 
-    def test_lead_lag_context_none_for_unsupported_pair(self):
-        # GMO sourcing its own feature for a GMO target isn't one of the
-        # confirmed BINANCE-leads-GMO relationships -- not applicable, no
-        # API call should even be attempted.
-        self.assertIsNone(_lead_lag_context("GMO", "BTC_JPY", "GMO", "BTC_JPY", "2026-05-01", "2026-05-02"))
+    def test_measured_lead_lag_none_for_same_market(self):
+        # Same feature/target glob -- lead-lag isn't meaningful against
+        # yourself; no query should even be attempted.
+        self.assertIsNone(_measured_lead_lag(None, "same/glob", "same/glob", "2026-05-01", "2026-05-02"))
+
+    def test_peak_lag_corr_detects_known_lead(self):
+        rng = np.random.RandomState(0)
+        n = 2000
+        feature_ret = rng.normal(size=n)
+        target_ret = np.empty(n)
+        target_ret[:3] = rng.normal(size=3)
+        target_ret[3:] = 0.8 * feature_ret[:-3] + 0.2 * rng.normal(size=n - 3)  # target lags feature by 3
+        result = _peak_lag_corr(feature_ret, target_ret, max_lag_seconds=10)
+        self.assertIsNotNone(result)
+        best_lag, best_corr, corr_at_zero = result
+        self.assertEqual(best_lag, 3)
+        self.assertGreater(best_corr, corr_at_zero)
+
+    def test_peak_lag_corr_none_for_too_little_data(self):
+        self.assertIsNone(_peak_lag_corr(np.array([1.0, 2.0]), np.array([1.0, 2.0]), max_lag_seconds=10))
 
 
 @unittest.skipUnless(_MAKALU_DATA_ROOT.is_dir(), "real Makalu data not present")
@@ -120,17 +136,16 @@ class TestRunScanIntegration(unittest.TestCase):
         self.assertLess(ctx["avg_half_spread_bps"], 2.0)
         self.assertGreater(ctx["realized_volatility_bps"], 0)
 
-    def test_market_context_lead_lag_reflects_real_data_coverage_gap(self):
-        # BINANCE:BTC_USDT -> GMO:BTC_JPY is a confirmed pair, but Makalu's
-        # precomputed gold LeadLag dataset only covers 2025-12-30..2026-01-31
-        # -- found for real while building this feature. This window
-        # (2026-05-01..02) has no coverage, and that absence should be
-        # reported explicitly, not collapsed into a bare null.
+    def test_market_context_lead_lag_confirms_binance_leads(self):
+        # Measured directly from bronze for exactly this window (not
+        # Makalu's gold LeadLag dataset, whose coverage doesn't match
+        # every scanned period) -- should confirm BINANCE leads GMO, the
+        # premise every cross-market hypothesis in this project relies on.
         lead_lag = self.report["market_context"]["lead_lag"]
         self.assertIsNotNone(lead_lag)
-        self.assertEqual(lead_lag["asset"], "BTC")
-        self.assertEqual(lead_lag["status"], "no-data-for-window")
-        self.assertIsNone(lead_lag["leader_share"])
+        self.assertGreater(lead_lag["feature_leads_fraction"], 0.5)
+        self.assertGreater(lead_lag["mean_best_lag_seconds"], 0)
+        self.assertGreaterEqual(lead_lag["mean_best_corr"], lead_lag["mean_corr_at_zero"])
 
     def test_ic_and_hit_rate_are_positive_and_modest(self):
         # Matches the manually-computed result for this exact case: IC ~0.05,

@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "id": "scan-20260619-016",
+  "hypothesis_id": "hyp-20260619-001",
+  "scanner_version": "v1",
+  "config_hash": "",
+  "created_at": "2026-06-19T01:41:01Z",
+  "data_window": {
+    "exchange": "BITBANK",
+    "symbol": "ETH_SPOT",
+    "start_date": "2026-05-25",
+    "end_date": "2026-05-31",
+    "distinct_days": 8
+  },
+  "market_context": {
+    "avg_half_spread_bps": 0.9693679382770322,
+    "realized_volatility_bps": 8.673204531321726,
+    "lead_lag": null
+  },
+  "metrics": {
+    "primary_horizon_seconds": 120,
+    "ic_method": "spearman",
+    "ic_pooled": 0.12975007205105407,
+    "ic_by_day": {
+      "2026-05-25 00:00:00+09": 0.07206706070679329,
+      "2026-05-26 00:00:00+09": 0.09004793477310641,
+      "2026-05-27 00:00:00+09": 0.1370771150581189,
+      "2026-05-28 00:00:00+09": 0.07433334957448666,
+      "2026-05-29 00:00:00+09": 0.1582006959860752,
+      "2026-05-30 00:00:00+09": 0.22881106492042796,
+      "2026-05-31 00:00:00+09": 0.14910195530093617,
+      "2026-06-01 00:00:00+09": 0.06156079063519275
+    },
+    "hit_rate": 0.5390379392669182,
+    "bucketed_returns": [
+      {
+        "bucket": 0,
+        "n": 327146,
+        "mean_target_return": -0.00012420560035616835
+      },
+      {
+        "bucket": 1,
+        "n": 326946,
+        "mean_target_return": -7.126761101500223e-05
+      },
+      {
+        "bucket": 2,
+        "n": 327325,
+        "mean_target_return": 1.489349196764913e-07
+      },
+      {
+        "bucket": 3,
+        "n": 326768,
+        "mean_target_return": 5.5072824444484684e-05
+      },
+      {
+        "bucket": 4,
+        "n": 327016,
+        "mean_target_return": 0.00010182549758775193
+      }
+    ],
+    "decay_by_horizon": [
+      {
+        "horizon_seconds": 30,
+        "ic_pooled": 0.12438861438749163,
+        "hit_rate": 0.5324054306116601,
+        "n": 1635455
+      },
+      {
+        "horizon_seconds": 120,
+        "ic_pooled": 0.12975007205105407,
+        "hit_rate": 0.5390379392669182,
+        "n": 1635201
+      },
+      {
+        "horizon_seconds": 300,
+        "ic_pooled": 0.1057132880802719,
+        "hit_rate": 0.5388466838872307,
+        "n": 1634796
+      }
+    ],
+    "raw_sample_count": 1635201,
+    "effective_sample_count": 71137.33066682616,
+    "signal_autocorrelation_lag1": 0.9175533364006099,
+    "significance_method": "newey_west_hac",
+    "hac_bandwidth": 34,
+    "bootstrap_resamples": null,
+    "bootstrap_seed": null,
+    "bootstrap_ci_low": 0.1224961621369341,
+    "bootstrap_ci_high": 0.137003981965174,
+    "stability_by_regime": {}
+  },
+  "threshold_verdict": {
+    "status": "fail",
+    "failed_rules": [
+      "failed-cost-buffer"
+    ],
+    "yellow_flags": [
+      "regime-stability-unproven"
+    ],
+    "verdict_text": "edge 1.130bps does not exceed required cost buffer 1.812bps (fees -0.02 + half_spread 0.969 (measured) + slippage 0.5, x1.25) stability_by_regime is not yet computed (scanner v1 gap)",
+    "cost_buffer": {
+      "edge_bps": 1.1301554897196016,
+      "fee_bps": -0.02,
+      "half_spread_bps": 0.9693679382770322,
+      "slippage_bps": 0.5,
+      "safety_multiplier": 1.25,
+      "required_bps": 1.81170992284629,
+      "cleared": false
+    }
+  }
+}

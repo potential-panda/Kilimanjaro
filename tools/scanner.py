@@ -41,8 +41,6 @@ import yaml
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).parent))
-from lead_lag_wave import _SUPPORTED_PAIRS as _LEAD_LAG_SUPPORTED_PAIRS  # noqa: E402
-from lead_lag_wave import compute_wave as _compute_lead_lag_wave  # noqa: E402
 from sql_safety import validate_expression  # noqa: E402
 
 _ROOT = Path(__file__).parent.parent
@@ -93,37 +91,92 @@ def _realized_volatility_bps(primary_df: pd.DataFrame) -> float | None:
     return float(primary_df["target_return"].std() * 10000)
 
 
-def _lead_lag_context(feature_exchange: str, feature_symbol: str, target_exchange: str, target_symbol: str, start_date: str, end_date: str) -> dict | None:
-    """Real lead-lag summary for exactly the scanned window, reusing
-    tools/lead_lag_wave.py's existing per-30min-bucket computation against
-    Makalu's precomputed gold LeadLag dataset (not reinventing the
-    cross-correlation math here). Only meaningful for the confirmed
-    BINANCE->GMO pairs lead_lag_wave.py already supports; None otherwise
-    (e.g. a same-market or non-BINANCE-sourced hypothesis), where this
-    cross-market relationship isn't applicable at all -- distinct from
-    {"asset": ..., "status": "no-data-for-window"}, which means the pair
-    IS one of the confirmed BINANCE->GMO relationships but Makalu's
-    precomputed gold LeadLag dataset has no rows covering this scan's
-    exact date range (found for real: it only covers 2025-12-30..2026-01-31,
-    while every hyp-20260618-* spec scans 2026-05-01..15 -- meaning the
-    "BINANCE leads 81-97%" claim those specs cite was validated against a
-    different period than the one actually tested)."""
-    asset = None
-    for candidate, (market_a, market_b) in _LEAD_LAG_SUPPORTED_PAIRS.items():
-        if market_a == f"{feature_exchange}:{feature_symbol}" and market_b == f"{target_exchange}:{target_symbol}":
-            asset = candidate
-            break
-    if asset is None:
+_LEAD_LAG_MAX_LAG_SECONDS = 10
+
+
+def _peak_lag_corr(feature_ret: np.ndarray, target_ret: np.ndarray, max_lag_seconds: int) -> tuple[int, float, float] | None:
+    """Cross-correlation of (feature_ret, target_ret) at integer-second
+    lags in [-max_lag, +max_lag]. A peak at lag k>0 means target_ret[t+k]
+    correlates best with feature_ret[t] -- the feature changed first and
+    the target caught up k seconds later (feature leads). Returns
+    (best_lag, best_corr, corr_at_zero), or None if there's too little
+    data or every lag is degenerate (zero variance)."""
+    corrs: dict[int, float] = {}
+    for lag in range(-max_lag_seconds, max_lag_seconds + 1):
+        a, b = (feature_ret[:-lag], target_ret[lag:]) if lag > 0 else (feature_ret[-lag:], target_ret[:lag]) if lag < 0 else (feature_ret, target_ret)
+        if len(a) < 30 or np.std(a) == 0 or np.std(b) == 0:
+            continue
+        corrs[lag] = float(np.corrcoef(a, b)[0, 1])
+    if not corrs:
+        return None
+    best_lag = max(corrs, key=lambda k: corrs[k])
+    return best_lag, corrs[best_lag], corrs.get(0, float("nan"))
+
+
+def _measured_lead_lag(
+    con: duckdb.DuckDBPyConnection,
+    feature_glob: str,
+    target_glob: str,
+    start_date: str,
+    end_date: str,
+    max_lag_seconds: int = _LEAD_LAG_MAX_LAG_SECONDS,
+) -> dict | None:
+    """Real lead-lag measurement computed directly from bronze OrderBook
+    over exactly the scanned window -- not Makalu's precomputed gold
+    LeadLag dataset, which was found to only cover 2025-12-30..2026-01-31
+    while every hyp-20260618-* spec scans 2026-05-01..15 (a different
+    period than the one actually tested). Per the project's Bronze-First
+    Reliability Model, bronze is the only guaranteed dataset; this avoids
+    depending on gold-layer coverage for a decision-relevant metric.
+
+    Both markets are resampled to 1-second mid-price bars and joined on
+    the second grid; cross-correlation of log returns at each integer lag
+    is computed per day, then summarized across days. None when the
+    feature and target are the same market (lead-lag isn't meaningful) or
+    when there's too little overlapping data to say anything."""
+    if feature_glob == target_glob:
         return None
 
-    df = _compute_lead_lag_wave(asset, start_date=start_date, end_date=end_date)
-    if df.empty:
-        return {"asset": asset, "status": "no-data-for-window", "leader_share": None, "avg_max_corr": None}
+    sql = f"""
+    WITH f AS (
+      SELECT CAST(floor(ts) AS BIGINT) AS t_sec, last((bid0_price + ask0_price) / 2.0 ORDER BY ts) AS mid
+      FROM read_parquet('{feature_glob}', hive_partitioning=true)
+      WHERE ask0_price > bid0_price AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+      GROUP BY t_sec
+    ),
+    t AS (
+      SELECT CAST(floor(ts) AS BIGINT) AS t_sec, last((bid0_price + ask0_price) / 2.0 ORDER BY ts) AS mid
+      FROM read_parquet('{target_glob}', hive_partitioning=true)
+      WHERE ask0_price > bid0_price AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+      GROUP BY t_sec
+    )
+    SELECT f.t_sec, CAST(DATE_TRUNC('day', TO_TIMESTAMP(f.t_sec + {_JST_OFFSET_SECONDS})) AS VARCHAR) AS jst_date,
+      f.mid AS feature_mid, t.mid AS target_mid
+    FROM f JOIN t ON f.t_sec = t.t_sec
+    ORDER BY f.t_sec
+    """
+    df = con.sql(sql).df().dropna()
+    if len(df) < (2 * max_lag_seconds + 100):
+        return None
+
+    daily = []
+    for jst_date, day_df in df.groupby("jst_date"):
+        feature_ret = np.diff(np.log(day_df["feature_mid"].to_numpy()))
+        target_ret = np.diff(np.log(day_df["target_mid"].to_numpy()))
+        result = _peak_lag_corr(feature_ret, target_ret, max_lag_seconds)
+        if result is not None:
+            best_lag, best_corr, corr_at_zero = result
+            daily.append({"date": jst_date, "best_lag_seconds": best_lag, "best_corr": best_corr, "corr_at_zero": corr_at_zero})
+
+    if not daily:
+        return None
+
     return {
-        "asset": asset,
-        "status": "ok",
-        "leader_share": float(df["frac_binance_leads"].mean()),
-        "avg_max_corr": float(df["avg_max_corr"].mean()),
+        "distinct_days": len(daily),
+        "feature_leads_fraction": float(np.mean([d["best_lag_seconds"] > 0 for d in daily])),
+        "mean_best_lag_seconds": float(np.mean([d["best_lag_seconds"] for d in daily])),
+        "mean_best_corr": float(np.mean([d["best_corr"] for d in daily])),
+        "mean_corr_at_zero": float(np.mean([d["corr_at_zero"] for d in daily])),
     }
 
 
@@ -383,11 +436,7 @@ def run_scan(
     market_context = {
         "avg_half_spread_bps": _measured_half_spread_bps(con, target_glob, start_date, end_date),
         "realized_volatility_bps": _realized_volatility_bps(primary_df),
-        "lead_lag": _lead_lag_context(
-            feature_source["exchange"], feature_source["symbol"],
-            target_source["exchange"], target_source["symbol"],
-            start_date, end_date,
-        ),
+        "lead_lag": _measured_lead_lag(con, feature_glob, target_glob, start_date, end_date),
     }
 
     created_at = datetime.now(timezone.utc)
