@@ -41,6 +41,7 @@ import yaml
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).parent))
+import makalu_client  # noqa: E402
 from regime_window import bucket_of_jst_second, load_regime_artifact, regime_key  # noqa: E402
 from sql_safety import validate_expression  # noqa: E402
 
@@ -249,6 +250,34 @@ def _measured_lead_lag(
     }
 
 
+def _lead_lag_block(
+    con: duckdb.DuckDBPyConnection,
+    feature_glob: str,
+    target_glob: str,
+    feature_exchange: str,
+    feature_symbol: str,
+    target_exchange: str,
+    target_symbol: str,
+    start_date: str,
+    end_date: str,
+) -> dict | None:
+    """Makalu manages the data, Kilimanjaro only consumes it: check/populate
+    Makalu's gold LeadLag coverage for this pair+window first, and if
+    available, use tools/makalu_client.py's mapping of Makalu's own
+    (more sophisticated, EWM-decayed multi-window) cross-correlation
+    instead of recomputing it from bronze ourselves. Falls back to the
+    bronze-direct _measured_lead_lag entirely (never mixes the two)
+    if Makalu doesn't have this pair, or populate fails."""
+    if feature_exchange != target_exchange or feature_symbol != target_symbol:
+        if makalu_client.ensure_leadlag(feature_exchange, feature_symbol, target_exchange, target_symbol, start_date, end_date):
+            summary = makalu_client.read_leadlag_summary(
+                feature_exchange, feature_symbol, target_exchange, target_symbol, start_date, end_date
+            )
+            if summary is not None:
+                return summary
+    return _measured_lead_lag(con, feature_glob, target_glob, start_date, end_date)
+
+
 def _pull_joined_table(
     con: duckdb.DuckDBPyConnection,
     feature_sql: str,
@@ -305,6 +334,58 @@ def _pull_joined_table(
     FROM joined
     WHERE mid_future IS NOT NULL AND mid_now IS NOT NULL AND signal IS NOT NULL
     ORDER BY ts
+    """
+    df = con.sql(sql).df()
+    if target_type == "spread_adjusted_return":
+        df["target_return"] = df["raw_return"] - np.sign(df["raw_return"]) * df["half_spread_cost"] / 2.0
+    else:
+        df["target_return"] = df["raw_return"]
+    return df[["ts", "jst_date", "signal", "target_return"]]
+
+
+def _pull_joined_table_via_makalu_return(
+    con: duckdb.DuckDBPyConnection,
+    feature_sql: str,
+    feature_alias: str,
+    feature_glob: str,
+    return_glob: str,
+    target_type: str,
+    horizon_seconds: float,
+    start_date: str,
+    end_date: str,
+) -> pd.DataFrame:
+    """Same output shape as _pull_joined_table, but reads the target's
+    forward return from Makalu's already-populated Return dataset
+    (tools/makalu_client.py) instead of computing it via a second ASOF
+    join + lookahead-padded read -- Makalu manages the data, Kilimanjaro
+    only consumes it. Simpler than the bronze-direct path: Return already
+    has the forward return precomputed, so this needs only one ASOF join,
+    not two, and no lookahead date padding."""
+    if target_type not in ("next_return", "spread_adjusted_return"):
+        raise ScannerError(f"target.type '{target_type}' is not implemented in v1 (only next_return, spread_adjusted_return)")
+
+    half_spread_expr = "spread / mid / 2.0" if target_type == "spread_adjusted_return" else "0.0"
+    sql = f"""
+    WITH feature_src AS (
+      SELECT ts, ({feature_sql}) AS signal
+      FROM read_parquet('{feature_glob}', hive_partitioning=true) AS {feature_alias}
+      WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+    ),
+    target_return AS (
+      SELECT ts, return_{int(horizon_seconds)}s AS raw_return, {half_spread_expr} AS half_spread_cost
+      FROM read_parquet('{return_glob}', hive_partitioning=true)
+      WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+    )
+    SELECT
+      f.ts,
+      CAST(DATE_TRUNC('day', TO_TIMESTAMP(f.ts + {_JST_OFFSET_SECONDS})) AS VARCHAR) AS jst_date,
+      f.signal,
+      t.raw_return,
+      t.half_spread_cost
+    FROM feature_src f
+    ASOF JOIN target_return t ON t.ts <= f.ts
+    WHERE t.raw_return IS NOT NULL AND f.signal IS NOT NULL
+    ORDER BY f.ts
     """
     df = con.sql(sql).df()
     if target_type == "spread_adjusted_return":
@@ -479,13 +560,33 @@ def run_scan(
     all_horizons = sorted({primary_horizon, *h["target"]["comparison_horizons_seconds"]})
 
     con = duckdb.connect()
+
+    # Makalu manages the data, Kilimanjaro only consumes it: check/populate
+    # the target's Return coverage once for the full horizon grid, and if
+    # available, join against it directly instead of computing the forward
+    # return ourselves via a second ASOF join + lookahead-padded read. Falls
+    # back to the bronze-direct path entirely (never mixes the two within
+    # one scan) if Makalu doesn't have it for this asset/scope.
+    return_glob = None
+    if makalu_client.ensure_return(target_source["exchange"], target_source["symbol"], start_date, end_date, horizons=tuple(all_horizons)):
+        return_glob = makalu_client.return_glob(
+            target_source["exchange"], target_source["symbol"],
+            makalu_client.return_param_id(makalu_client.execution_size_for(target_source["symbol"]), tuple(all_horizons)),
+        )
+
     decay_by_horizon = []
     primary_df = None
     for horizon in all_horizons:
-        df = _pull_joined_table(
-            con, sql_expr, feature_alias, feature_glob, target_glob, h["target"]["type"],
-            horizon, start_date, end_date, data_root,
-        )
+        if return_glob is not None:
+            df = _pull_joined_table_via_makalu_return(
+                con, sql_expr, feature_alias, feature_glob, return_glob, h["target"]["type"],
+                horizon, start_date, end_date,
+            )
+        else:
+            df = _pull_joined_table(
+                con, sql_expr, feature_alias, feature_glob, target_glob, h["target"]["type"],
+                horizon, start_date, end_date, data_root,
+            )
         ic = _spearman_ic(df["signal"].to_numpy(), df["target_return"].to_numpy())
         hr = _hit_rate(df["signal"].to_numpy(), df["target_return"].to_numpy())
         decay_by_horizon.append({"horizon_seconds": horizon, "ic_pooled": ic, "hit_rate": hr, "n": len(df)})
@@ -505,7 +606,12 @@ def run_scan(
     market_context = {
         "avg_half_spread_bps": _measured_half_spread_bps(con, target_glob, start_date, end_date),
         "realized_volatility_bps": _realized_volatility_bps(primary_df),
-        "lead_lag": _measured_lead_lag(con, feature_glob, target_glob, start_date, end_date),
+        "lead_lag": _lead_lag_block(
+            con, feature_glob, target_glob,
+            feature_source["exchange"], feature_source["symbol"],
+            target_source["exchange"], target_source["symbol"],
+            start_date, end_date,
+        ),
     }
 
     regime_restricted = _regime_restricted_block(
