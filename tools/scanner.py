@@ -41,6 +41,8 @@ import yaml
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).parent))
+from lead_lag_wave import _SUPPORTED_PAIRS as _LEAD_LAG_SUPPORTED_PAIRS  # noqa: E402
+from lead_lag_wave import compute_wave as _compute_lead_lag_wave  # noqa: E402
 from sql_safety import validate_expression  # noqa: E402
 
 _ROOT = Path(__file__).parent.parent
@@ -62,6 +64,67 @@ def _ob_glob(data_root: Path, exchange: str, symbol: str) -> str:
 
 def _max_horizon(spec_target: dict) -> int:
     return int(max([spec_target["primary_horizon_seconds"], *spec_target["comparison_horizons_seconds"]]))
+
+
+def _measured_half_spread_bps(con: duckdb.DuckDBPyConnection, target_glob: str, start_date: str, end_date: str) -> float | None:
+    """Real average half-spread on the target market over exactly the
+    scanned window -- not a value declared in the spec ahead of time.
+    Replaces the old execution_assumptions.half_spread_bps, which was
+    found to drift stale relative to whatever window a spec was actually
+    scanned against (see requirements.md's 2026-06-19 cost-buffer note)."""
+    sql = f"""
+    SELECT avg(ask0_price - bid0_price) AS avg_spread, avg((bid0_price + ask0_price) / 2.0) AS avg_mid
+    FROM read_parquet('{target_glob}', hive_partitioning=true)
+    WHERE ask0_price > bid0_price AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+    """
+    row = con.sql(sql).df().iloc[0]
+    if row["avg_mid"] in (None, 0) or pd.isna(row["avg_mid"]):
+        return None
+    return float((row["avg_spread"] / 2.0) / row["avg_mid"] * 10000)
+
+
+def _realized_volatility_bps(primary_df: pd.DataFrame) -> float | None:
+    """Stdev of the target's realized return at the primary horizon, over
+    exactly the scanned window -- the same "how much does price actually
+    move" question markets/waves/ answers generically by time-of-day, but
+    measured for this specific run instead of a separate precomputed wave."""
+    if len(primary_df) < 2:
+        return None
+    return float(primary_df["target_return"].std() * 10000)
+
+
+def _lead_lag_context(feature_exchange: str, feature_symbol: str, target_exchange: str, target_symbol: str, start_date: str, end_date: str) -> dict | None:
+    """Real lead-lag summary for exactly the scanned window, reusing
+    tools/lead_lag_wave.py's existing per-30min-bucket computation against
+    Makalu's precomputed gold LeadLag dataset (not reinventing the
+    cross-correlation math here). Only meaningful for the confirmed
+    BINANCE->GMO pairs lead_lag_wave.py already supports; None otherwise
+    (e.g. a same-market or non-BINANCE-sourced hypothesis), where this
+    cross-market relationship isn't applicable at all -- distinct from
+    {"asset": ..., "status": "no-data-for-window"}, which means the pair
+    IS one of the confirmed BINANCE->GMO relationships but Makalu's
+    precomputed gold LeadLag dataset has no rows covering this scan's
+    exact date range (found for real: it only covers 2025-12-30..2026-01-31,
+    while every hyp-20260618-* spec scans 2026-05-01..15 -- meaning the
+    "BINANCE leads 81-97%" claim those specs cite was validated against a
+    different period than the one actually tested)."""
+    asset = None
+    for candidate, (market_a, market_b) in _LEAD_LAG_SUPPORTED_PAIRS.items():
+        if market_a == f"{feature_exchange}:{feature_symbol}" and market_b == f"{target_exchange}:{target_symbol}":
+            asset = candidate
+            break
+    if asset is None:
+        return None
+
+    df = _compute_lead_lag_wave(asset, start_date=start_date, end_date=end_date)
+    if df.empty:
+        return {"asset": asset, "status": "no-data-for-window", "leader_share": None, "avg_max_corr": None}
+    return {
+        "asset": asset,
+        "status": "ok",
+        "leader_share": float(df["frac_binance_leads"].mean()),
+        "avg_max_corr": float(df["avg_max_corr"].mean()),
+    }
 
 
 def _pull_joined_table(
@@ -317,6 +380,16 @@ def run_scan(
     raw_n, effective_n = _effective_sample_count(primary_df)
     ci_low, ci_high, hac_bandwidth = _newey_west_hac_ci(primary_df)
 
+    market_context = {
+        "avg_half_spread_bps": _measured_half_spread_bps(con, target_glob, start_date, end_date),
+        "realized_volatility_bps": _realized_volatility_bps(primary_df),
+        "lead_lag": _lead_lag_context(
+            feature_source["exchange"], feature_source["symbol"],
+            target_source["exchange"], target_source["symbol"],
+            start_date, end_date,
+        ),
+    }
+
     created_at = datetime.now(timezone.utc)
     report = {
         "schema_version": 1,
@@ -332,6 +405,7 @@ def run_scan(
             "end_date": end_date,
             "distinct_days": primary_df["jst_date"].nunique(),
         },
+        "market_context": market_context,
         "metrics": {
             "primary_horizon_seconds": primary_horizon,
             "ic_method": "spearman",

@@ -70,8 +70,6 @@ hypothesis:
   execution_assumptions:
     order_type: market
     fees_bps: 0  # markets/registry.yaml: GMO ETH_JPY fee_bps=0 -- authoritative, not a guess
-    half_spread_included: false
-    half_spread_bps: 2.55  # avg_spread/avg_mid for GMO/ETH_JPY computed directly over 2026-05-01..15 (the exact scanned window)
     slippage_bps: 0.5  # markets/registry.yaml: default_slippage_bps, from ~1 year of real trading -- authoritative, not a guess
     latency_ms: 100
     liquidity_capacity_assumption: "single-unit notional, no capacity scaling in v1 scan"

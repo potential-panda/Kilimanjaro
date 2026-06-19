@@ -27,6 +27,7 @@ _MAKALU_DATA_ROOT = Path("/panda/makalu-data")
 def _base_report() -> dict:
     return {
         "data_window": {"distinct_days": 10},
+        "market_context": {"avg_half_spread_bps": 0.1, "realized_volatility_bps": 5.0, "lead_lag": None},
         "metrics": {
             "primary_horizon_seconds": 120,
             "ic_pooled": 0.05,
@@ -53,7 +54,7 @@ def _base_spec() -> dict:
     return {
         "hypothesis": {
             "target": {"type": "next_return"},
-            "execution_assumptions": {"fees_bps": 0.1, "half_spread_bps": 0.1, "slippage_bps": 0.1},
+            "execution_assumptions": {"fees_bps": 0.1, "slippage_bps": 0.1},
         }
     }
 
@@ -63,6 +64,15 @@ class TestThresholdEvaluator(unittest.TestCase):
         verdict = evaluate(_base_report(), _base_spec())
         self.assertEqual(verdict["status"], "pass")
         self.assertEqual(verdict["failed_rules"], [])
+
+    def test_cost_buffer_breakdown_is_structured_not_just_in_verdict_text(self):
+        verdict = evaluate(_base_report(), _base_spec())
+        cb = verdict["cost_buffer"]
+        self.assertAlmostEqual(cb["fee_bps"], 0.1)
+        self.assertAlmostEqual(cb["half_spread_bps"], 0.1)  # from market_context, not the spec
+        self.assertAlmostEqual(cb["slippage_bps"], 0.1)
+        self.assertAlmostEqual(cb["required_bps"], (0.1 + 0.1 + 0.1) * 1.25)
+        self.assertTrue(cb["cleared"])
 
     def test_too_few_distinct_days_yields_needs_more_data(self):
         report = _base_report()
@@ -139,17 +149,20 @@ class TestThresholdEvaluator(unittest.TestCase):
         self.assertIn("failed-cost-buffer", verdict["failed_rules"])
 
     def test_missing_half_spread_info_yields_needs_tooling(self):
+        # half_spread_bps now comes from the scanner's measured
+        # market_context, not a spec-declared field -- a report missing it
+        # (shouldn't happen with a current scanner.py, but checked anyway)
+        # is the only way to trigger this.
         report = _base_report()
-        spec = _base_spec()
-        spec["hypothesis"]["execution_assumptions"] = {"fees_bps": 0.1}  # no half_spread_bps, not flagged included
-        verdict = evaluate(report, spec)
+        report["market_context"]["avg_half_spread_bps"] = None
+        verdict = evaluate(report, _base_spec())
         self.assertEqual(verdict["status"], "needs-tooling")
 
     def test_spread_adjusted_target_does_not_double_count_half_spread(self):
         report = copy.deepcopy(_base_report())
+        report["market_context"]["avg_half_spread_bps"] = 100  # would fail if double-counted
         spec = _base_spec()
         spec["hypothesis"]["target"]["type"] = "spread_adjusted_return"
-        spec["hypothesis"]["execution_assumptions"]["half_spread_bps"] = 100  # would fail if double-counted
         verdict = evaluate(report, spec)
         self.assertNotIn("failed-cost-buffer", verdict["failed_rules"])
 

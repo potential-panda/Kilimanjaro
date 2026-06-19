@@ -4,7 +4,7 @@
   "title": "Kilimanjaro Scan Report",
   "description": "Output of tools/scanner.py (task 7), per requirements/data-contract.md's Scan Report Output. threshold_verdict.status is 'not_evaluated' until task 8's threshold evaluator runs.",
   "type": "object",
-  "required": ["schema_version", "id", "hypothesis_id", "scanner_version", "created_at", "data_window", "metrics", "threshold_verdict"],
+  "required": ["schema_version", "id", "hypothesis_id", "scanner_version", "created_at", "data_window", "market_context", "metrics", "threshold_verdict"],
   "properties": {
     "schema_version": { "const": 1 },
     "id": { "type": "string", "pattern": "^scan-[0-9]{8}-[0-9]{3}$" },
@@ -21,6 +21,26 @@
         "start_date": { "type": "string" },
         "end_date": { "type": "string" },
         "distinct_days": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "market_context": {
+      "type": "object",
+      "description": "Real market conditions measured for exactly this scan's date window -- not a precomputed, possibly stale, generic estimate. Relevant no matter what hypothesis is being tested.",
+      "required": ["avg_half_spread_bps", "realized_volatility_bps", "lead_lag"],
+      "properties": {
+        "avg_half_spread_bps": { "type": ["number", "null"], "description": "Measured directly from the target market's own OrderBook over the scanned window; replaces the old spec-declared execution_assumptions.half_spread_bps." },
+        "realized_volatility_bps": { "type": ["number", "null"], "description": "Stdev of the target's realized return at the primary horizon, over the scanned window." },
+        "lead_lag": {
+          "type": ["object", "null"],
+          "description": "null when the feature/target pair isn't one of the confirmed BINANCE-leads-GMO relationships (not applicable). When it is, status distinguishes 'ok' (real numbers below) from 'no-data-for-window' (the pair is confirmed in general, but Makalu's precomputed gold LeadLag dataset has no rows for this exact date range).",
+          "required": ["asset", "status", "leader_share", "avg_max_corr"],
+          "properties": {
+            "asset": { "type": "string" },
+            "status": { "enum": ["ok", "no-data-for-window"] },
+            "leader_share": { "type": ["number", "null"], "description": "Fraction of the window where BINANCE led, per tools/lead_lag_wave.py's per-30min-bucket computation." },
+            "avg_max_corr": { "type": ["number", "null"] }
+          }
+        }
       }
     },
     "metrics": {

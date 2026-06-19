@@ -26,6 +26,7 @@ from scanner import (  # noqa: E402
     _effective_sample_count,
     _hit_rate,
     _lag1_autocorr,
+    _lead_lag_context,
     _newey_west_hac_ci,
     _spearman_ic,
     run_scan,
@@ -93,6 +94,12 @@ class TestMetricFunctions(unittest.TestCase):
         self.assertIsNone(ci_low)
         self.assertIsNone(bandwidth)
 
+    def test_lead_lag_context_none_for_unsupported_pair(self):
+        # GMO sourcing its own feature for a GMO target isn't one of the
+        # confirmed BINANCE-leads-GMO relationships -- not applicable, no
+        # API call should even be attempted.
+        self.assertIsNone(_lead_lag_context("GMO", "BTC_JPY", "GMO", "BTC_JPY", "2026-05-01", "2026-05-02"))
+
 
 @unittest.skipUnless(_MAKALU_DATA_ROOT.is_dir(), "real Makalu data not present")
 class TestRunScanIntegration(unittest.TestCase):
@@ -104,6 +111,26 @@ class TestRunScanIntegration(unittest.TestCase):
     def test_report_matches_schema(self):
         schema = json.loads(_SCHEMA_PATH.read_text())
         jsonschema.Draft202012Validator(schema).validate(self.report)
+
+    def test_market_context_has_real_measured_spread(self):
+        ctx = self.report["market_context"]
+        # GMO/BTC_JPY's real half-spread for this exact window is ~0.92bps
+        # (computed directly, not the spec's old stale full-history guess).
+        self.assertGreater(ctx["avg_half_spread_bps"], 0.5)
+        self.assertLess(ctx["avg_half_spread_bps"], 2.0)
+        self.assertGreater(ctx["realized_volatility_bps"], 0)
+
+    def test_market_context_lead_lag_reflects_real_data_coverage_gap(self):
+        # BINANCE:BTC_USDT -> GMO:BTC_JPY is a confirmed pair, but Makalu's
+        # precomputed gold LeadLag dataset only covers 2025-12-30..2026-01-31
+        # -- found for real while building this feature. This window
+        # (2026-05-01..02) has no coverage, and that absence should be
+        # reported explicitly, not collapsed into a bare null.
+        lead_lag = self.report["market_context"]["lead_lag"]
+        self.assertIsNotNone(lead_lag)
+        self.assertEqual(lead_lag["asset"], "BTC")
+        self.assertEqual(lead_lag["status"], "no-data-for-window")
+        self.assertIsNone(lead_lag["leader_share"])
 
     def test_ic_and_hit_rate_are_positive_and_modest(self):
         # Matches the manually-computed result for this exact case: IC ~0.05,

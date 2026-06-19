@@ -19,10 +19,12 @@ v1 scope notes (documented limitations, not silently assumed):
     in v1, because tools/scanner.py always emits stability_by_regime
     empty (documented v1 gap in that module) -- not computed, not assumed
     passing.
-  - The cost buffer needs execution_assumptions.half_spread_bps, a real
-    magnitude the older half_spread_included boolean didn't carry; a spec
-    without it can't have its cost buffer evaluated and is marked
-    needs-tooling for that check specifically, not silently passed.
+  - The cost buffer's spread cost comes from report.market_context.avg_half_spread_bps,
+    measured directly by tools/scanner.py from the target market's own data
+    over the exact scanned window -- not declared in the spec ahead of
+    time. A report missing it (shouldn't happen with a current scanner.py,
+    but checked rather than assumed) is marked needs-tooling for that
+    check specifically, not silently passed.
 """
 
 from __future__ import annotations
@@ -57,6 +59,7 @@ class Verdict:
         self.notes: list[str] = []
         self.needs_more_data = False
         self.needs_tooling = False
+        self.cost_buffer: dict | None = None
 
     def fail(self, reason: str, note: str) -> None:
         self.failed_rules.append(reason)
@@ -80,6 +83,7 @@ class Verdict:
             "failed_rules": self.failed_rules,
             "yellow_flags": self.yellow_flags,
             "verdict_text": " ".join(self.notes) if self.notes else "all v1 thresholds cleared",
+            "cost_buffer": self.cost_buffer,
         }
 
 
@@ -162,13 +166,14 @@ def _check_single_cell_overfit(report: dict, v: Verdict) -> None:
 def _check_cost_buffer(report: dict, spec: dict, v: Verdict) -> None:
     h = spec["hypothesis"]
     ea = h.get("execution_assumptions", {})
-    half_spread_bps = ea.get("half_spread_bps")
-    if half_spread_bps is None and not ea.get("half_spread_included"):
+
+    half_spread_bps = (report.get("market_context") or {}).get("avg_half_spread_bps")
+    if half_spread_bps is None:
         v.needs_tooling = True
         v.fail(
             _REASON_FAILED_COST_BUFFER,
-            "execution_assumptions.half_spread_bps is not set and half_spread_included is false -- "
-            "cannot evaluate the cost buffer without a spread magnitude",
+            "report.market_context.avg_half_spread_bps is missing -- cannot evaluate the cost "
+            "buffer without a measured spread magnitude",
         )
         return
 
@@ -182,17 +187,31 @@ def _check_cost_buffer(report: dict, spec: dict, v: Verdict) -> None:
 
     fees_bps = ea.get("fees_bps") or 0
     slippage_bps = ea.get("slippage_bps") or 0
-    half_spread_cost_bps = 0 if (h["target"]["type"] == "spread_adjusted_return") else (half_spread_bps or 0)
+    # half_spread_bps is measured directly from the target market over this
+    # exact scan window (tools/scanner.py's market_context), not declared in
+    # the spec -- removes the staleness risk a spec-declared value had (see
+    # requirements.md's 2026-06-19 cost-buffer note).
+    half_spread_cost_bps = 0 if (h["target"]["type"] == "spread_adjusted_return") else half_spread_bps
     # latency_penalty_bps (observed adverse mid movement over latency_ms) is
     # not computed in v1 -- documented gap, not assumed zero-cost beyond
     # what's already in fees/spread/slippage.
     required_bps = (fees_bps + half_spread_cost_bps + slippage_bps) * _COST_BUFFER_SAFETY_MULTIPLIER
 
+    v.cost_buffer = {
+        "edge_bps": edge_bps,
+        "fee_bps": fees_bps,
+        "half_spread_bps": half_spread_cost_bps,
+        "slippage_bps": slippage_bps,
+        "safety_multiplier": _COST_BUFFER_SAFETY_MULTIPLIER,
+        "required_bps": required_bps,
+        "cleared": edge_bps > required_bps,
+    }
+
     if edge_bps <= required_bps:
         v.fail(
             _REASON_FAILED_COST_BUFFER,
             f"edge {edge_bps:.3f}bps does not exceed required cost buffer {required_bps:.3f}bps "
-            f"(fees {fees_bps} + half_spread {half_spread_cost_bps} + slippage {slippage_bps}, x{_COST_BUFFER_SAFETY_MULTIPLIER})",
+            f"(fees {fees_bps} + half_spread {half_spread_cost_bps:.3f} (measured) + slippage {slippage_bps}, x{_COST_BUFFER_SAFETY_MULTIPLIER})",
         )
 
 
