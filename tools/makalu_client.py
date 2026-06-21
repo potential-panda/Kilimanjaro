@@ -91,6 +91,39 @@ def _distinct_dates(glob: str, start_date: str, end_date: str) -> set:
     return set(pd.to_datetime(df["date"]).dt.date)
 
 
+def market_price_glob(exchange: str, symbol: str, execution_size: str) -> str:
+    return str(
+        _MAKALU_DATA_ROOT / "silver" / "dataset=MarketPrice" / f"exchange={exchange}" / f"symbol={symbol}"
+        / f"execution_size={execution_size}" / "date=*" / "*.parquet"
+    )
+
+
+def ensure_market_price(exchange: str, symbol: str, start_date: str, end_date: str) -> bool:
+    """Return/VolSpread/LeadLag's shared prerequisite. Checked and
+    populated separately from ensure_return/ensure_leadlag -- found for
+    real that calling `populate Return` directly when MarketPrice isn't
+    there yet doesn't error, it just silently produces almost no rows
+    (Makalu's pipeline skips every chunk as a "gap" -- indistinguishable
+    by exit code from a genuine raw-data hole). Confirmed: re-scanning
+    hyp-20260619-002 over its full ~year of bronze history still only
+    produced the original 8-day sample, because MarketPrice was never
+    populated past the original narrow window -- the populate command
+    exited 0 the whole time."""
+    execution_size = execution_size_for(symbol)
+    if execution_size is None or not makalu_available():
+        return False
+    glob = market_price_glob(exchange, symbol, execution_size)
+    needed = set(pd.date_range(start_date, end_date).date)
+    if needed - _distinct_dates(glob, start_date, end_date):
+        result = _run_populate(
+            "MarketPrice", "--exchange", exchange, "--symbol", symbol,
+            "--execution-size", execution_size, "--start", start_date, "--end", end_date,
+        )
+        if result.returncode != 0:
+            return False
+    return True
+
+
 def return_param_id(execution_size: str, horizons: tuple[int, ...] = _DEFAULT_HORIZONS, resample_interval: str = "1s") -> str:
     return f"ret_{execution_size}_{'_'.join(str(h) for h in horizons)}_{resample_interval}"
 
@@ -110,9 +143,18 @@ def ensure_return(
     the range still returns True -- this only confirms populate ran
     without error, not that every single day is covered; callers should
     treat any missing day within the result as a disclosed gap, not an
-    error, the same way every other wave tool in this project does."""
+    error, the same way every other wave tool in this project does.
+
+    Always checks/populates MarketPrice (Return's prerequisite) first --
+    calling `populate Return` directly when MarketPrice isn't there yet
+    doesn't error, it silently produces almost no rows, which used to be
+    indistinguishable by exit code from a genuine raw-data gap (found for
+    real: re-scanning hyp-20260619-002 over a ~year of bronze history
+    still only produced the original 8-day sample)."""
     execution_size = execution_size_for(symbol)
     if execution_size is None or not makalu_available():
+        return False
+    if not ensure_market_price(exchange, symbol, start_date, end_date):
         return False
     param_id = return_param_id(execution_size, horizons)
     glob = return_glob(exchange, symbol, param_id)
@@ -157,7 +199,14 @@ def _leadlag_glob(feature_exchange: str, feature_symbol: str, target_exchange: s
 def ensure_leadlag(
     feature_exchange: str, feature_symbol: str, target_exchange: str, target_symbol: str, start_date: str, end_date: str
 ) -> bool:
+    """LeadLag's prerequisite is MarketPrice for BOTH legs -- same silent-
+    partial-output risk as ensure_return if either is missing for part of
+    the requested range, so both are checked/populated first."""
     if not makalu_available():
+        return False
+    if not ensure_market_price(feature_exchange, feature_symbol, start_date, end_date):
+        return False
+    if not ensure_market_price(target_exchange, target_symbol, start_date, end_date):
         return False
     glob = _leadlag_glob(feature_exchange, feature_symbol, target_exchange, target_symbol)
     needed = set(pd.date_range(start_date, end_date).date)

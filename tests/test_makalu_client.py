@@ -15,9 +15,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 from makalu_client import (  # noqa: E402
     asset_of,
     ensure_leadlag,
+    ensure_market_price,
     ensure_return,
     execution_size_for,
     makalu_available,
+    market_price_glob,
     read_leadlag_summary,
     read_return,
     return_param_id,
@@ -55,6 +57,35 @@ class TestReturnBridge(unittest.TestCase):
         # mismatched tick-vs-resampled indices left ~99.9% of rows null --
         # confirm that regression doesn't come back.
         self.assertLess(df["return_120s"].isna().mean(), 0.01)
+
+    def test_ensure_return_actually_covers_a_range_marketprice_never_had(self):
+        # Found for real: re-scanning hyp-20260619-002 over a ~year of
+        # bronze history still only produced the original 8-day sample,
+        # because `populate Return` exits 0 even when its MarketPrice
+        # prerequisite is missing -- it just silently skips every chunk.
+        # ensure_return must check/populate MarketPrice first, not just
+        # trust the Return populate command's exit code. Uses a narrow,
+        # cheap 3-day window distinct from other tests' windows so this
+        # genuinely exercises "MarketPrice didn't exist yet here."
+        exchange, symbol, start, end = "GMO", "XRP_JPY", "2026-02-01", "2026-02-03"
+        mp_glob = market_price_glob(exchange, symbol, execution_size_for(symbol))
+        ok = ensure_market_price(exchange, symbol, start, end)
+        self.assertTrue(ok)
+        import duckdb
+        import pandas as pd
+
+        con = duckdb.connect()
+        dates = set(pd.to_datetime(con.sql(
+            f"SELECT DISTINCT date FROM read_parquet('{mp_glob}', hive_partitioning=true) "
+            f"WHERE date >= DATE '{start}' AND date <= DATE '{end}'"
+        ).df()["date"]).dt.date)
+        self.assertEqual(len(dates), 3)
+
+        ok = ensure_return(exchange, symbol, start, end)
+        self.assertTrue(ok)
+        df = read_return(exchange, symbol, start, end)
+        self.assertIsNotNone(df)
+        self.assertGreater(len(df), 0)
 
     def test_unknown_asset_returns_false_and_none(self):
         self.assertFalse(ensure_return("GMO", "DOGE_JPY", "2026-05-01", "2026-05-02"))
