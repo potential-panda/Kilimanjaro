@@ -18,18 +18,15 @@ This is the governing principle for everything else in this contract, confirmed 
   4. **If a populated, queryable dataset turns out not to carry signal once scanned, that's just a normal scan outcome** (`scan-failed`/`rejected`), not a data problem. Existing derived datasets earn their place by passing scans, not by being assumed valuable because they already exist.
 - A hypothesis is never blocked because a *specific* derived dataset is unpopulated, unqueryable, or has gone unused — it is only blocked if bronze itself can't support the needed window/coverage, since bronze has no fallback.
 
-## Known Gap: catalog-declared layer can disagree with actual storage
+## Known Gap (fixed upstream 2026-06-21): catalog-declared layer disagreed with actual storage
 
-Confirmed directly against the running Makalu instance (2026-06-18):
+Originally confirmed directly against the running Makalu instance (2026-06-18), and confirmed fixed by re-checking the live instance on 2026-06-21:
 
-- `catalog.yaml` declares `layer: bronze` for both `BookState` and `BookChange`.
-- The actual data lives on disk under `silver/dataset=BookState/` and `silver/dataset=BookChange/` (confirmed via `ls /panda/makalu-data/silver/`).
-- Makalu's query engine (`src/makalu/engine.py`) builds each dataset's view-registration path directly from `catalog.yaml`'s declared `layer` (`{root}/{layer}/dataset={name}`). Because the catalog says `bronze`, it looks in `bronze/dataset=BookState/`, finds nothing, and silently skips registering the view. Today, `query --sql "DESCRIBE bookstate"` fails with "table does not exist" even though the dataset has real, populated data.
-- `data-check` does **not** have this problem for these two datasets — it uses its own independent, correct layer map in `src/makalu/cli/common.py` (`BookState`/`BookChange` -> `silver`), so availability probing via `data-check` works fine; only the SQL query path is affected.
-- Only `BINANCE`/`BTC_USDT` currently has populated `BookState`/`BookChange` data (39 days); `GMO`/`BTC_JPY` — the example used throughout the phase-1/phase-2 docs — has none for either.
-- `Feature_Mid` has no populated data anywhere; only `Feature_NearHFT` exists on disk. This is a plain non-population gap, not a layer mismatch.
+- `catalog.yaml` used to declare `layer: bronze` for both `BookState` and `BookChange`, while the actual data lived on disk under `silver/`. Makalu's query engine builds each dataset's view-registration path from the catalog's declared `layer`, so the mismatch meant `query --sql "DESCRIBE bookstate"` failed with "table does not exist" even though the dataset had real, populated data.
+- **As of 2026-06-21, this is fixed**: `catalog.yaml` now correctly declares `layer: silver` for both, and `tools/inventory.py`'s live snapshot confirms `query_verified: true` for both — Makalu's query CLI registers them correctly now.
+- `Feature_Mid` still has no populated data anywhere (only `Feature_NearHFT` exists on disk) — that's an unrelated, still-true non-population gap, not a layer mismatch.
 
-Per the Bronze-First Reliability Model above, none of this blocks v1: `BookState`/`BookChange` are candidates to populate for `GMO`/`BTC_JPY` if the bootstrap hypotheses need them there, or the same imbalance/pull-refill mechanics can be derived directly from bronze `OrderBook` if populating isn't worth it. Kilimanjaro does not depend on `catalog.yaml`'s declared layer being correct — see "Catalog Contract" below for the verification rule this implies.
+Per the Bronze-First Reliability Model above, this never blocked v1 even while the mismatch existed — Kilimanjaro independently verifies queryability rather than trusting the catalog (see "Catalog Contract" below), and the same imbalance/pull-refill mechanics remain available to derive directly from bronze `OrderBook` regardless of whether `BookState`/`BookChange` are populated for a given market.
 
 ### Known populate commands (confirmed against `python cli.py populate --help`, 2026-06-18)
 

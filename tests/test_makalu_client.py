@@ -58,6 +58,24 @@ class TestReturnBridge(unittest.TestCase):
         # confirm that regression doesn't come back.
         self.assertLess(df["return_120s"].isna().mean(), 0.01)
 
+    def test_ensure_market_price_does_not_repopulate_when_only_gap_is_unfixable(self):
+        # Found for real: re-scanning hyp-20260619-002 a second time
+        # triggered another ~1hr MarketPrice repopulate for 338 days it
+        # already had, just to reconfirm the same 8 unfillable days
+        # (2026-04-02..09, a real upstream raw-data gap) are still
+        # unfillable. ensure_market_price must not call populate at all
+        # once every "missing" day is also missing from bronze itself.
+        from unittest import mock
+
+        import makalu_client
+
+        # GMO/BTC_JPY already has MarketPrice for a window spanning the
+        # known 2026-04-02..09 bronze gap (populated by earlier sessions).
+        with mock.patch.object(makalu_client, "_run_populate") as mock_populate:
+            ok = ensure_market_price("GMO", "BTC_JPY", "2026-03-30", "2026-04-10")
+        self.assertTrue(ok)
+        mock_populate.assert_not_called()
+
     def test_ensure_return_actually_covers_a_range_marketprice_never_had(self):
         # Found for real: re-scanning hyp-20260619-002 over a ~year of
         # bronze history still only produced the original 8-day sample,

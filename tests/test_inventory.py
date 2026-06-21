@@ -39,14 +39,21 @@ class TestInventory(unittest.TestCase):
                 self.assertEqual(entry["reliability"], "candidate", name)
 
     def test_reliability_is_not_inferred_from_catalog_declared_layer(self):
-        # BookState/BookChange's catalog_declared_layer says "bronze" (a known
-        # mismatch -- see makalu-integration-contract.md's "Known Gap") but
-        # reliability must reflect that they are NOT actually Trade/OrderBook,
-        # not the catalog's claim.
+        # makalu-integration-contract.md's "Known Gap" originally documented
+        # a real catalog/storage mismatch (catalog said "bronze" for
+        # BookState, which is actually stored under silver, and Makalu's own
+        # query CLI couldn't register it). Confirmed fixed upstream in
+        # Makalu (2026-06-21): catalog_declared_layer now correctly says
+        # "silver" and query_verified is True. The actual invariant this
+        # test exists to prove still holds regardless: reliability must
+        # never be inferred from catalog_declared_layer being present/
+        # correct -- BookState is still only "candidate", never "guaranteed",
+        # because reliability is about whether the dataset IS Trade/OrderBook,
+        # not whether the catalog describes it accurately.
         book_state = self.by_name_exchange[("BookState", "GMO")]
-        self.assertEqual(book_state["catalog_declared_layer"], "bronze")
+        self.assertEqual(book_state["catalog_declared_layer"], "silver")
         self.assertEqual(book_state["reliability"], "candidate")
-        self.assertFalse(book_state["query_verified"])
+        self.assertTrue(book_state["query_verified"])
         self.assertEqual(book_state["resolved_layer"], "silver")
 
     def test_canonical_vs_research_ephemeral_distinguished(self):

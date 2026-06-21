@@ -91,6 +91,33 @@ def _distinct_dates(glob: str, start_date: str, end_date: str) -> set:
     return set(pd.to_datetime(df["date"]).dt.date)
 
 
+def bronze_glob(exchange: str, symbol: str) -> str:
+    return str(
+        _MAKALU_DATA_ROOT / "bronze" / "dataset=OrderBook" / f"exchange={exchange}" / f"symbol={symbol}"
+        / "date=*" / "*.parquet"
+    )
+
+
+def _missing_but_populatable(glob: str, exchange: str, symbol: str, start_date: str, end_date: str) -> set:
+    """needed - have, restricted to days bronze actually has. Makalu's
+    populate commands always reprocess the FULL requested range -- there's
+    no "already exists, skip" check, only the gap-skip fix's "bronze has
+    nothing for this chunk" check. Without this filter, any permanent
+    upstream gap (e.g. the real 2026-04-02..09 hole) makes `missing` not
+    just `False`, so callers would re-trigger a full, expensive re-populate
+    of an already-complete range on every single call, forever -- found
+    for real: re-scanning hyp-20260619-002 a second time triggered another
+    ~1hr MarketPrice repopulate for 338 days it already had, just to
+    reconfirm the same 8 unfillable days are still unfillable."""
+    needed = set(pd.date_range(start_date, end_date).date)
+    have = _distinct_dates(glob, start_date, end_date)
+    missing = needed - have
+    if not missing:
+        return missing
+    bronze_dates = _distinct_dates(bronze_glob(exchange, symbol), start_date, end_date)
+    return missing & bronze_dates
+
+
 def market_price_glob(exchange: str, symbol: str, execution_size: str) -> str:
     return str(
         _MAKALU_DATA_ROOT / "silver" / "dataset=MarketPrice" / f"exchange={exchange}" / f"symbol={symbol}"
@@ -108,13 +135,18 @@ def ensure_market_price(exchange: str, symbol: str, start_date: str, end_date: s
     hyp-20260619-002 over its full ~year of bronze history still only
     produced the original 8-day sample, because MarketPrice was never
     populated past the original narrow window -- the populate command
-    exited 0 the whole time."""
+    exited 0 the whole time.
+
+    Only calls populate for days bronze can actually supply (see
+    _missing_but_populatable) -- otherwise a single permanent gap (like
+    2026-04-02..09) would make this re-trigger a full, ~hour-long
+    repopulate of an already-complete range on every call, forever,
+    confirmed for real."""
     execution_size = execution_size_for(symbol)
     if execution_size is None or not makalu_available():
         return False
     glob = market_price_glob(exchange, symbol, execution_size)
-    needed = set(pd.date_range(start_date, end_date).date)
-    if needed - _distinct_dates(glob, start_date, end_date):
+    if _missing_but_populatable(glob, exchange, symbol, start_date, end_date):
         result = _run_populate(
             "MarketPrice", "--exchange", exchange, "--symbol", symbol,
             "--execution-size", execution_size, "--start", start_date, "--end", end_date,
@@ -158,8 +190,7 @@ def ensure_return(
         return False
     param_id = return_param_id(execution_size, horizons)
     glob = return_glob(exchange, symbol, param_id)
-    needed = set(pd.date_range(start_date, end_date).date)
-    if needed - _distinct_dates(glob, start_date, end_date):
+    if _missing_but_populatable(glob, exchange, symbol, start_date, end_date):
         result = _run_populate(
             "Return", "--exchange", exchange, "--symbol", symbol,
             "--execution-size", execution_size, "--start", start_date, "--end", end_date,
@@ -210,7 +241,14 @@ def ensure_leadlag(
         return False
     glob = _leadlag_glob(feature_exchange, feature_symbol, target_exchange, target_symbol)
     needed = set(pd.date_range(start_date, end_date).date)
-    if needed - _distinct_dates(glob, start_date, end_date):
+    missing = needed - _distinct_dates(glob, start_date, end_date)
+    # Populatable only on days BOTH legs' bronze actually has -- same
+    # reasoning as _missing_but_populatable, just intersected across two
+    # markets instead of one.
+    feature_bronze = _distinct_dates(bronze_glob(feature_exchange, feature_symbol), start_date, end_date)
+    target_bronze = _distinct_dates(bronze_glob(target_exchange, target_symbol), start_date, end_date)
+    missing &= feature_bronze & target_bronze
+    if missing:
         pair_key = _LEAD_LAG_PAIR_SHORTHAND.get((feature_exchange, feature_symbol, target_exchange, target_symbol))
         if pair_key:
             args = ["LeadLag", "--pair", pair_key, "--start", start_date, "--end", end_date]
