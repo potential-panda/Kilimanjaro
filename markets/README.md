@@ -22,6 +22,36 @@ truth for a hypothesis spec's `execution_assumptions.fees_bps`/
 `slippage_bps` — `tools/validate_spec.py` rejects a spec that declares a
 different number without explanation, so this can't silently drift.
 
+## Makalu Datasets Actually Read
+
+A precise list, not "everything Makalu has" — confirmed by checking which
+datasets every `tools/*.py` module actually opens, 2026-06-21:
+
+| Layer | Dataset | Read by | Purpose |
+|---|---|---|---|
+| Bronze | `OrderBook` | `scanner.py`, `volatility_wave.py`, `lead_lag_wave.py`, `fill_probability.py` | feature/signal SQL, fallback target return, bronze-direct vol/lead-lag waves |
+| Bronze | `Trade` | `fill_probability.py` | limit-order fill-probability proxy |
+| Research | `Label_Return` (Makalu's `Return`) | `scanner.py`, via `tools/makalu_client.py` | target forward return, when Makalu has coverage for the scope — falls back to a bronze-direct ASOF join otherwise |
+| Gold | `LeadLag` | `scanner.py`, via `tools/makalu_client.py` | feature/target lead-lag, when Makalu has coverage for the pair — falls back to `lead_lag_wave.py`'s bronze-direct cross-correlation otherwise |
+
+**Not read at all:**
+- Makalu's `MarketPrice` (silver) — never read directly by Kilimanjaro. It's
+  only Makalu's own internal prerequisite for `Return`/`LeadLag`; nothing
+  here opens it.
+- Makalu's `VolSpread` (gold) — deliberately not used. It's an EMA of
+  realized volatility/spread, a genuinely different metric from
+  `volatility_wave.py`'s own (probability of clearing N-times-spread within
+  a horizon). Swapping one for the other would misrepresent what's being
+  measured, not just relocate where it's computed.
+- Fill probability has no Makalu equivalent at all — `fill_probability.py`
+  is bronze-direct by necessity, not choice.
+
+The `Return`/`LeadLag` Makalu-first behavior (check coverage, populate via
+Makalu's own CLI if missing, read the result, fall back to bronze-direct
+if Makalu can't help) is implemented once in `../tools/makalu_client.py` —
+see its module docstring for the reasoning and the populate commands it
+calls.
+
 ## `waves/` and `graphs/`
 
 Daily volatility-vs-spread waves: for a market, at each 30-minute JST bucket
