@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "id": "scan-20260621-001",
+  "hypothesis_id": "hyp-20260619-002",
+  "scanner_version": "v1",
+  "config_hash": "",
+  "created_at": "2026-06-21T12:12:49Z",
+  "data_window": {
+    "exchange": "BITBANK",
+    "symbol": "XRP_SPOT",
+    "start_date": "2025-07-01",
+    "end_date": "2026-06-19",
+    "distinct_days": 8
+  },
+  "market_context": {
+    "avg_half_spread_bps": 0.5593944062974314,
+    "realized_volatility_bps": 7.534928925509477,
+    "lead_lag": null
+  },
+  "regime_restricted": {
+    "available": true,
+    "regime_key": "BITBANK_XRP_SPOT",
+    "favorable_buckets": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      13,
+      14,
+      20,
+      21,
+      22,
+      26,
+      45,
+      46,
+      47
+    ],
+    "criteria": {
+      "volatility_spread": {
+        "column": "p_gt_1x",
+        "tercile": 0.3333333333333333,
+        "n_favorable_buckets": 16
+      },
+      "fill_ease": {
+        "columns": [
+          "p_fill_buy_x5bps",
+          "p_fill_sell_x5bps"
+        ],
+        "horizon_seconds": 120,
+        "tercile": 0.3333333333333333,
+        "n_favorable_buckets": 16
+      }
+    },
+    "fraction_of_rows": 0.29151266811488,
+    "market_context": {
+      "avg_half_spread_bps": 0.5577577740430018,
+      "realized_volatility_bps": 10.28747744079065
+    },
+    "metrics": {
+      "ic_pooled": 0.13544706429878414,
+      "hit_rate": 0.5445343070033477,
+      "bucketed_returns": [
+        {
+          "bucket": 0,
+          "n": 98441,
+          "mean_target_return": -0.00017353824799581702
+        },
+        {
+          "bucket": 1,
+          "n": 98409,
+          "mean_target_return": -0.00014309235203037123
+        },
+        {
+          "bucket": 2,
+          "n": 98420,
+          "mean_target_return": -2.4448485052385343e-05
+        },
+        {
+          "bucket": 3,
+          "n": 98413,
+          "mean_target_return": 0.00011714442954449546
+        },
+        {
+          "bucket": 4,
+          "n": 98407,
+          "mean_target_return": 0.0001450549209057707
+        }
+      ],
+      "raw_sample_count": 492090,
+      "effective_sample_count": 20018.574674412528,
+      "signal_autocorrelation_lag1": 0.9225127222995416
+    }
+  },
+  "metrics": {
+    "primary_horizon_seconds": 120,
+    "ic_method": "spearman",
+    "ic_pooled": 0.12361039581866194,
+    "ic_by_day": {
+      "2026-05-25 00:00:00+09": 0.10182751638674825,
+      "2026-05-26 00:00:00+09": 0.0828131805901457,
+      "2026-05-27 00:00:00+09": 0.16436270279589557,
+      "2026-05-28 00:00:00+09": 0.11441403519090414,
+      "2026-05-29 00:00:00+09": 0.10995969946951754,
+      "2026-05-30 00:00:00+09": 0.15809213395392316,
+      "2026-05-31 00:00:00+09": 0.11066150256128274,
+      "2026-06-01 00:00:00+09": 0.12951519644661022
+    },
+    "hit_rate": 0.5392683184992748,
+    "bucketed_returns": [
+      {
+        "bucket": 0,
+        "n": 337635,
+        "mean_target_return": -0.000115813703640445
+      },
+      {
+        "bucket": 1,
+        "n": 337603,
+        "mean_target_return": -9.525444239573324e-05
+      },
+      {
+        "bucket": 2,
+        "n": 337618,
+        "mean_target_return": -1.5121244775179436e-06
+      },
+      {
+        "bucket": 3,
+        "n": 337610,
+        "mean_target_return": 7.92043692150253e-05
+      },
+      {
+        "bucket": 4,
+        "n": 337591,
+        "mean_target_return": 0.0001181001938491592
+      }
+    ],
+    "decay_by_horizon": [
+      {
+        "horizon_seconds": 30,
+        "ic_pooled": 0.11146031131450537,
+        "hit_rate": 0.5355229723930575,
+        "n": 1688313
+      },
+      {
+        "horizon_seconds": 120,
+        "ic_pooled": 0.12361039581866194,
+        "hit_rate": 0.5392683184992748,
+        "n": 1688057
+      },
+      {
+        "horizon_seconds": 300,
+        "ic_pooled": 0.10119031471033935,
+        "hit_rate": 0.5354329808791766,
+        "n": 1687550
+      }
+    ],
+    "raw_sample_count": 1688057,
+    "effective_sample_count": 60651.71681456171,
+    "signal_autocorrelation_lag1": 0.9307976087720282,
+    "significance_method": "newey_west_hac",
+    "hac_bandwidth": 34,
+    "bootstrap_resamples": null,
+    "bootstrap_seed": null,
+    "bootstrap_ci_low": 0.11615719929115993,
+    "bootstrap_ci_high": 0.13106359234616444,
+    "stability_by_regime": {}
+  },
+  "threshold_verdict": {
+    "status": "fail",
+    "failed_rules": [
+      "failed-cost-buffer"
+    ],
+    "yellow_flags": [
+      "regime-stability-unproven"
+    ],
+    "verdict_text": "edge 1.170bps does not exceed required cost buffer 1.299bps (fees -0.02 + half_spread 0.559 (measured) + slippage 0.5, x1.25) stability_by_regime is not yet computed (scanner v1 gap)",
+    "cost_buffer": {
+      "edge_bps": 1.1695694874480211,
+      "fee_bps": -0.02,
+      "half_spread_bps": 0.5593944062974314,
+      "slippage_bps": 0.5,
+      "safety_multiplier": 1.25,
+      "required_bps": 1.2992430078717891,
+      "cleared": false
+    },
+    "regime_restricted_cost_buffer": {
+      "edge_bps": 1.5929658445079387,
+      "fee_bps": -0.02,
+      "half_spread_bps": 0.5577577740430018,
+      "slippage_bps": 0.5,
+      "safety_multiplier": 1.25,
+      "required_bps": 1.297197217553752,
+      "cleared": true
+    }
+  }
+}
