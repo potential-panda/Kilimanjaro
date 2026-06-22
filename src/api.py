@@ -12,7 +12,7 @@ import json
 import sys
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, send_from_directory
+from flask import Flask, abort, jsonify, request, send_from_directory
 
 _ROOT = Path(__file__).parent.parent
 _SPECS_DIR = _ROOT / "specs"
@@ -22,6 +22,7 @@ _WEB_DIR = _ROOT / "web"
 
 sys.path.insert(0, str(_ROOT / "tools"))
 from ledger import _latest_status, load_events, load_specs  # noqa: E402
+from results_summary import build_results  # noqa: E402
 
 app = Flask(__name__, static_folder=str(_WEB_DIR))
 
@@ -93,6 +94,12 @@ def api_scan_report(report_id: str):
 @app.route("/api/ledger")
 def api_ledger():
     return jsonify(load_events(_LEDGER_PATH))
+
+
+@app.route("/api/results")
+def api_results():
+    no_bronze = request.args.get("no_bronze_check") == "1"
+    return jsonify(build_results(check_bronze=not no_bronze))
 
 
 # -- Static / SPA --------------------------------------------------------
