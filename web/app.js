@@ -1,8 +1,14 @@
 let hypotheses = [];
 let selectedId = null;
+let activeDetailRequest = 0;
+
+const API_BASE = (() => {
+  const src = document.currentScript?.src;
+  return src ? new URL(src).pathname.replace(/\/[^/]+$/, "") : "";
+})();
 
 async function fetchJSON(url) {
-  const res = await fetch(url);
+  const res = await fetch(`${API_BASE}${url}`);
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
   return res.json();
 }
@@ -30,15 +36,47 @@ function renderTable() {
     tr.className = "hyp-row" + (h.id === selectedId ? " selected" : "");
     tr.dataset.id = h.id;
     tr.innerHTML = `
-      <td>${h.id}</td>
-      <td>${h.family ?? ""}</td>
-      <td>${h.title ?? ""}</td>
-      <td><span class="status-badge ${statusClass(h.status)}">${h.status}</span></td>
-      <td class="reason-tag">${h.decision_reasons.join(", ")}</td>
+      <td data-label="ID">${h.id}</td>
+      <td data-label="Family">${h.family ?? ""}</td>
+      <td data-label="Title">${h.title ?? ""}</td>
+      <td data-label="Status"><span class="status-badge ${statusClass(h.status)}">${h.status}</span></td>
+      <td data-label="Reason" class="reason-tag">${h.decision_reasons.join(", ")}</td>
     `;
-    tr.addEventListener("click", () => selectHypothesis(h.id));
+    tr.addEventListener("click", () => navigateToDetail(h.id));
     body.appendChild(tr);
   }
+}
+
+function showListPage() {
+  selectedId = null;
+  document.getElementById("list-page").classList.add("active");
+  document.getElementById("detail-page").classList.remove("active");
+  renderTable();
+}
+
+function showDetailPage(id) {
+  selectedId = id;
+  document.getElementById("list-page").classList.remove("active");
+  document.getElementById("detail-page").classList.add("active");
+  renderTable();
+}
+
+function navigateToDetail(id) {
+  window.location.hash = `hypotheses/${encodeURIComponent(id)}`;
+}
+
+function navigateToList() {
+  if (window.location.hash) {
+    window.location.hash = "";
+    return;
+  }
+  showListPage();
+}
+
+function selectedIdFromHash() {
+  const hash = window.location.hash.replace(/^#\/?/, "");
+  const match = hash.match(/^hypotheses\/(.+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 function switchTab(tab) {
@@ -104,12 +142,17 @@ function renderLedger(events) {
 }
 
 async function selectHypothesis(id) {
-  selectedId = id;
-  renderTable();
-  document.getElementById("detail-empty").classList.add("hidden");
-  document.getElementById("detail-content").classList.remove("hidden");
+  const requestId = ++activeDetailRequest;
+  showDetailPage(id);
+  switchTab("spec");
+  document.getElementById("detail-title").textContent = "Loading...";
+  document.getElementById("detail-meta").textContent = id;
+  document.getElementById("spec-json").textContent = "";
+  document.getElementById("scan-json").textContent = "";
+  document.getElementById("ledger-events").innerHTML = "";
 
   const detail = await fetchJSON(`/api/hypotheses/${id}`);
+  if (requestId !== activeDetailRequest) return;
   document.getElementById("detail-title").textContent = detail.summary.title || id;
   document.getElementById("detail-meta").textContent =
     `${id}  ·  ${detail.summary.family}  ·  ${detail.summary.status}` +
@@ -121,6 +164,7 @@ async function selectHypothesis(id) {
   const latestReportId = detail.summary.latest_scan_report_id;
   if (latestReportId) {
     const report = await fetchJSON(`/api/scan-reports/${latestReportId}`);
+    if (requestId !== activeDetailRequest) return;
     renderScanSummary(report);
     document.getElementById("scan-json").textContent = JSON.stringify(report, null, 2);
   } else {
@@ -129,14 +173,33 @@ async function selectHypothesis(id) {
   }
 }
 
+function renderRoute() {
+  const id = selectedIdFromHash();
+  if (!id) {
+    showListPage();
+    return;
+  }
+  selectHypothesis(id).catch((err) => {
+    document.getElementById("detail-title").textContent = "Unable to load hypothesis";
+    document.getElementById("detail-meta").textContent = err.message;
+    document.getElementById("spec-json").textContent = "";
+    document.getElementById("scan-json").textContent = "";
+    document.getElementById("ledger-events").innerHTML = "";
+  });
+}
+
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 });
+
+document.getElementById("back-to-list").addEventListener("click", navigateToList);
+window.addEventListener("hashchange", renderRoute);
 
 async function init() {
   hypotheses = await fetchJSON("/api/hypotheses");
   renderStats();
   renderTable();
+  renderRoute();
 }
 
 init();

@@ -45,7 +45,7 @@
     </div>
 
     <main id="main">
-      <section id="list-pane">
+      <section id="list-page" class="view-page active">
         <table id="hyp-table">
           <thead>
             <tr>
@@ -60,9 +60,9 @@
         </table>
       </section>
 
-      <section id="detail-pane">
-        <div id="detail-empty">Select a hypothesis to view its spec, ledger history, and scan report.</div>
-        <div id="detail-content" class="hidden">
+      <section id="detail-page" class="view-page">
+        <button id="back-to-list" type="button" aria-label="Back to hypothesis list">&larr; Hypotheses</button>
+        <div id="detail-content">
           <h2 id="detail-title"></h2>
           <div id="detail-meta"></div>
 
