@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -452,6 +453,42 @@ def _bucketed_returns(df: pd.DataFrame, n_buckets: int = _N_BUCKETS) -> list[dic
     return sorted(out, key=lambda r: r["bucket"])
 
 
+def _bucketed_returns_grouped(df: pd.DataFrame, key_col: str, key_label: str, n_buckets: int = _N_BUCKETS) -> list[dict]:
+    """Shared core for _bucketed_returns_by_{day,week,month}: same per-day-
+    quantile bucketing as _bucketed_returns, but split by a coarser period
+    -- lets the cost-buffer check in threshold_evaluator.py see whether
+    the edge is uniform across a long scan window or concentrated in part
+    of it, instead of only the single pooled number the full window
+    gives. Includes ic_pooled/hit_rate per period too, computed once here
+    rather than recomputed from bucketed_returns downstream."""
+    out = []
+    for key, group_df in df.groupby(key_col):
+        out.append({
+            key_label: str(key),
+            "distinct_days": int(group_df["jst_date"].nunique()),
+            "ic_pooled": _spearman_ic(group_df["signal"].to_numpy(), group_df["target_return"].to_numpy()),
+            "hit_rate": _hit_rate(group_df["signal"].to_numpy(), group_df["target_return"].to_numpy()),
+            "bucketed_returns": _bucketed_returns(group_df, n_buckets),
+        })
+    return out
+
+
+def _bucketed_returns_by_day(df: pd.DataFrame, n_buckets: int = _N_BUCKETS) -> list[dict]:
+    return _bucketed_returns_grouped(df, "jst_date", "day", n_buckets)
+
+
+def _bucketed_returns_by_week(df: pd.DataFrame, n_buckets: int = _N_BUCKETS) -> list[dict]:
+    df = df.copy()
+    df["week"] = pd.to_datetime(df["jst_date"].str[:10]).dt.to_period("W").astype(str)
+    return _bucketed_returns_grouped(df, "week", "week", n_buckets)
+
+
+def _bucketed_returns_by_month(df: pd.DataFrame, n_buckets: int = _N_BUCKETS) -> list[dict]:
+    df = df.copy()
+    df["month"] = df["jst_date"].str[:7]
+    return _bucketed_returns_grouped(df, "month", "month", n_buckets)
+
+
 def _block_bootstrap_ci(df: pd.DataFrame, seed: int = _BOOTSTRAP_SEED, resamples: int = _BOOTSTRAP_RESAMPLES) -> tuple[float | None, float | None]:
     """Block bootstrap by day: resample whole days with replacement,
     recompute pooled Spearman IC each time, report the 95% CI.
@@ -645,6 +682,9 @@ def run_scan(
             "ic_by_day": ic_by_day,
             "hit_rate": _hit_rate(primary_df["signal"].to_numpy(), primary_df["target_return"].to_numpy()),
             "bucketed_returns": _bucketed_returns(primary_df),
+            "bucketed_returns_by_day": _bucketed_returns_by_day(primary_df),
+            "bucketed_returns_by_week": _bucketed_returns_by_week(primary_df),
+            "bucketed_returns_by_month": _bucketed_returns_by_month(primary_df),
             "decay_by_horizon": decay_by_horizon,
             "raw_sample_count": raw_n,
             "effective_sample_count": effective_n,
@@ -668,10 +708,32 @@ def run_scan(
 
 
 def write_report(report: dict, scan_reports_dir: Path = _DEFAULT_SCAN_REPORTS_DIR) -> Path:
+    """report['id'] (from _next_scan_id, computed back in run_scan) is only
+    a best-effort guess -- two scans started around the same time can both
+    list the same "next free" id before either has written its file, and
+    the second write would otherwise silently clobber the first's report
+    (confirmed for real: concurrent full-history reruns of two specs both
+    landed on scan-20260622-003, and the loser's report -- and the ledger
+    event pointing at it -- were gone). os.open with O_CREAT|O_EXCL makes
+    the actual claim atomic at the filesystem level: a colliding id always
+    fails here and retries the next one, so no report is ever overwritten.
+    Mutates report['id'] to whatever id was actually claimed, since that
+    can differ from the guess under contention."""
     scan_reports_dir.mkdir(parents=True, exist_ok=True)
-    path = scan_reports_dir / f"{report['id']}.json"
-    path.write_text(json.dumps(report, indent=2))
-    return path
+    prefix = report["id"].rsplit("-", 1)[0] + "-"
+    seq = int(report["id"].rsplit("-", 1)[1])
+    while True:
+        report_id = f"{prefix}{seq:03d}"
+        path = scan_reports_dir / f"{report_id}.json"
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            seq += 1
+            continue
+        report["id"] = report_id
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(report, indent=2))
+        return path
 
 
 def main() -> int:

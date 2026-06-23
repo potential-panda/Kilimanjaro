@@ -11,6 +11,7 @@ and the whole point is confirming the automated version agrees with it.
 
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -23,6 +24,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
 from scanner import (  # noqa: E402
     _bucketed_returns,
+    _bucketed_returns_by_day,
+    _bucketed_returns_by_month,
+    _bucketed_returns_by_week,
     _effective_sample_count,
     _hit_rate,
     _lag1_autocorr,
@@ -31,6 +35,7 @@ from scanner import (  # noqa: E402
     _peak_lag_corr,
     _spearman_ic,
     run_scan,
+    write_report,
 )
 
 _ROOT = Path(__file__).parent.parent
@@ -83,6 +88,45 @@ class TestMetricFunctions(unittest.TestCase):
         means = [b["mean_target_return"] for b in sorted(buckets, key=lambda b: b["bucket"])]
         self.assertEqual(means, sorted(means))  # bucket 0 (low signal) -> bucket 4 (high signal) increasing
 
+    def test_bucketed_returns_by_day_splits_on_calendar_day(self):
+        df = _synthetic_predictive_df(n=2000, seed=0)  # already 2 distinct days
+        by_day = _bucketed_returns_by_day(df)
+
+        self.assertEqual([d["day"] for d in by_day], ["2026-01-01", "2026-01-02"])
+        for d in by_day:
+            self.assertEqual(d["distinct_days"], 1)
+            self.assertIsNotNone(d["ic_pooled"])
+            self.assertEqual(len(d["bucketed_returns"]), 5)
+
+    def test_bucketed_returns_by_week_splits_on_calendar_week(self):
+        wk1 = _synthetic_predictive_df(n=2000, seed=0)
+        wk1["jst_date"] = "2026-01-05"  # a Monday
+        wk2 = _synthetic_predictive_df(n=2000, seed=1)
+        wk2["jst_date"] = "2026-01-19"  # two weeks later
+        df = pd.concat([wk1, wk2], ignore_index=True)
+
+        by_week = _bucketed_returns_by_week(df)
+
+        self.assertEqual(len(by_week), 2)
+        self.assertNotEqual(by_week[0]["week"], by_week[1]["week"])
+        for w in by_week:
+            self.assertEqual(w["distinct_days"], 1)
+            self.assertEqual(len(w["bucketed_returns"]), 5)
+
+    def test_bucketed_returns_by_month_splits_on_calendar_month(self):
+        jan = _synthetic_predictive_df(n=2000, seed=0)
+        jan["jst_date"] = "2026-01-15"
+        feb = _synthetic_predictive_df(n=2000, seed=1)
+        feb["jst_date"] = "2026-02-15"
+        df = pd.concat([jan, feb], ignore_index=True)
+
+        by_month = _bucketed_returns_by_month(df)
+
+        self.assertEqual([m["month"] for m in by_month], ["2026-01", "2026-02"])
+        for m in by_month:
+            self.assertEqual(m["distinct_days"], 1)
+            self.assertEqual(len(m["bucketed_returns"]), 5)
+
     def test_newey_west_ci_excludes_zero_for_strong_signal(self):
         df = _synthetic_predictive_df(n=5000)
         ci_low, ci_high, bandwidth = _newey_west_hac_ci(df)
@@ -115,6 +159,49 @@ class TestMetricFunctions(unittest.TestCase):
 
     def test_peak_lag_corr_none_for_too_little_data(self):
         self.assertIsNone(_peak_lag_corr(np.array([1.0, 2.0]), np.array([1.0, 2.0]), max_lag_seconds=10))
+
+
+class TestWriteReportConcurrencySafety(unittest.TestCase):
+    """Confirmed for real (2026-06-22): two scans started around the same
+    time both computed report['id'] = 'scan-20260622-003' from the same
+    stale directory listing, and the second write silently clobbered the
+    first's report -- losing it and leaving the first scan's ledger event
+    pointing at the wrong report. write_report's O_CREAT|O_EXCL claim must
+    never allow that."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.scan_reports_dir = Path(self.tmpdir.name)
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def test_does_not_overwrite_an_existing_report_with_the_same_guessed_id(self):
+        (self.scan_reports_dir / "scan-20260622-003.json").write_text(json.dumps({"id": "scan-20260622-003", "hypothesis_id": "hyp-A"}))
+
+        report = {"id": "scan-20260622-003", "hypothesis_id": "hyp-B"}
+        path = write_report(report, self.scan_reports_dir)
+
+        self.assertEqual(report["id"], "scan-20260622-004")
+        self.assertEqual(path.name, "scan-20260622-004.json")
+        self.assertEqual(json.loads((self.scan_reports_dir / "scan-20260622-003.json").read_text())["hypothesis_id"], "hyp-A")
+        self.assertEqual(json.loads(path.read_text())["hypothesis_id"], "hyp-B")
+
+    def test_skips_past_multiple_colliding_ids(self):
+        for seq in (3, 4, 5):
+            (self.scan_reports_dir / f"scan-20260622-{seq:03d}.json").write_text("{}")
+
+        report = {"id": "scan-20260622-003", "hypothesis_id": "hyp-C"}
+        path = write_report(report, self.scan_reports_dir)
+
+        self.assertEqual(report["id"], "scan-20260622-006")
+        self.assertEqual(path.name, "scan-20260622-006.json")
+
+    def test_normal_case_uses_the_guessed_id_unchanged(self):
+        report = {"id": "scan-20260622-001", "hypothesis_id": "hyp-D"}
+        path = write_report(report, self.scan_reports_dir)
+        self.assertEqual(report["id"], "scan-20260622-001")
+        self.assertEqual(path.name, "scan-20260622-001.json")
 
 
 @unittest.skipUnless(_MAKALU_DATA_ROOT.is_dir(), "real Makalu data not present")
