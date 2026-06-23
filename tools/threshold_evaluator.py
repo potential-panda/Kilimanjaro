@@ -61,6 +61,9 @@ class Verdict:
         self.needs_tooling = False
         self.cost_buffer: dict | None = None
         self.regime_restricted_cost_buffer: dict | None = None
+        self.cost_buffer_by_day: list[dict] | None = None
+        self.cost_buffer_by_week: list[dict] | None = None
+        self.cost_buffer_by_month: list[dict] | None = None
 
     def fail(self, reason: str, note: str) -> None:
         self.failed_rules.append(reason)
@@ -86,6 +89,9 @@ class Verdict:
             "verdict_text": " ".join(self.notes) if self.notes else "all v1 thresholds cleared",
             "cost_buffer": self.cost_buffer,
             "regime_restricted_cost_buffer": self.regime_restricted_cost_buffer,
+            "cost_buffer_by_day": self.cost_buffer_by_day,
+            "cost_buffer_by_week": self.cost_buffer_by_week,
+            "cost_buffer_by_month": self.cost_buffer_by_month,
         }
 
 
@@ -251,6 +257,35 @@ def _check_regime_restricted_cost_buffer(report: dict, spec: dict, v: Verdict) -
         v.regime_restricted_cost_buffer = cb
 
 
+def _cost_buffer_rows(by_period: list[dict] | None, target_type: str, ea: dict, half_spread_bps: float | None, key_label: str) -> list[dict] | None:
+    """Shared core for _check_cost_buffer_by_period's day/week/month
+    breakdowns: same cost-buffer formula as the official full-window
+    check, applied per period (tools/scanner.py's bucketed_returns_by_*)
+    using the whole-window measured half-spread (v1 does not re-measure
+    spread per period)."""
+    if half_spread_bps is None or not by_period:
+        return None
+    rows = []
+    for p in by_period:
+        cb = _compute_cost_buffer(target_type, ea, half_spread_bps, p["bucketed_returns"])
+        rows.append({key_label: p[key_label], "distinct_days": p["distinct_days"], "ic_pooled": p.get("ic_pooled"), "cost_buffer": cb})
+    return rows
+
+
+def _check_cost_buffer_by_period(report: dict, spec: dict, v: Verdict) -> None:
+    """Informational only -- never affects failed_rules/status. Lets a
+    long scan disclose whether the edge held up evenly across its window
+    or was concentrated in part of it, instead of only the single pooled
+    full-window number, at three granularities (day/week/month)."""
+    h = spec["hypothesis"]
+    ea = h.get("execution_assumptions", {})
+    half_spread_bps = (report.get("market_context") or {}).get("avg_half_spread_bps")
+    m = report["metrics"]
+    v.cost_buffer_by_day = _cost_buffer_rows(m.get("bucketed_returns_by_day"), h["target"]["type"], ea, half_spread_bps, "day")
+    v.cost_buffer_by_week = _cost_buffer_rows(m.get("bucketed_returns_by_week"), h["target"]["type"], ea, half_spread_bps, "week")
+    v.cost_buffer_by_month = _cost_buffer_rows(m.get("bucketed_returns_by_month"), h["target"]["type"], ea, half_spread_bps, "month")
+
+
 def evaluate(report: dict, spec: dict) -> dict:
     """Returns a new threshold_verdict dict; does not mutate the report."""
     v = Verdict()
@@ -263,6 +298,7 @@ def evaluate(report: dict, spec: dict) -> dict:
     _check_single_cell_overfit(report, v)
     _check_cost_buffer(report, spec, v)
     _check_regime_restricted_cost_buffer(report, spec, v)
+    _check_cost_buffer_by_period(report, spec, v)
     # stability_by_regime is always empty per tools/scanner.py's documented
     # v1 gap -- always disclosed as unproven, never silently assumed fine.
     v.flag("regime-stability-unproven", "stability_by_regime is not yet computed (scanner v1 gap)")

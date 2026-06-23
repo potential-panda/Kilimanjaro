@@ -197,6 +197,47 @@ class TestThresholdEvaluator(unittest.TestCase):
         verdict = evaluate(_base_report(), _base_spec())
         self.assertIn("regime-stability-unproven", verdict["yellow_flags"])
 
+    def test_cost_buffer_by_period_none_when_scanner_did_not_emit_it(self):
+        verdict = evaluate(_base_report(), _base_spec())
+        self.assertIsNone(verdict["cost_buffer_by_day"])
+        self.assertIsNone(verdict["cost_buffer_by_week"])
+        self.assertIsNone(verdict["cost_buffer_by_month"])
+
+    def test_cost_buffer_by_period_never_affects_status(self):
+        report = _base_report()
+        # Deliberately WORSE periods than the full-window pooled result --
+        # if these leaked into the official status, the full-window "pass"
+        # would flip to "fail". They must not, at any granularity.
+        weak_bucket = [
+            {"bucket": 0, "n": 50, "mean_target_return": 0.00001},
+            {"bucket": 4, "n": 50, "mean_target_return": -0.00001},
+        ]
+        strong_bucket = [
+            {"bucket": 0, "n": 50, "mean_target_return": -0.001},
+            {"bucket": 4, "n": 50, "mean_target_return": 0.001},
+        ]
+        report["metrics"]["bucketed_returns_by_day"] = [
+            {"day": "2026-01-01", "distinct_days": 1, "ic_pooled": 0.01, "bucketed_returns": weak_bucket},
+            {"day": "2026-01-02", "distinct_days": 1, "ic_pooled": 0.05, "bucketed_returns": strong_bucket},
+        ]
+        report["metrics"]["bucketed_returns_by_week"] = [
+            {"week": "2026-01", "distinct_days": 7, "ic_pooled": 0.01, "bucketed_returns": weak_bucket},
+            {"week": "2026-02", "distinct_days": 7, "ic_pooled": 0.05, "bucketed_returns": strong_bucket},
+        ]
+        report["metrics"]["bucketed_returns_by_month"] = [
+            {"month": "2026-01", "distinct_days": 5, "ic_pooled": 0.01, "bucketed_returns": weak_bucket},
+            {"month": "2026-02", "distinct_days": 5, "ic_pooled": 0.05, "bucketed_returns": strong_bucket},
+        ]
+        verdict = evaluate(report, _base_spec())
+        self.assertEqual(verdict["status"], "pass")
+
+        for key, label in (("cost_buffer_by_day", "day"), ("cost_buffer_by_week", "week"), ("cost_buffer_by_month", "month")):
+            rows = verdict[key]
+            self.assertEqual([r[label] for r in rows], [report["metrics"][f"bucketed_returns_by_{label}"][0][label],
+                                                          report["metrics"][f"bucketed_returns_by_{label}"][1][label]])
+            self.assertFalse(rows[0]["cost_buffer"]["cleared"])
+            self.assertTrue(rows[1]["cost_buffer"]["cleared"])
+
 
 @unittest.skipUnless(_MAKALU_DATA_ROOT.is_dir(), "real Makalu data not present")
 class TestThresholdEvaluatorIntegration(unittest.TestCase):
