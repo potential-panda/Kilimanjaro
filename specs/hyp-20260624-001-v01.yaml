@@ -1,0 +1,103 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260624-001-v01
+  parent_id: hyp-20260624-001
+  title: "Parabolic SAR on range bars predicts GMO BTC_JPY 30s mid return"
+  status: draft
+  family: custom
+  family_label: "Range-bar trend (Parabolic SAR)"
+  custom_family_justification: >
+    Same mechanism as the parent hyp-20260624-001; variant changes only
+    primary_horizon_seconds to 30, since the parent's full horizon grid
+    showed IC decaying sharply from 0.263 (30s) to 0.141 (120s) to 0.098
+    (300s) -- the parent's cost-buffer failure at 120s may not hold at the
+    horizon where the edge is actually strongest, since the required cost
+    buffer (fees+spread+slippage) does not depend on horizon at all.
+  created_at: "2026-06-24T00:00:00Z"
+  owner: agent
+  summary: >
+    Same as parent (GMO BTC_JPY range-bar Parabolic SAR, box_size_rate=0.0015),
+    tested at the 30s horizon where the parent's own decay grid showed the
+    strongest edge.
+  expected_edge_mechanism: >
+    Same mechanism as parent. Range bars filter out time spent in
+    low-activity noise; the resulting trend-following SAR signal is the
+    same one orion's v601 variant trades live. Edge decays with horizon
+    (consistent with momentum continuation that fades), so the shortest
+    tested horizon is the most direct test of the mechanism's strength.
+  economic_rationale: "Trend persistence after a range-bar-confirmed price move; effect is strongest immediately after the flip and decays as mean-reverting liquidity providers catch up."
+  duplicate_search:
+    searched_at: "2026-06-24T00:00:00Z"
+    query_terms:
+      - parabolic
+      - sar
+      - range bar
+      - trend
+      - BTC_JPY
+    possible_duplicates: ["hyp-20260624-001"]
+    conclusion: variant
+  data_requirements:
+    markets:
+      - exchange: GMO
+        symbol: BTC_JPY
+    datasets:
+      - layer: feature
+        dataset: ChartRangeSAR
+      - layer: bronze
+        dataset: OrderBook
+    minimum_distinct_days: 5
+    required_columns: ["sar_up", "sar_flip", "sar_level"]
+    unavailable_data_policy: needs-more-data
+    research_metadata: null
+  feature:
+    sql_expression: "sar_up"
+    source_datasets:
+      - layer: feature
+        dataset: ChartRangeSAR
+        exchange: GMO
+        symbol: BTC_JPY
+    primary_timestamp_column: ts
+    point_in_time_rule: "sar_up computed strictly from range bars closed at or before signal ts (orion's ParabolicSarIndicator, fed in chronological order)"
+  cross_market_rationale: >
+    Same-market by necessity, not by default-deviation: BINANCE has no
+    analogue for GMO BTC_JPY's own range-bar/trade-tape trend state -- a
+    range bar on a different market measures a different market's price
+    action, not this one's. This is the same local-execution-mechanics
+    reasoning hypothesis-contract.md already grants queue_depletion/
+    adverse_selection_avoidance (BINANCE has no analogue for the target
+    market's own mechanics); a range-bar trend signal is the same kind of
+    target-market-intrinsic mechanism, just not yet in that exempt list.
+  target:
+    type: next_return
+    primary_horizon_seconds: 30
+    comparison_horizons_seconds: [30, 120, 300]
+    source_dataset:
+      layer: bronze
+      dataset: OrderBook
+      exchange: GMO
+      symbol: BTC_JPY
+    timestamp_cutoff_rule: "target window starts strictly after signal timestamp"
+  execution_assumptions:
+    order_type: market
+    fees_bps: 0  # markets/registry.yaml: GMO BTC_JPY fee_bps=0 -- authoritative, not a guess
+    slippage_bps: 0.5  # markets/registry.yaml: default_slippage_bps, from ~1 year of real trading -- authoritative, not a guess
+    latency_ms: 100
+    liquidity_capacity_assumption: "single-unit notional, no capacity scaling in v1 scan"
+  falsification_tests:
+    - name: "sar-only-on-one-day"
+      expected_failure_meaning: "effect disappears once tested across >=5 distinct days"
+    - name: "sign-flips-across-horizons"
+      expected_failure_meaning: "IC sign is not consistent across the 30/120/300s horizon grid"
+  scan_plan:
+    primary_horizon_seconds: 30
+    threshold_grid: [30, 120, 300]
+    regime_buckets: ["low_vol", "mid_vol", "high_vol"]
+    significance_method: block_bootstrap_by_day
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: "orion v601 variant (qate.trading.chart.RangeBarBuilder + orion.parabolic_sar.ParabolicSarIndicator)"
+    himalaya_config_notes: "GMO/BTC_JPY, box_size_rate=0.0015, acceleration=0.02, step=0.02, maximum=0.2 -- matches the already-live v601 tuning"
+  decisions:
+    - at: "2026-06-24T00:00:00Z"
+      actor: agent
+      decision: draft
+      reason: "variant of hyp-20260624-001 testing the 30s horizon where the parent's decay grid showed the strongest edge"

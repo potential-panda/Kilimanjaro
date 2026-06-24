@@ -1,0 +1,106 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260624-003
+  parent_id: null
+  title: "Parabolic SAR on range bars predicts GMO XRP_JPY 120s mid return"
+  status: draft
+  family: custom
+  family_label: "Range-bar trend (Parabolic SAR)"
+  custom_family_justification: >
+    No existing v1 family describes a trend-following signal computed from
+    event-driven (price-range-triggered, not time-triggered) bars. This is
+    the orion v601 live strategy's own signal (qate.trading.chart.RangeBarBuilder
+    + orion.parabolic_sar.ParabolicSarIndicator, params acceleration=0.02,
+    step=0.02, maximum=0.2, box_size_rate=0.0025 for XRP_JPY -- taken directly
+    from /home/lulurun/env/backtest/BENJAMIN_TATUM/live prod config (QIN_TENGFEI, env/prod-clone/orion-01), confirmed currently trading v601 on this market), being tested here for
+    whether it carries genuine statistical edge as a directional signal,
+    independent of orion's own tick-level execution-price entry logic.
+  created_at: "2026-06-24T00:00:00Z"
+  owner: agent
+  summary: >
+    Computed on GMO XRP_JPY's own range bars (box_size_rate=0.0025): does the
+    Parabolic SAR trend direction (sar_up) predict the market's own future
+    mid return at a horizon long enough to clear the spread.
+  expected_edge_mechanism: >
+    Range bars filter out time spent in low-activity noise and only close a
+    bar once price has genuinely moved -- the resulting trend-following SAR
+    signal is the same one orion's v601 variant trades live on GMO XRP_JPY/
+    ETH_JPY/XRP_JPY. If the underlying trend persistence this indicator
+    detects is real, sar_up should be predictive of the market's own
+    near-term future return.
+  economic_rationale: "Trend persistence after a range-bar-confirmed price move, consistent with momentum continuing briefly before mean-reverting liquidity providers catch up."
+  duplicate_search:
+    searched_at: "2026-06-24T00:00:00Z"
+    query_terms:
+      - parabolic
+      - sar
+      - range bar
+      - trend
+      - XRP_JPY
+    possible_duplicates: []
+    conclusion: new
+  data_requirements:
+    markets:
+      - exchange: GMO
+        symbol: XRP_JPY
+    datasets:
+      - layer: feature
+        dataset: ChartRangeSAR
+      - layer: bronze
+        dataset: OrderBook
+    minimum_distinct_days: 5
+    required_columns: ["sar_up", "sar_flip", "sar_level"]
+    unavailable_data_policy: needs-more-data
+    research_metadata: null
+  feature:
+    sql_expression: "sar_up"
+    source_datasets:
+      - layer: feature
+        dataset: ChartRangeSAR
+        exchange: GMO
+        symbol: XRP_JPY
+    primary_timestamp_column: ts
+    point_in_time_rule: "sar_up computed strictly from range bars closed at or before signal ts (orion's ParabolicSarIndicator, fed in chronological order)"
+  cross_market_rationale: >
+    Same-market by necessity, not by default-deviation: BINANCE has no
+    analogue for GMO XRP_JPY's own range-bar/trade-tape trend state -- a
+    range bar on a different market measures a different market's price
+    action, not this one's. This is the same local-execution-mechanics
+    reasoning hypothesis-contract.md already grants queue_depletion/
+    adverse_selection_avoidance (BINANCE has no analogue for the target
+    market's own mechanics); a range-bar trend signal is the same kind of
+    target-market-intrinsic mechanism, just not yet in that exempt list.
+  target:
+    type: next_return
+    primary_horizon_seconds: 120
+    comparison_horizons_seconds: [30, 120, 300]
+    source_dataset:
+      layer: bronze
+      dataset: OrderBook
+      exchange: GMO
+      symbol: XRP_JPY
+    timestamp_cutoff_rule: "target window starts strictly after signal timestamp"
+  execution_assumptions:
+    order_type: market
+    fees_bps: 0  # markets/registry.yaml: GMO XRP_JPY fee_bps=0 -- authoritative, not a guess
+    slippage_bps: 0.5  # markets/registry.yaml: default_slippage_bps, from ~1 year of real trading -- authoritative, not a guess
+    latency_ms: 100
+    liquidity_capacity_assumption: "single-unit notional, no capacity scaling in v1 scan"
+  falsification_tests:
+    - name: "sar-only-on-one-day"
+      expected_failure_meaning: "effect disappears once tested across >=5 distinct days"
+    - name: "sign-flips-across-horizons"
+      expected_failure_meaning: "IC sign is not consistent across the 30/120/300s horizon grid"
+  scan_plan:
+    primary_horizon_seconds: 120
+    threshold_grid: [30, 120, 300]
+    regime_buckets: ["low_vol", "mid_vol", "high_vol"]
+    significance_method: block_bootstrap_by_day
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: "orion v601 variant (qate.trading.chart.RangeBarBuilder + orion.parabolic_sar.ParabolicSarIndicator)"
+    himalaya_config_notes: "GMO/XRP_JPY, box_size_rate=0.0025, acceleration=0.02, step=0.02, maximum=0.2 -- matches the already-live v601 tuning"
+  decisions:
+    - at: "2026-06-24T00:00:00Z"
+      actor: agent
+      decision: draft
+      reason: "initial spec drafted"
