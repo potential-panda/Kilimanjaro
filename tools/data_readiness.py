@@ -35,13 +35,19 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import pyarrow.parquet as pq
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 import inventory as _inventory  # noqa: E402
 
+_ROOT = Path(__file__).parent.parent
 _SUPPORTED_TARGET_TYPES = {"next_return", "spread_adjusted_return"}
 _SUPPORTED_DATASET = "OrderBook"  # v1 scanner.py only reads bronze OrderBook
+# Kilimanjaro-owned precomputed feature datasets scanner.py also accepts as
+# a feature source (never as a target) -- kept in sync with scanner.py's
+# own _PRECOMPUTED_FEATURE_DATASETS set.
+_PRECOMPUTED_FEATURE_DATASETS = {"ChartRangeSAR"}
 
 
 def _unsupported_transform_reasons(h: dict) -> list[str]:
@@ -55,12 +61,20 @@ def _unsupported_transform_reasons(h: dict) -> list[str]:
             f"(only {sorted(_SUPPORTED_TARGET_TYPES)})"
         )
 
-    for ds in [*h["feature"]["source_datasets"], h["target"]["source_dataset"]]:
-        if ds["dataset"] != _SUPPORTED_DATASET:
+    for ds in h["feature"]["source_datasets"]:
+        if ds["dataset"] != _SUPPORTED_DATASET and ds["dataset"] not in _PRECOMPUTED_FEATURE_DATASETS:
             reasons.append(
-                f"{ds['exchange']}/{ds['symbol']}/{ds['dataset']}: tools/scanner.py v1 only "
-                f"supports bronze {_SUPPORTED_DATASET} as a feature/target source dataset"
+                f"{ds['exchange']}/{ds['symbol']}/{ds['dataset']}: tools/scanner.py v1 only supports bronze "
+                f"{_SUPPORTED_DATASET} or a known precomputed feature dataset {sorted(_PRECOMPUTED_FEATURE_DATASETS)} "
+                "as a feature source dataset"
             )
+
+    target_ds = h["target"]["source_dataset"]
+    if target_ds["dataset"] != _SUPPORTED_DATASET:
+        reasons.append(
+            f"{target_ds['exchange']}/{target_ds['symbol']}/{target_ds['dataset']}: tools/scanner.py v1 only "
+            f"supports bronze {_SUPPORTED_DATASET} as the target source dataset"
+        )
 
     research_metadata = (h.get("data_requirements") or {}).get("research_metadata") or {}
     if target_type == "research_label" and research_metadata.get("metadata_status") != "complete":
@@ -125,6 +139,28 @@ def assess_data_readiness(
 
     datasets_checked = []
     for dataset_name, exchange, symbol in _dataset_market_pairs(h):
+        if dataset_name in _PRECOMPUTED_FEATURE_DATASETS:
+            # Kilimanjaro-owned, never in Makalu's catalog by design -- check
+            # its own markets/features/ tree instead of the Makalu inventory.
+            feature_dir = _ROOT / "markets" / "features" / f"dataset={dataset_name}" / f"exchange={exchange}" / f"symbol={symbol}"
+            date_dirs = sorted(feature_dir.glob("date=*")) if feature_dir.is_dir() else []
+            distinct_days = len(date_dirs)
+            if distinct_days < minimum_distinct_days:
+                needs_more_data_reasons.append(
+                    f"{exchange}/{symbol}/{dataset_name}: only {distinct_days} distinct days available in "
+                    f"markets/features/, need at least {minimum_distinct_days}"
+                )
+            columns = None
+            if date_dirs:
+                sample = next(date_dirs[-1].glob("*.parquet"), None)
+                if sample is not None:
+                    columns = list(pq.ParquetFile(sample).schema_arrow.names)
+            datasets_checked.append({
+                "dataset": dataset_name, "exchange": exchange, "symbol": symbol,
+                "in_catalog": "kilimanjaro_local", "distinct_days": distinct_days, "columns": columns,
+            })
+            continue
+
         catalog_entry = catalog.get(dataset_name)
         if catalog_entry is None:
             needs_tooling_reasons.append(

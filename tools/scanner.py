@@ -59,6 +59,31 @@ class ScannerError(Exception):
     pass
 
 
+_KILIMANJARO_FEATURES_ROOT = _ROOT / "markets" / "features"
+
+# Feature-side datasets this scanner trusts as precomputed signals, with
+# their own dedicated reader. OrderBook (bronze, Makalu-owned) is handled
+# separately via _ob_glob; anything not in this set falls through to
+# ScannerError -- never silently assumed to follow the same layout.
+_PRECOMPUTED_FEATURE_DATASETS = {"ChartRangeSAR"}
+
+
+def _precomputed_feature_glob(dataset: str, exchange: str, symbol: str) -> str:
+    """Kilimanjaro-owned precomputed feature (e.g. tools/range_bar_sar.py's
+    ChartRangeSAR) -- never Makalu's own data root, since these are
+    hypothesis-specific derived signals computed from an already-Makalu-
+    owned source (e.g. Chart_RANGE), not a reusable Makalu warehouse
+    dataset. The scanner reads it the same way it reads bronze OrderBook:
+    via a trivial feature.sql_expression that selects the precomputed
+    column directly, since the underlying computation (e.g. Parabolic
+    SAR) is inherently stateful and can't be expressed as the stateless
+    SQL this scanner otherwise evaluates."""
+    return str(
+        _KILIMANJARO_FEATURES_ROOT / f"dataset={dataset}" / f"exchange={exchange}" / f"symbol={symbol}"
+        / "date=*" / "*.parquet"
+    )
+
+
 def _ob_glob(data_root: Path, exchange: str, symbol: str) -> str:
     return str(data_root / "bronze" / "dataset=OrderBook" / f"exchange={exchange}" / f"symbol={symbol}" / "date=*" / "*.parquet")
 
@@ -586,10 +611,18 @@ def run_scan(
 
     feature_source = h["feature"]["source_datasets"][0]
     target_source = h["target"]["source_dataset"]
-    if feature_source["dataset"] != "OrderBook" or target_source["dataset"] != "OrderBook":
-        raise ScannerError("v1 scanner only supports OrderBook as the feature/target source dataset")
+    if target_source["dataset"] != "OrderBook":
+        raise ScannerError("v1 scanner only supports OrderBook as the target source dataset")
 
-    feature_glob = _ob_glob(data_root, feature_source["exchange"], feature_source["symbol"])
+    if feature_source["dataset"] == "OrderBook":
+        feature_glob = _ob_glob(data_root, feature_source["exchange"], feature_source["symbol"])
+    elif feature_source["dataset"] in _PRECOMPUTED_FEATURE_DATASETS:
+        feature_glob = _precomputed_feature_glob(feature_source["dataset"], feature_source["exchange"], feature_source["symbol"])
+    else:
+        raise ScannerError(
+            f"v1 scanner only supports OrderBook or a known precomputed feature dataset "
+            f"({sorted(_PRECOMPUTED_FEATURE_DATASETS)}) as the feature source dataset, got '{feature_source['dataset']}'"
+        )
     target_glob = _ob_glob(data_root, target_source["exchange"], target_source["symbol"])
     feature_alias = feature_source.get("alias") or "f"
 
@@ -643,12 +676,15 @@ def run_scan(
     market_context = {
         "avg_half_spread_bps": _measured_half_spread_bps(con, target_glob, start_date, end_date),
         "realized_volatility_bps": _realized_volatility_bps(primary_df),
+        # Lead-lag cross-correlation assumes both sides are OrderBook-shaped
+        # (bid0_price/ask0_price). Not meaningful (and not computable the
+        # same way) for a precomputed signal feature like ChartRangeSAR.
         "lead_lag": _lead_lag_block(
             con, feature_glob, target_glob,
             feature_source["exchange"], feature_source["symbol"],
             target_source["exchange"], target_source["symbol"],
             start_date, end_date,
-        ),
+        ) if feature_source["dataset"] == "OrderBook" else None,
     }
 
     regime_restricted = _regime_restricted_block(
