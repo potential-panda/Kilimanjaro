@@ -30,11 +30,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
 import numpy as np
 import pandas as pd
+
+_DEFAULT_LOOKBACK_DAYS = 60
 
 sys.path.insert(0, str(Path(__file__).parent))
 from scanner import _peak_lag_corr  # noqa: E402
@@ -133,6 +136,8 @@ def compute_wave(
     wave.insert(0, "target_exchange", target_exchange)
     wave.insert(0, "feature_symbol", feature_symbol)
     wave.insert(0, "feature_exchange", feature_exchange)
+    wave["window_start"] = start_date or ""
+    wave["window_end"]   = end_date or ""
     return wave.reset_index(drop=True)
 
 
@@ -143,10 +148,31 @@ def compute_wave_for_known_asset(asset: str, **kwargs) -> pd.DataFrame:
 
 
 def write_wave(df: pd.DataFrame, name: str, waves_dir: Path = _DEFAULT_WAVES_DIR) -> Path:
-    waves_dir.mkdir(parents=True, exist_ok=True)
-    path = waves_dir / f"leadlag_{name}.csv"
+    """Write to markets/waves/leadlag_{name}/{window_end}.csv"""
+    end_date = df["window_end"].iloc[0] if "window_end" in df.columns else "unknown"
+    out_dir = waves_dir / f"leadlag_{name}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{end_date}.csv"
     df.to_csv(path, index=False)
     return path
+
+
+def load_wave(
+    name: str,
+    as_of_date: str | None = None,
+    waves_dir: Path = _DEFAULT_WAVES_DIR,
+) -> pd.DataFrame | None:
+    """Load the most recent wave file with window_end <= as_of_date."""
+    wave_dir = waves_dir / f"leadlag_{name}"
+    if not wave_dir.exists():
+        return None
+    candidates = sorted(wave_dir.glob("*.csv"))
+    if not candidates:
+        return None
+    if as_of_date is None:
+        return pd.read_csv(candidates[-1])
+    valid = [f for f in candidates if f.stem <= as_of_date]
+    return pd.read_csv(valid[-1]) if valid else None
 
 
 def plot_wave(df: pd.DataFrame, name: str, graphs_dir: Path = _DEFAULT_GRAPHS_DIR) -> Path:
@@ -198,18 +224,31 @@ def query_at(df: pd.DataFrame, time_of_day: str, bucket_minutes: int = _DEFAULT_
     }
 
 
+def _end_date_from_lookback(end: str | None, lookback_days: int) -> tuple[str, str]:
+    end_dt = date.fromisoformat(end) if end else date.today()
+    start_dt = end_dt - timedelta(days=lookback_days)
+    return str(start_dt), str(end_dt)
+
+
 def _cmd_compute(args: argparse.Namespace) -> int:
+    start_date, end_date = _end_date_from_lookback(args.end, args.lookback_days)
     if args.asset:
-        df = compute_wave_for_known_asset(args.asset, bucket_minutes=args.bucket_minutes, start_date=args.start, end_date=args.end)
+        df = compute_wave_for_known_asset(
+            args.asset, bucket_minutes=args.bucket_minutes,
+            start_date=start_date, end_date=end_date,
+        )
         name = f"BINANCE_GMO_{args.asset}"
     else:
         df = compute_wave(
-            args.feature_exchange, args.feature_symbol, args.target_exchange, args.target_symbol,
-            bucket_minutes=args.bucket_minutes, start_date=args.start, end_date=args.end,
+            args.feature_exchange, args.feature_symbol,
+            args.target_exchange, args.target_symbol,
+            bucket_minutes=args.bucket_minutes,
+            start_date=start_date, end_date=end_date,
         )
         name = f"{args.feature_exchange}_{args.feature_symbol}__{args.target_exchange}_{args.target_symbol}"
     csv_path = write_wave(df, name)
-    print(f"Wrote {csv_path} ({len(df)} rows)")
+    print(f"Window: {start_date} → {end_date}  ({len(df)} rows)")
+    print(f"Wrote {csv_path}")
     if args.plot:
         png_path = plot_wave(df, name)
         print(f"Wrote {png_path}")
@@ -236,8 +275,8 @@ def main() -> int:
     p_compute.add_argument("--target-exchange", default=None)
     p_compute.add_argument("--target-symbol", default=None)
     p_compute.add_argument("--bucket-minutes", type=int, default=_DEFAULT_BUCKET_MINUTES)
-    p_compute.add_argument("--start", default=None)
-    p_compute.add_argument("--end", default=None)
+    p_compute.add_argument("--lookback-days", type=int, default=_DEFAULT_LOOKBACK_DAYS)
+    p_compute.add_argument("--end", default=None, help="window end date YYYY-MM-DD (default: today)")
     p_compute.add_argument("--plot", action="store_true")
     p_compute.set_defaults(func=_cmd_compute)
 
