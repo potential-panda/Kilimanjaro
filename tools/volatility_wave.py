@@ -152,7 +152,9 @@ def compute_wave(
           -- shift ts by Z/2 so the bucket boundary falls between hour marks
           CAST(floor(((ts + {_JST_OFFSET_SECONDS} + {z_seconds // 2}) % 86400)
                / {z_seconds}) AS INT) AS bucket,
+          avg(mid)    AS avg_mid,
           avg(spread) AS avg_spread,
+          avg(spread / mid) * 10000 AS avg_spread_bps,
           count(*)    AS n,
           {k_exprs}
         FROM joined
