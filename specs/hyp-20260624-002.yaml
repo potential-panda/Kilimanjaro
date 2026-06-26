@@ -2,7 +2,7 @@ schema_version: 1
 hypothesis:
   id: hyp-20260624-002
   parent_id: null
-  title: "Parabolic SAR on range bars predicts GMO ETH_JPY 120s mid return"
+  title: "BINANCE ETH_USDT range-bar SAR predicts GMO ETH_JPY 120s forward return"
   status: draft
   family: custom
   family_label: "Range-bar trend (Parabolic SAR)"
@@ -18,16 +18,17 @@ hypothesis:
   created_at: "2026-06-24T00:00:00Z"
   owner: agent
   summary: >
-    Computed on GMO ETH_JPY's own range bars (box_size_rate=0.0025): does the
-    Parabolic SAR trend direction (sar_up) predict the market's own future
-    mid return at a horizon long enough to clear the spread.
+    Range bars built from BINANCE ETH_USDT trade ticks (box_size_rate=0.0025,
+    live prod param from orion-02/QASIM_TARIQ): does the Parabolic SAR trend
+    direction computed on BINANCE predict the GMO ETH_JPY forward return?
+    This is the actual orion v601 architecture: ref_market=BINANCE fires Trade
+    events which drive RangeBarBuilder → SAR; execution happens on GMO.
   expected_edge_mechanism: >
-    Range bars filter out time spent in low-activity noise and only close a
-    bar once price has genuinely moved -- the resulting trend-following SAR
-    signal is the same one orion's v601 variant trades live on GMO ETH_JPY/
-    ETH_JPY/XRP_JPY. If the underlying trend persistence this indicator
-    detects is real, sar_up should be predictive of the market's own
-    near-term future return.
+    BINANCE leads GMO by a few seconds (confirmed by lead-lag wave). Range
+    bars on BINANCE filter noise and only close when price has genuinely moved
+    by 0.25%. A SAR flip on BINANCE therefore represents a trend-direction
+    change that GMO has not yet fully priced in, giving a brief window to
+    enter on GMO in the BINANCE-confirmed direction.
   economic_rationale: "Trend persistence after a range-bar-confirmed price move, consistent with momentum continuing briefly before mean-reverting liquidity providers catch up."
   duplicate_search:
     searched_at: "2026-06-24T00:00:00Z"
@@ -41,6 +42,8 @@ hypothesis:
     conclusion: new
   data_requirements:
     markets:
+      - exchange: BINANCE
+        symbol: ETH_USDT
       - exchange: GMO
         symbol: ETH_JPY
     datasets:
@@ -57,19 +60,17 @@ hypothesis:
     source_datasets:
       - layer: feature
         dataset: ChartRangeSAR
-        exchange: GMO
-        symbol: ETH_JPY
+        exchange: BINANCE
+        symbol: ETH_USDT
     primary_timestamp_column: ts
-    point_in_time_rule: "sar_up computed strictly from range bars closed at or before signal ts (orion's ParabolicSarIndicator, fed in chronological order)"
+    point_in_time_rule: "sar_up computed from BINANCE ETH_USDT range bars closed at or before signal ts; SAR cross detected at the exact crossing trade tick (orion v601 live logic)"
   cross_market_rationale: >
-    Same-market by necessity, not by default-deviation: BINANCE has no
-    analogue for GMO ETH_JPY's own range-bar/trade-tape trend state -- a
-    range bar on a different market measures a different market's price
-    action, not this one's. This is the same local-execution-mechanics
-    reasoning hypothesis-contract.md already grants queue_depletion/
-    adverse_selection_avoidance (BINANCE has no analogue for the target
-    market's own mechanics); a range-bar trend signal is the same kind of
-    target-market-intrinsic mechanism, just not yet in that exempt list.
+    BINANCE is the signal source by design, matching orion v601's live
+    architecture (orion-02/QASIM_TARIQ): ref_market=BINANCE:ETH_USDT provides
+    Trade events that drive RangeBarBuilder → ParabolicSarIndicator; execution
+    is on GMO:ETH_JPY. Using BINANCE as the feature source is not a
+    data-quality workaround — it is the actual causal structure of the
+    strategy being evaluated.
   target:
     type: next_return
     primary_horizon_seconds: 120
@@ -98,7 +99,7 @@ hypothesis:
     significance_method: block_bootstrap_by_day
   backtest_handoff_intent:
     potential_panda_core_strategy_pattern: "orion v601 variant (qate.trading.chart.RangeBarBuilder + orion.parabolic_sar.ParabolicSarIndicator)"
-    himalaya_config_notes: "GMO/ETH_JPY, box_size_rate=0.0025, acceleration=0.02, step=0.02, maximum=0.2 -- matches the already-live v601 tuning"
+    himalaya_config_notes: "ref_market=BINANCE/ETH_USDT, market=GMO/ETH_JPY, box_size_rate=0.0025, acceleration=0.02, step=0.02, maximum=0.2 -- live prod config orion-02/QASIM_TARIQ"
   decisions:
     - at: "2026-06-24T00:00:00Z"
       actor: agent
