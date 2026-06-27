@@ -92,10 +92,11 @@ def _flip_glob(flip_exchange: str, flip_symbol: str, box_size_rate: float, featu
     )
 
 
-def _ob_glob(exchange: str, symbol: str, data_root: Path) -> str:
+def _mp_glob(exchange: str, symbol: str, execution_size: str, data_root: Path) -> str:
     return str(
-        data_root / "bronze" / "dataset=OrderBook"
-        / f"exchange={exchange}" / f"symbol={symbol}" / "date=*" / "*.parquet"
+        data_root / "silver" / "dataset=MarketPrice"
+        / f"exchange={exchange}" / f"symbol={symbol}"
+        / f"execution_size={execution_size}" / "date=*" / "*.parquet"
     )
 
 
@@ -107,6 +108,7 @@ def run_flip_scan(
     start_date: str,
     end_date: str,
     box_size_rate: float = 0.0025,
+    execution_size: str = "150",
     horizons: list[int] = _DEFAULT_HORIZONS,
     costs_bps: float = _DEFAULT_COSTS_BPS,
     data_root: Path = _DEFAULT_DATA_ROOT,
@@ -118,10 +120,12 @@ def run_flip_scan(
     for both fixed-horizon and between-flip return definitions.
     """
     flip_glob = _flip_glob(flip_exchange, flip_symbol, box_size_rate, features_root)
-    ob_glob   = _ob_glob(target_exchange, target_symbol, data_root)
+    mp_glob   = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
     con = duckdb.connect()
 
     # ── Step 1: load all flips with actual entry execution price ─────────────
+    # Uses silver MarketPrice: bid/ask are VWAP at execution_size depth (more
+    # realistic than best bid0/ask0), and spread > 10 bps rows are pre-filtered.
     # BUY (sar_up=+1): enter at ask  SELL (sar_up=-1): enter at bid
     flips_df = con.sql(f"""
         WITH flips AS (
@@ -129,16 +133,15 @@ def run_flip_scan(
             FROM read_parquet('{flip_glob}', hive_partitioning=true)
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
         ),
-        ob AS (
-            SELECT ts, bid0_price, ask0_price
-            FROM read_parquet('{ob_glob}', hive_partitioning=true)
-            WHERE ask0_price > bid0_price
-              AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        mp AS (
+            SELECT ts, bid, ask
+            FROM read_parquet('{mp_glob}', hive_partitioning=true)
+            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
         )
         SELECT f.ts, f.sar_up,
-            CASE WHEN f.sar_up > 0 THEN o.ask0_price ELSE o.bid0_price END AS entry_price,
-            (o.bid0_price + o.ask0_price) / 2.0 AS entry_mid
-        FROM flips f ASOF JOIN ob o ON o.ts >= f.ts
+            CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS entry_price,
+            (o.bid + o.ask) / 2.0 AS entry_mid
+        FROM flips f ASOF JOIN mp o ON o.ts >= f.ts
         ORDER BY f.ts
     """).df().dropna()
 
@@ -157,16 +160,15 @@ def run_flip_scan(
                 SELECT ts, sar_up FROM read_parquet('{flip_glob}', hive_partitioning=true)
                 WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
             ),
-            ob AS (
-                SELECT ts, bid0_price, ask0_price
-                FROM read_parquet('{ob_glob}', hive_partitioning=true)
-                WHERE ask0_price > bid0_price
-                  AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+            mp AS (
+                SELECT ts, bid, ask
+                FROM read_parquet('{mp_glob}', hive_partitioning=true)
+                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
                     + INTERVAL {max(horizons) // 3600 + 1} DAY
             )
             SELECT f.ts,
-                CASE WHEN f.sar_up > 0 THEN o.bid0_price ELSE o.ask0_price END AS exit_price
-            FROM flips f ASOF JOIN ob o ON o.ts >= f.ts + {h}
+                CASE WHEN f.sar_up > 0 THEN o.bid ELSE o.ask END AS exit_price
+            FROM flips f ASOF JOIN mp o ON o.ts >= f.ts + {h}
             ORDER BY f.ts
         """).df().dropna()
 
@@ -197,15 +199,14 @@ def run_flip_scan(
     pairs = flips_df[["ts", "sar_up", "next_ts"]].dropna(subset=["next_ts"]).copy()
     con.register("_pairs", pairs)
     exit_ob = con.sql(f"""
-        WITH ob AS (
-            SELECT ts, bid0_price, ask0_price
-            FROM read_parquet('{ob_glob}', hive_partitioning=true)
-            WHERE ask0_price > bid0_price
-              AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        WITH mp AS (
+            SELECT ts, bid, ask
+            FROM read_parquet('{mp_glob}', hive_partitioning=true)
+            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
         )
         SELECT p.ts,
-            CASE WHEN p.sar_up > 0 THEN o.bid0_price ELSE o.ask0_price END AS exit_price
-        FROM _pairs p ASOF JOIN ob o ON o.ts >= p.next_ts
+            CASE WHEN p.sar_up > 0 THEN o.bid ELSE o.ask END AS exit_price
+        FROM _pairs p ASOF JOIN mp o ON o.ts >= p.next_ts
     """).df().dropna()
 
     bf = (
@@ -267,6 +268,7 @@ def run_flip_scan(
         "n_flips":         n_flips,
         "flips_per_day":   round(n_flips / n_days, 2),
         "box_size_rate":   box_size_rate,
+        "execution_size":  execution_size,
         "fixed_horizon":   horizon_results,
         "between_flip":    between_flip,
         "by_month":        monthly,
@@ -278,7 +280,7 @@ def print_summary(report: dict) -> None:
     costs = report["costs_bps"]
     print(f"\n{'='*60}")
     print(f"FLIP SCAN: {report['flip_exchange']}/{report['flip_symbol']} → {report['target_exchange']}/{report['target_symbol']}")
-    print(f"Window: {report['start_date']} .. {report['end_date']}  box_size_rate={report['box_size_rate']}")
+    print(f"Window: {report['start_date']} .. {report['end_date']}  box_size_rate={report['box_size_rate']}  execution_size={report['execution_size']}")
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
 
@@ -313,6 +315,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         start_date=args.start,
         end_date=args.end,
         box_size_rate=args.box_size_rate,
+        execution_size=args.execution_size,
         horizons=[int(h) for h in args.horizons.split(",")],
         costs_bps=args.costs_bps,
     )
@@ -335,6 +338,7 @@ def main() -> int:
     p.add_argument("--start",           required=True, help="Start date YYYY-MM-DD")
     p.add_argument("--end",             required=True, help="End date YYYY-MM-DD")
     p.add_argument("--box-size-rate",    type=float, default=0.0025, help="Range bar size rate (e.g. 0.0025)")
+    p.add_argument("--execution-size",   default="150", help="MarketPrice execution size partition (e.g. 150 for XRP_JPY, 0.1 for ETH_JPY, 0.002 for BTC_JPY)")
     p.add_argument("--horizons",        default=",".join(str(h) for h in _DEFAULT_HORIZONS))
     p.add_argument("--costs-bps",       type=float, default=_DEFAULT_COSTS_BPS)
     p.add_argument("--out",             default=None, help="Write JSON report to this path")
