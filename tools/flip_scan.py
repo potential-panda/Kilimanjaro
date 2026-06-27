@@ -22,9 +22,11 @@ sar_up=-1 (expect down). A positive signed return means the signal was correct.
 Top-level:
   n_flips              Total number of SAR flip events in the window.
   flips_per_day        n_flips / calendar days in window.
-  costs_bps            Round-trip cost assumption (fee + slippage + half-spread,
-                       both entry and exit). Default 5 bps for GMO margin:
-                         fee 0 bps + slippage ~0.5+0.5 bps + half-spread ~2+2 bps.
+  costs_bps            Residual round-trip cost not captured by bid/ask prices.
+                       Default 1 bps (slippage only: ~0.5 bps entry + ~0.5 bps exit).
+                       Spread is already baked into returns via actual bid/ask execution
+                       prices (BUY enters at ask, exits at bid; SELL enters at bid, exits
+                       at ask), so only slippage remains here. Fee is 0 for GMO margin.
 
 fixed_horizon[] — one entry per horizon H:
   horizon_seconds      H in seconds (e.g. 30, 120, 300, 600).
@@ -77,7 +79,8 @@ _DEFAULT_FEATURES_ROOT = _ROOT / "markets" / "features"
 _DEFAULT_SCAN_REPORTS_DIR = _ROOT / "scan-reports"
 
 _DEFAULT_HORIZONS = [30, 120, 300, 600]
-_DEFAULT_COSTS_BPS = 5.0  # round-trip: ~1 bps slippage + ~4 bps half-spread x2
+_DEFAULT_COSTS_BPS = 1.0  # round-trip slippage only (~0.5 bps each way);
+                          # spread is already baked in via bid/ask execution prices
 
 
 def _flip_glob(flip_exchange: str, flip_symbol: str, features_root: Path) -> str:
@@ -116,7 +119,8 @@ def run_flip_scan(
     ob_glob   = _ob_glob(target_exchange, target_symbol, data_root)
     con = duckdb.connect()
 
-    # ── Step 1: load all flips with entry mid (GMO mid at flip timestamp) ────
+    # ── Step 1: load all flips with actual entry execution price ─────────────
+    # BUY (sar_up=+1): enter at ask  SELL (sar_up=-1): enter at bid
     flips_df = con.sql(f"""
         WITH flips AS (
             SELECT ts, sar_up
@@ -124,12 +128,14 @@ def run_flip_scan(
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
         ),
         ob AS (
-            SELECT ts, (bid0_price + ask0_price) / 2.0 AS mid
+            SELECT ts, bid0_price, ask0_price
             FROM read_parquet('{ob_glob}', hive_partitioning=true)
             WHERE ask0_price > bid0_price
               AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
         )
-        SELECT f.ts, f.sar_up, o.mid AS entry_mid
+        SELECT f.ts, f.sar_up,
+            CASE WHEN f.sar_up > 0 THEN o.ask0_price ELSE o.bid0_price END AS entry_price,
+            (o.bid0_price + o.ask0_price) / 2.0 AS entry_mid
         FROM flips f ASOF JOIN ob o ON o.ts >= f.ts
         ORDER BY f.ts
     """).df().dropna()
@@ -141,27 +147,29 @@ def run_flip_scan(
     n_days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
 
     # ── Step 2: fixed-horizon returns ─────────────────────────────────────────
+    # Exit execution price is the opposite side: long exits at bid, short at ask
     horizon_results = []
     for h in horizons:
         exit_df = con.sql(f"""
             WITH flips AS (
-                SELECT ts FROM read_parquet('{flip_glob}', hive_partitioning=true)
+                SELECT ts, sar_up FROM read_parquet('{flip_glob}', hive_partitioning=true)
                 WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
             ),
             ob AS (
-                SELECT ts, (bid0_price + ask0_price) / 2.0 AS mid
+                SELECT ts, bid0_price, ask0_price
                 FROM read_parquet('{ob_glob}', hive_partitioning=true)
                 WHERE ask0_price > bid0_price
                   AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
                     + INTERVAL {max(horizons) // 3600 + 1} DAY
             )
-            SELECT f.ts, o.mid AS exit_mid
+            SELECT f.ts,
+                CASE WHEN f.sar_up > 0 THEN o.bid0_price ELSE o.ask0_price END AS exit_price
             FROM flips f ASOF JOIN ob o ON o.ts >= f.ts + {h}
             ORDER BY f.ts
         """).df().dropna()
 
         merged = flips_df.merge(exit_df, on="ts", how="inner")
-        raw_ret = (merged["exit_mid"] - merged["entry_mid"]) / merged["entry_mid"] * 10000
+        raw_ret = (merged["exit_price"] - merged["entry_price"]) / merged["entry_price"] * 10000
         signed  = merged["sar_up"] * raw_ret
 
         horizon_results.append({
@@ -178,13 +186,31 @@ def run_flip_scan(
         })
 
     # ── Step 3: between-flip return ───────────────────────────────────────────
+    # Exit at the next flip: long exits at next flip's bid, short at next flip's ask.
     flips_df = flips_df.reset_index(drop=True)
-    flips_df["next_ts"]  = flips_df["ts"].shift(-1)
-    flips_df["next_mid"] = flips_df["entry_mid"].shift(-1)
+    flips_df["next_ts"] = flips_df["ts"].shift(-1)
 
-    bf = flips_df.dropna(subset=["next_ts", "next_mid"]).copy()
+    # Build a pairs table: (ts, sar_up, next_ts) then ASOF JOIN OB at next_ts.
+    # This avoids shift-based misalignment when some rows have no OB match.
+    pairs = flips_df[["ts", "sar_up", "next_ts"]].dropna(subset=["next_ts"]).copy()
+    con.register("_pairs", pairs)
+    exit_ob = con.sql(f"""
+        WITH ob AS (
+            SELECT ts, bid0_price, ask0_price
+            FROM read_parquet('{ob_glob}', hive_partitioning=true)
+            WHERE ask0_price > bid0_price
+              AND date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        )
+        SELECT p.ts,
+            CASE WHEN p.sar_up > 0 THEN o.bid0_price ELSE o.ask0_price END AS exit_price
+        FROM _pairs p ASOF JOIN ob o ON o.ts >= p.next_ts
+    """).df().dropna()
+
+    bf = (
+        flips_df.merge(exit_ob, on="ts", how="inner")
+    )
     bf["holding_seconds"] = bf["next_ts"] - bf["ts"]
-    raw_bf  = (bf["next_mid"] - bf["entry_mid"]) / bf["entry_mid"] * 10000
+    raw_bf    = (bf["exit_price"] - bf["entry_price"]) / bf["entry_price"] * 10000
     signed_bf = bf["sar_up"] * raw_bf
 
     between_flip = {
@@ -205,7 +231,7 @@ def run_flip_scan(
     bf["month"] = pd.to_datetime(bf["ts"], unit="s", utc=True).dt.strftime("%Y-%m")
     monthly = []
     for month, g in bf.groupby("month"):
-        sr = bf["sar_up"].loc[g.index] * (g["next_mid"] - g["entry_mid"]) / g["entry_mid"] * 10000
+        sr = g["sar_up"] * (g["exit_price"] - g["entry_price"]) / g["entry_price"] * 10000
         monthly.append({
             "month": month,
             "n_flips": len(g),
@@ -219,7 +245,7 @@ def run_flip_scan(
     bf["jst_hour"] = ((bf["ts"] + _JST) % 86400 // 3600).astype(int)
     by_hour = []
     for hour, g in bf.groupby("jst_hour"):
-        sr = bf["sar_up"].loc[g.index] * (g["next_mid"] - g["entry_mid"]) / g["entry_mid"] * 10000
+        sr = g["sar_up"] * (g["exit_price"] - g["entry_price"]) / g["entry_price"] * 10000
         by_hour.append({
             "jst_hour": int(hour),
             "n_flips": len(g),
