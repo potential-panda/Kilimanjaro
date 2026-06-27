@@ -83,10 +83,11 @@ _DEFAULT_COSTS_BPS = 1.0  # round-trip slippage only (~0.5 bps each way);
                           # spread is already baked in via bid/ask execution prices
 
 
-def _flip_glob(flip_exchange: str, flip_symbol: str, features_root: Path) -> str:
+def _flip_glob(flip_exchange: str, flip_symbol: str, box_size_rate: float, features_root: Path) -> str:
     return str(
         features_root / "dataset=ChartRangeSAR"
         / f"exchange={flip_exchange}" / f"symbol={flip_symbol}"
+        / f"box_size_rate={box_size_rate}"
         / "date=*" / "*.parquet"
     )
 
@@ -105,6 +106,7 @@ def run_flip_scan(
     target_symbol: str,
     start_date: str,
     end_date: str,
+    box_size_rate: float = 0.0025,
     horizons: list[int] = _DEFAULT_HORIZONS,
     costs_bps: float = _DEFAULT_COSTS_BPS,
     data_root: Path = _DEFAULT_DATA_ROOT,
@@ -115,7 +117,7 @@ def run_flip_scan(
     Returns a report dict with per-flip statistics before and after costs,
     for both fixed-horizon and between-flip return definitions.
     """
-    flip_glob = _flip_glob(flip_exchange, flip_symbol, features_root)
+    flip_glob = _flip_glob(flip_exchange, flip_symbol, box_size_rate, features_root)
     ob_glob   = _ob_glob(target_exchange, target_symbol, data_root)
     con = duckdb.connect()
 
@@ -264,6 +266,7 @@ def run_flip_scan(
         "costs_bps":       costs_bps,
         "n_flips":         n_flips,
         "flips_per_day":   round(n_flips / n_days, 2),
+        "box_size_rate":   box_size_rate,
         "fixed_horizon":   horizon_results,
         "between_flip":    between_flip,
         "by_month":        monthly,
@@ -275,7 +278,7 @@ def print_summary(report: dict) -> None:
     costs = report["costs_bps"]
     print(f"\n{'='*60}")
     print(f"FLIP SCAN: {report['flip_exchange']}/{report['flip_symbol']} → {report['target_exchange']}/{report['target_symbol']}")
-    print(f"Window: {report['start_date']} .. {report['end_date']}")
+    print(f"Window: {report['start_date']} .. {report['end_date']}  box_size_rate={report['box_size_rate']}")
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
 
@@ -309,6 +312,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         target_symbol=args.target_symbol,
         start_date=args.start,
         end_date=args.end,
+        box_size_rate=args.box_size_rate,
         horizons=[int(h) for h in args.horizons.split(",")],
         costs_bps=args.costs_bps,
     )
@@ -330,6 +334,7 @@ def main() -> int:
     p.add_argument("--target-symbol",   required=True, help="Symbol to measure returns on (e.g. XRP_JPY)")
     p.add_argument("--start",           required=True, help="Start date YYYY-MM-DD")
     p.add_argument("--end",             required=True, help="End date YYYY-MM-DD")
+    p.add_argument("--box-size-rate",    type=float, default=0.0025, help="Range bar size rate (e.g. 0.0025)")
     p.add_argument("--horizons",        default=",".join(str(h) for h in _DEFAULT_HORIZONS))
     p.add_argument("--costs-bps",       type=float, default=_DEFAULT_COSTS_BPS)
     p.add_argument("--out",             default=None, help="Write JSON report to this path")
