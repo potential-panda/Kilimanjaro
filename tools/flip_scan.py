@@ -12,6 +12,52 @@ Two return definitions are computed for each flip:
     (the true holding-period return for a strategy that reverses on every flip)
 
 Both are expressed in bps and compared against a configurable round-trip cost.
+
+## Output field definitions
+
+All return fields are signed by signal direction: sar_up=+1 (expect up) or
+sar_up=-1 (expect down). A positive signed return means the signal was correct.
+1 bps = 0.01% = 1/10000 of price.
+
+Top-level:
+  n_flips              Total number of SAR flip events in the window.
+  flips_per_day        n_flips / calendar days in window.
+  costs_bps            Round-trip cost assumption (fee + slippage + half-spread,
+                       both entry and exit). Default 5 bps for GMO margin:
+                         fee 0 bps + slippage ~0.5+0.5 bps + half-spread ~2+2 bps.
+
+fixed_horizon[] — one entry per horizon H:
+  horizon_seconds      H in seconds (e.g. 30, 120, 300, 600).
+  n                    Number of flips with a valid exit price at ts+H.
+  avg_signed_return_bps  Mean of (sar_up × mid_return) across all flips.
+                         Positive = signal was right on average.
+  avg_net_return_bps   avg_signed_return_bps − costs_bps. What you keep after friction.
+  hit_rate             Fraction of flips where signed return > 0 (right before costs).
+  hit_rate_net         Fraction of flips where signed return > costs_bps (profitable after costs).
+  median_signed_return_bps  Median signed return — less distorted by outliers than mean.
+  p25_bps / p75_bps    25th / 75th percentile of signed returns.
+  std_bps              Standard deviation of signed returns per flip.
+
+between_flip — hold from this flip until the next SAR cross (orion's actual holding period):
+  n                    Number of flips with a valid next flip (last flip excluded).
+  avg_holding_seconds  Mean time between consecutive flips.
+  median_holding_seconds  Median holding period (more robust; mean is skewed by long trends).
+  avg_signed_return_bps  Mean signed return over the holding period.
+  avg_net_return_bps   avg_signed_return_bps − costs_bps.
+  hit_rate             Fraction of flips where the holding-period return > 0.
+  hit_rate_net         Fraction of flips where holding-period return > costs_bps.
+  median_signed_return_bps  Median signed return over holding period.
+  p25_bps / p75_bps    25th / 75th percentile.
+  std_bps              Standard deviation.
+
+by_month[] — between-flip stats grouped by calendar month (YYYY-MM):
+  month                Calendar month.
+  n_flips              Number of flips originating in this month.
+  avg_signed_return_bps / avg_net_return_bps / hit_rate  Same as between_flip above.
+
+by_jst_hour[] — between-flip stats grouped by JST hour of the flip:
+  jst_hour             0–23, JST (UTC+9).
+  n_flips / avg_signed_return_bps / avg_net_return_bps / hit_rate  Same as above.
 """
 
 from __future__ import annotations
