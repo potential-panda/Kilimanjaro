@@ -100,6 +100,14 @@ def _mp_glob(exchange: str, symbol: str, execution_size: str, data_root: Path) -
     )
 
 
+def _trade_glob(exchange: str, symbol: str, data_root: Path) -> str:
+    return str(
+        data_root / "bronze" / "dataset=Trade"
+        / f"exchange={exchange}" / f"symbol={symbol}"
+        / "date=*" / "*.parquet"
+    )
+
+
 def run_flip_scan(
     flip_exchange: str,
     flip_symbol: str,
@@ -111,6 +119,8 @@ def run_flip_scan(
     execution_size: str = "150",
     horizons: list[int] = _DEFAULT_HORIZONS,
     costs_bps: float = _DEFAULT_COSTS_BPS,
+    max_spread_bps: float | None = None,
+    max_trades_30s: int | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path = _DEFAULT_FEATURES_ROOT,
 ) -> dict:
@@ -119,8 +129,9 @@ def run_flip_scan(
     Returns a report dict with per-flip statistics before and after costs,
     for both fixed-horizon and between-flip return definitions.
     """
-    flip_glob = _flip_glob(flip_exchange, flip_symbol, box_size_rate, features_root)
-    mp_glob   = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
+    flip_glob  = _flip_glob(flip_exchange, flip_symbol, box_size_rate, features_root)
+    mp_glob    = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
+    trade_glob = _trade_glob(flip_exchange, flip_symbol, data_root)
     con = duckdb.connect()
 
     # ── Step 1: load all flips with actual entry execution price ─────────────
@@ -140,7 +151,9 @@ def run_flip_scan(
         )
         SELECT f.ts, f.sar_up,
             CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS entry_price,
-            (o.bid + o.ask) / 2.0 AS entry_mid
+            (o.bid + o.ask) / 2.0 AS entry_mid,
+            o.bid AS entry_bid,
+            o.ask AS entry_ask
         FROM flips f ASOF JOIN mp o ON o.ts >= f.ts
         ORDER BY f.ts
     """).df().dropna()
@@ -148,8 +161,45 @@ def run_flip_scan(
     if flips_df.empty:
         raise ValueError(f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}")
 
+    # ── Risk gates ────────────────────────────────────────────────────────────
+    flips_df["entry_spread_bps"] = (
+        (flips_df["entry_ask"] - flips_df["entry_bid"]) / flips_df["entry_bid"] * 10_000
+    )
+    n_spread_blocked = 0
+    n_rate_blocked   = 0
+
+    if max_spread_bps is not None:
+        spread_mask = flips_df["entry_spread_bps"] >= max_spread_bps
+        n_spread_blocked = int(spread_mask.sum())
+        flips_df = flips_df[~spread_mask].copy()
+
+    if max_trades_30s is not None and not flips_df.empty:
+        con.register("_flips_for_rate", flips_df[["ts"]])
+        rate_df = con.sql(f"""
+            WITH seconds AS (
+                SELECT floor(ts) AS sec, count(*) AS n
+                FROM read_parquet('{trade_glob}', hive_partitioning=true)
+                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+                GROUP BY 1
+            ),
+            rolling AS (
+                SELECT sec,
+                    SUM(n) OVER (ORDER BY sec RANGE BETWEEN 30.0 PRECEDING AND CURRENT ROW)
+                    AS trades_30s
+                FROM seconds
+            )
+            SELECT f.ts, COALESCE(r.trades_30s, 0) AS trades_30s
+            FROM _flips_for_rate f
+            LEFT JOIN rolling r ON r.sec = floor(f.ts)
+        """).df()
+        flips_df = flips_df.merge(rate_df, on="ts", how="left")
+        rate_mask = flips_df["trades_30s"] >= max_trades_30s
+        n_rate_blocked = int(rate_mask.sum())
+        flips_df = flips_df[~rate_mask].copy()
+
+    n_flips_raw = len(flips_df) + n_spread_blocked + n_rate_blocked
     n_flips = len(flips_df)
-    n_days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
+    n_days  = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
 
     # ── Step 2: fixed-horizon returns ─────────────────────────────────────────
     # Exit execution price is the opposite side: long exits at bid, short at ask
@@ -269,6 +319,13 @@ def run_flip_scan(
         "flips_per_day":   round(n_flips / n_days, 2),
         "box_size_rate":   box_size_rate,
         "execution_size":  execution_size,
+        "risk_gates": {
+            "max_spread_bps":   max_spread_bps,
+            "max_trades_30s":   max_trades_30s,
+            "n_spread_blocked": n_spread_blocked,
+            "n_rate_blocked":   n_rate_blocked,
+            "n_raw_flips":      n_flips_raw,
+        },
         "fixed_horizon":   horizon_results,
         "between_flip":    between_flip,
         "by_month":        monthly,
@@ -281,6 +338,12 @@ def print_summary(report: dict) -> None:
     print(f"\n{'='*60}")
     print(f"FLIP SCAN: {report['flip_exchange']}/{report['flip_symbol']} → {report['target_exchange']}/{report['target_symbol']}")
     print(f"Window: {report['start_date']} .. {report['end_date']}  box_size_rate={report['box_size_rate']}  execution_size={report['execution_size']}")
+    rg = report["risk_gates"]
+    gates_active = rg["max_spread_bps"] is not None or rg["max_trades_30s"] is not None
+    if gates_active:
+        print(f"Risk gates: spread<{rg['max_spread_bps']} bps / trades_30s<{rg['max_trades_30s']}")
+        print(f"  Blocked: {rg['n_spread_blocked']} spread + {rg['n_rate_blocked']} rate "
+              f"= {rg['n_spread_blocked']+rg['n_rate_blocked']} of {rg['n_raw_flips']} raw flips")
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
 
@@ -318,6 +381,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         execution_size=args.execution_size,
         horizons=[int(h) for h in args.horizons.split(",")],
         costs_bps=args.costs_bps,
+        max_spread_bps=args.max_spread_bps or None,
+        max_trades_30s=args.max_trades_30s or None,
     )
     print_summary(report)
     if args.out:
@@ -341,6 +406,10 @@ def main() -> int:
     p.add_argument("--execution-size",   default="150", help="MarketPrice execution size partition (e.g. 150 for XRP_JPY, 0.1 for ETH_JPY, 0.002 for BTC_JPY)")
     p.add_argument("--horizons",        default=",".join(str(h) for h in _DEFAULT_HORIZONS))
     p.add_argument("--costs-bps",       type=float, default=_DEFAULT_COSTS_BPS)
+    p.add_argument("--max-spread-bps",  type=float, default=6.0,
+                   help="Skip flips where GMO spread >= this (bps). 0 to disable.")
+    p.add_argument("--max-trades-30s",  type=int,   default=1000,
+                   help="Skip flips where BINANCE trades in prior 30s >= this. 0 to disable.")
     p.add_argument("--out",             default=None, help="Write JSON report to this path")
     p.set_defaults(func=_cmd_scan)
 
