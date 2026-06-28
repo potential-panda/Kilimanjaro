@@ -150,6 +150,7 @@ def write_sar_signal(
     exchange: str,
     symbol: str,
     box_size_rate: float,
+    step: float = 0.02,
     features_root: Path = _DEFAULT_FEATURES_ROOT,
 ) -> list[Path]:
     df = df.copy()
@@ -159,7 +160,7 @@ def write_sar_signal(
         path = (
             features_root / "dataset=ChartRangeSAR"
             / f"exchange={exchange}" / f"symbol={symbol}"
-            / f"box_size_rate={box_size_rate}"
+            / f"box_size_rate={box_size_rate}" / f"step={step}"
             / f"date={d}" / "data.parquet"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -190,7 +191,7 @@ def main() -> int:
         args.box_size_rate,
         args.acceleration, args.step, args.maximum,
     )
-    paths = write_sar_signal(df, args.exchange, args.symbol, args.box_size_rate, Path(args.out_dir))
+    paths = write_sar_signal(df, args.exchange, args.symbol, args.box_size_rate, args.step, Path(args.out_dir))
     flips = int(df["sar_flip"].sum()) if not df.empty else 0
     print(f"Wrote {len(paths)} daily partitions, {flips} flips total")
     return 0

@@ -1,0 +1,307 @@
+{
+  "flip_exchange": "BINANCE",
+  "flip_symbol": "ETH_USDT",
+  "target_exchange": "GMO",
+  "target_symbol": "ETH_JPY",
+  "start_date": "2025-07-01",
+  "end_date": "2026-06-27",
+  "costs_bps": 1.0,
+  "n_flips": 3302,
+  "flips_per_day": 9.15,
+  "box_size_rate": 0.0025,
+  "sar_step": 0.04,
+  "execution_size": "0.1",
+  "risk_gates": {
+    "max_spread_bps": 6.0,
+    "max_trades_30s": 1000,
+    "block_jst_hours": [
+      2,
+      3,
+      5,
+      9,
+      15,
+      21
+    ],
+    "n_spread_blocked": 11762,
+    "n_rate_blocked": 9154,
+    "n_hour_blocked": 1100,
+    "n_raw_flips": 25318
+  },
+  "fixed_horizon": [
+    {
+      "horizon_seconds": 30,
+      "n": 3302,
+      "avg_signed_return_bps": -2.0780906659351652,
+      "avg_net_return_bps": -3.0780906659351652,
+      "hit_rate": 0.3119321623258631,
+      "hit_rate_net": 0.25772259236826167,
+      "median_signed_return_bps": -2.9170600705470067,
+      "p25_bps": -6.5045764335509375,
+      "p75_bps": 1.1880503871131163,
+      "std_bps": 8.020166841769427
+    },
+    {
+      "horizon_seconds": 120,
+      "n": 3302,
+      "avg_signed_return_bps": -1.6838648836760417,
+      "avg_net_return_bps": -2.6838648836760415,
+      "hit_rate": 0.38915808600847973,
+      "hit_rate_net": 0.35614778921865536,
+      "median_signed_return_bps": -3.173471199785202,
+      "p25_bps": -9.448639657839793,
+      "p75_bps": 4.301152172195647,
+      "std_bps": 14.618694762460727
+    },
+    {
+      "horizon_seconds": 300,
+      "n": 3302,
+      "avg_signed_return_bps": -1.17291902061729,
+      "avg_net_return_bps": -2.17291902061729,
+      "hit_rate": 0.42761962447001817,
+      "hit_rate_net": 0.3985463355542096,
+      "median_signed_return_bps": -2.5646569934919707,
+      "p25_bps": -12.322245862216974,
+      "p75_bps": 8.080559669820923,
+      "std_bps": 21.553969837940038
+    },
+    {
+      "horizon_seconds": 600,
+      "n": 3302,
+      "avg_signed_return_bps": -1.0578634454511318,
+      "avg_net_return_bps": -2.0578634454511318,
+      "hit_rate": 0.44457904300423984,
+      "hit_rate_net": 0.4273167777104785,
+      "median_signed_return_bps": -2.8589446909619207,
+      "p25_bps": -15.447448646073303,
+      "p75_bps": 12.159744862823391,
+      "std_bps": 29.69446783358247
+    }
+  ],
+  "between_flip": {
+    "n": 3301,
+    "avg_holding_seconds": 9273.317451681307,
+    "median_holding_seconds": 5860.987999916077,
+    "avg_signed_return_bps": -0.45738007935198693,
+    "avg_net_return_bps": -1.4573800793519869,
+    "hit_rate": 0.4422902150863375,
+    "hit_rate_net": 0.4338079369887913,
+    "median_signed_return_bps": -9.03045009511103,
+    "p25_bps": -42.269350609003936,
+    "p75_bps": 39.56087429532193,
+    "std_bps": 105.74786237248445
+  },
+  "by_month": [
+    {
+      "month": "2025-07",
+      "n_flips": 203,
+      "avg_signed_return_bps": -1.1484776281202085,
+      "avg_net_return_bps": -2.1484776281202085,
+      "hit_rate": 0.46798029556650245
+    },
+    {
+      "month": "2025-08",
+      "n_flips": 316,
+      "avg_signed_return_bps": -1.2484777575901271,
+      "avg_net_return_bps": -2.248477757590127,
+      "hit_rate": 0.47468354430379744
+    },
+    {
+      "month": "2025-09",
+      "n_flips": 268,
+      "avg_signed_return_bps": -8.38633650115674,
+      "avg_net_return_bps": -9.38633650115674,
+      "hit_rate": 0.4216417910447761
+    },
+    {
+      "month": "2025-10",
+      "n_flips": 350,
+      "avg_signed_return_bps": 2.4500547785363387,
+      "avg_net_return_bps": 1.4500547785363387,
+      "hit_rate": 0.44
+    },
+    {
+      "month": "2025-11",
+      "n_flips": 349,
+      "avg_signed_return_bps": 8.50305888083409,
+      "avg_net_return_bps": 7.5030588808340895,
+      "hit_rate": 0.45272206303724927
+    },
+    {
+      "month": "2025-12",
+      "n_flips": 280,
+      "avg_signed_return_bps": -3.7975525149273253,
+      "avg_net_return_bps": -4.797552514927325,
+      "hit_rate": 0.4392857142857143
+    },
+    {
+      "month": "2026-01",
+      "n_flips": 285,
+      "avg_signed_return_bps": 2.1263724367871393,
+      "avg_net_return_bps": 1.1263724367871393,
+      "hit_rate": 0.40350877192982454
+    },
+    {
+      "month": "2026-02",
+      "n_flips": 327,
+      "avg_signed_return_bps": 2.5315315503059823,
+      "avg_net_return_bps": 1.5315315503059823,
+      "hit_rate": 0.4648318042813456
+    },
+    {
+      "month": "2026-03",
+      "n_flips": 338,
+      "avg_signed_return_bps": -3.370200859826419,
+      "avg_net_return_bps": -4.370200859826419,
+      "hit_rate": 0.40828402366863903
+    },
+    {
+      "month": "2026-04",
+      "n_flips": 169,
+      "avg_signed_return_bps": -1.682434683191976,
+      "avg_net_return_bps": -2.682434683191976,
+      "hit_rate": 0.39644970414201186
+    },
+    {
+      "month": "2026-05",
+      "n_flips": 215,
+      "avg_signed_return_bps": -3.7627115587977658,
+      "avg_net_return_bps": -4.762711558797766,
+      "hit_rate": 0.4511627906976744
+    },
+    {
+      "month": "2026-06",
+      "n_flips": 201,
+      "avg_signed_return_bps": -2.973980953508869,
+      "avg_net_return_bps": -3.973980953508869,
+      "hit_rate": 0.48756218905472637
+    }
+  ],
+  "by_jst_hour": [
+    {
+      "jst_hour": 0,
+      "n_flips": 196,
+      "avg_signed_return_bps": 0.9190177137446,
+      "avg_net_return_bps": -0.08098228625540005,
+      "hit_rate": 0.5153061224489796
+    },
+    {
+      "jst_hour": 1,
+      "n_flips": 210,
+      "avg_signed_return_bps": 1.5700383593381189,
+      "avg_net_return_bps": 0.5700383593381189,
+      "hit_rate": 0.4666666666666667
+    },
+    {
+      "jst_hour": 4,
+      "n_flips": 161,
+      "avg_signed_return_bps": 1.5677326142359973,
+      "avg_net_return_bps": 0.5677326142359973,
+      "hit_rate": 0.4658385093167702
+    },
+    {
+      "jst_hour": 6,
+      "n_flips": 159,
+      "avg_signed_return_bps": -8.873297206629507,
+      "avg_net_return_bps": -9.873297206629507,
+      "hit_rate": 0.4088050314465409
+    },
+    {
+      "jst_hour": 7,
+      "n_flips": 207,
+      "avg_signed_return_bps": 1.4071909859537095,
+      "avg_net_return_bps": 0.4071909859537095,
+      "hit_rate": 0.4106280193236715
+    },
+    {
+      "jst_hour": 8,
+      "n_flips": 180,
+      "avg_signed_return_bps": -5.157161273494273,
+      "avg_net_return_bps": -6.157161273494273,
+      "hit_rate": 0.4222222222222222
+    },
+    {
+      "jst_hour": 10,
+      "n_flips": 201,
+      "avg_signed_return_bps": 1.826299579951801,
+      "avg_net_return_bps": 0.8262995799518009,
+      "hit_rate": 0.4427860696517413
+    },
+    {
+      "jst_hour": 11,
+      "n_flips": 181,
+      "avg_signed_return_bps": -10.193247830418114,
+      "avg_net_return_bps": -11.193247830418114,
+      "hit_rate": 0.39779005524861877
+    },
+    {
+      "jst_hour": 12,
+      "n_flips": 188,
+      "avg_signed_return_bps": 6.334100414250633,
+      "avg_net_return_bps": 5.334100414250633,
+      "hit_rate": 0.43617021276595747
+    },
+    {
+      "jst_hour": 13,
+      "n_flips": 169,
+      "avg_signed_return_bps": -2.5629519449432268,
+      "avg_net_return_bps": -3.5629519449432268,
+      "hit_rate": 0.46153846153846156
+    },
+    {
+      "jst_hour": 14,
+      "n_flips": 132,
+      "avg_signed_return_bps": 2.8683512203122494,
+      "avg_net_return_bps": 1.8683512203122494,
+      "hit_rate": 0.4696969696969697
+    },
+    {
+      "jst_hour": 16,
+      "n_flips": 172,
+      "avg_signed_return_bps": -2.77353815275603,
+      "avg_net_return_bps": -3.77353815275603,
+      "hit_rate": 0.4011627906976744
+    },
+    {
+      "jst_hour": 17,
+      "n_flips": 188,
+      "avg_signed_return_bps": -5.605029868032566,
+      "avg_net_return_bps": -6.605029868032566,
+      "hit_rate": 0.42021276595744683
+    },
+    {
+      "jst_hour": 18,
+      "n_flips": 190,
+      "avg_signed_return_bps": 0.5527497114281738,
+      "avg_net_return_bps": -0.44725028857182625,
+      "hit_rate": 0.35789473684210527
+    },
+    {
+      "jst_hour": 19,
+      "n_flips": 172,
+      "avg_signed_return_bps": 1.692228215500497,
+      "avg_net_return_bps": 0.6922282155004971,
+      "hit_rate": 0.5058139534883721
+    },
+    {
+      "jst_hour": 20,
+      "n_flips": 150,
+      "avg_signed_return_bps": -7.606248636253805,
+      "avg_net_return_bps": -8.606248636253806,
+      "hit_rate": 0.41333333333333333
+    },
+    {
+      "jst_hour": 22,
+      "n_flips": 208,
+      "avg_signed_return_bps": 2.985639840640663,
+      "avg_net_return_bps": 1.9856398406406628,
+      "hit_rate": 0.4519230769230769
+    },
+    {
+      "jst_hour": 23,
+      "n_flips": 237,
+      "avg_signed_return_bps": 7.476930802045418,
+      "avg_net_return_bps": 6.476930802045418,
+      "hit_rate": 0.4978902953586498
+    }
+  ]
+}

@@ -83,11 +83,11 @@ _DEFAULT_COSTS_BPS = 1.0  # round-trip slippage only (~0.5 bps each way);
                           # spread is already baked in via bid/ask execution prices
 
 
-def _flip_glob(flip_exchange: str, flip_symbol: str, box_size_rate: float, features_root: Path) -> str:
+def _flip_glob(flip_exchange: str, flip_symbol: str, box_size_rate: float, features_root: Path, sar_step: float = 0.02) -> str:
     return str(
         features_root / "dataset=ChartRangeSAR"
         / f"exchange={flip_exchange}" / f"symbol={flip_symbol}"
-        / f"box_size_rate={box_size_rate}"
+        / f"box_size_rate={box_size_rate}" / f"step={sar_step}"
         / "date=*" / "*.parquet"
     )
 
@@ -116,6 +116,7 @@ def run_flip_scan(
     start_date: str,
     end_date: str,
     box_size_rate: float = 0.0025,
+    sar_step: float = 0.02,
     execution_size: str = "150",
     horizons: list[int] = _DEFAULT_HORIZONS,
     costs_bps: float = _DEFAULT_COSTS_BPS,
@@ -130,7 +131,7 @@ def run_flip_scan(
     Returns a report dict with per-flip statistics before and after costs,
     for both fixed-horizon and between-flip return definitions.
     """
-    flip_glob  = _flip_glob(flip_exchange, flip_symbol, box_size_rate, features_root)
+    flip_glob  = _flip_glob(flip_exchange, flip_symbol, box_size_rate, features_root, sar_step)
     mp_glob    = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
     trade_glob = _trade_glob(flip_exchange, flip_symbol, data_root)
     con = duckdb.connect()
@@ -326,6 +327,7 @@ def run_flip_scan(
         "n_flips":         n_flips,
         "flips_per_day":   round(n_flips / n_days, 2),
         "box_size_rate":   box_size_rate,
+        "sar_step":        sar_step,
         "execution_size":  execution_size,
         "risk_gates": {
             "max_spread_bps":   max_spread_bps,
@@ -396,6 +398,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         start_date=args.start,
         end_date=args.end,
         box_size_rate=args.box_size_rate,
+        sar_step=args.sar_step,
         execution_size=args.execution_size,
         horizons=[int(h) for h in args.horizons.split(",")],
         costs_bps=args.costs_bps,
@@ -422,6 +425,7 @@ def main() -> int:
     p.add_argument("--start",           required=True, help="Start date YYYY-MM-DD")
     p.add_argument("--end",             required=True, help="End date YYYY-MM-DD")
     p.add_argument("--box-size-rate",    type=float, default=0.0025, help="Range bar size rate (e.g. 0.0025)")
+    p.add_argument("--sar-step",         type=float, default=0.02,   help="Parabolic SAR step/acceleration (e.g. 0.02 or 0.04)")
     p.add_argument("--execution-size",   default="150", help="MarketPrice execution size partition (e.g. 150 for XRP_JPY, 0.1 for ETH_JPY, 0.002 for BTC_JPY)")
     p.add_argument("--horizons",        default=",".join(str(h) for h in _DEFAULT_HORIZONS))
     p.add_argument("--costs-bps",       type=float, default=_DEFAULT_COSTS_BPS)
