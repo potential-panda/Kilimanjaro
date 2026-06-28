@@ -13,8 +13,10 @@
   "risk_gates": {
     "max_spread_bps": 6.0,
     "max_trades_30s": 1000,
+    "block_jst_hours": [],
     "n_spread_blocked": 2046,
     "n_rate_blocked": 6195,
+    "n_hour_blocked": 0,
     "n_raw_flips": 11003
   },
   "fixed_horizon": [

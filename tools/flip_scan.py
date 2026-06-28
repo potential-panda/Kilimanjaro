@@ -121,6 +121,7 @@ def run_flip_scan(
     costs_bps: float = _DEFAULT_COSTS_BPS,
     max_spread_bps: float | None = None,
     max_trades_30s: int | None = None,
+    block_jst_hours: list[int] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path = _DEFAULT_FEATURES_ROOT,
 ) -> dict:
@@ -162,11 +163,14 @@ def run_flip_scan(
         raise ValueError(f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}")
 
     # ── Risk gates ────────────────────────────────────────────────────────────
+    _JST_OFFSET = 9 * 3600
     flips_df["entry_spread_bps"] = (
         (flips_df["entry_ask"] - flips_df["entry_bid"]) / flips_df["entry_bid"] * 10_000
     )
+    flips_df["jst_hour"] = ((flips_df["ts"] + _JST_OFFSET) % 86400 // 3600).astype(int)
     n_spread_blocked = 0
     n_rate_blocked   = 0
+    n_hour_blocked   = 0
 
     if max_spread_bps is not None:
         spread_mask = flips_df["entry_spread_bps"] >= max_spread_bps
@@ -197,7 +201,12 @@ def run_flip_scan(
         n_rate_blocked = int(rate_mask.sum())
         flips_df = flips_df[~rate_mask].copy()
 
-    n_flips_raw = len(flips_df) + n_spread_blocked + n_rate_blocked
+    if block_jst_hours:
+        hour_mask = flips_df["jst_hour"].isin(set(block_jst_hours))
+        n_hour_blocked = int(hour_mask.sum())
+        flips_df = flips_df[~hour_mask].copy()
+
+    n_flips_raw = len(flips_df) + n_spread_blocked + n_rate_blocked + n_hour_blocked
     n_flips = len(flips_df)
     n_days  = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
 
@@ -294,8 +303,7 @@ def run_flip_scan(
         })
 
     # ── Step 5: time-of-day breakdown (between-flip, JST buckets) ────────────
-    _JST = 9 * 3600
-    bf["jst_hour"] = ((bf["ts"] + _JST) % 86400 // 3600).astype(int)
+    # jst_hour already computed on flips_df and propagated to bf via merge
     by_hour = []
     for hour, g in bf.groupby("jst_hour"):
         sr = g["sar_up"] * (g["exit_price"] - g["entry_price"]) / g["entry_price"] * 10000
@@ -322,8 +330,10 @@ def run_flip_scan(
         "risk_gates": {
             "max_spread_bps":   max_spread_bps,
             "max_trades_30s":   max_trades_30s,
+            "block_jst_hours":  block_jst_hours or [],
             "n_spread_blocked": n_spread_blocked,
             "n_rate_blocked":   n_rate_blocked,
+            "n_hour_blocked":   n_hour_blocked,
             "n_raw_flips":      n_flips_raw,
         },
         "fixed_horizon":   horizon_results,
@@ -339,11 +349,15 @@ def print_summary(report: dict) -> None:
     print(f"FLIP SCAN: {report['flip_exchange']}/{report['flip_symbol']} → {report['target_exchange']}/{report['target_symbol']}")
     print(f"Window: {report['start_date']} .. {report['end_date']}  box_size_rate={report['box_size_rate']}  execution_size={report['execution_size']}")
     rg = report["risk_gates"]
-    gates_active = rg["max_spread_bps"] is not None or rg["max_trades_30s"] is not None
+    gates_active = (rg["max_spread_bps"] is not None
+                    or rg["max_trades_30s"] is not None
+                    or rg.get("block_jst_hours"))
     if gates_active:
-        print(f"Risk gates: spread<{rg['max_spread_bps']} bps / trades_30s<{rg['max_trades_30s']}")
+        hour_tag = f" / block_hours={rg['block_jst_hours']}" if rg.get("block_jst_hours") else ""
+        print(f"Risk gates: spread<{rg['max_spread_bps']} bps / trades_30s<{rg['max_trades_30s']}{hour_tag}")
+        total_blocked = rg['n_spread_blocked'] + rg['n_rate_blocked'] + rg.get('n_hour_blocked', 0)
         print(f"  Blocked: {rg['n_spread_blocked']} spread + {rg['n_rate_blocked']} rate "
-              f"= {rg['n_spread_blocked']+rg['n_rate_blocked']} of {rg['n_raw_flips']} raw flips")
+              f"+ {rg.get('n_hour_blocked', 0)} hour = {total_blocked} of {rg['n_raw_flips']} raw flips")
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
 
@@ -370,6 +384,10 @@ def print_summary(report: dict) -> None:
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
+    block_jst_hours = (
+        [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
+        if args.block_jst_hours else []
+    )
     report = run_flip_scan(
         flip_exchange=args.flip_exchange,
         flip_symbol=args.flip_symbol,
@@ -383,6 +401,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         costs_bps=args.costs_bps,
         max_spread_bps=args.max_spread_bps or None,
         max_trades_30s=args.max_trades_30s or None,
+        block_jst_hours=block_jst_hours or None,
     )
     print_summary(report)
     if args.out:
@@ -410,6 +429,8 @@ def main() -> int:
                    help="Skip flips where GMO spread >= this (bps). 0 to disable.")
     p.add_argument("--max-trades-30s",  type=int,   default=1000,
                    help="Skip flips where BINANCE trades in prior 30s >= this. 0 to disable.")
+    p.add_argument("--block-jst-hours", default="",
+                   help="Comma-separated JST hours to block (e.g. '2,3,5,9,15,21'). Empty = no hour gate.")
     p.add_argument("--out",             default=None, help="Write JSON report to this path")
     p.set_defaults(func=_cmd_scan)
 
