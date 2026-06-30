@@ -21,8 +21,9 @@ _LEDGER_PATH = _ROOT / "ledger" / "events.jsonl"
 _WEB_DIR = _ROOT / "web"
 
 sys.path.insert(0, str(_ROOT / "tools"))
-from ledger import _latest_status, load_events, load_specs  # noqa: E402
 from results_summary import build_results  # noqa: E402
+
+from ledger import _latest_status, load_events, load_specs  # noqa: E402
 
 app = Flask(__name__, static_folder=str(_WEB_DIR))
 
@@ -38,7 +39,9 @@ def _events_by_hypothesis() -> dict[str, list[dict]]:
 
 def _hypothesis_summary(hyp_id: str, spec: dict, events: list[dict]) -> dict:
     h = spec["hypothesis"]
-    decision_reasons = sorted({e["decision_reason"] for e in events if e.get("decision_reason")})
+    decision_reasons = sorted(
+        {e["decision_reason"] for e in events if e.get("decision_reason")}
+    )
     scan_report_ids = [
         e["artifact_ids"]["scan_report_id"]
         for e in events
@@ -76,11 +79,13 @@ def api_hypothesis_detail(hyp_id: str):
     if spec is None:
         abort(404)
     events = _events_by_hypothesis().get(hyp_id, [])
-    return jsonify({
-        "summary": _hypothesis_summary(hyp_id, spec, events),
-        "spec": spec,
-        "events": events,
-    })
+    return jsonify(
+        {
+            "summary": _hypothesis_summary(hyp_id, spec, events),
+            "spec": spec,
+            "events": events,
+        }
+    )
 
 
 @app.route("/api/scan-reports/<report_id>")
@@ -103,6 +108,7 @@ def api_results():
 
 
 # -- Static / SPA --------------------------------------------------------
+
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
