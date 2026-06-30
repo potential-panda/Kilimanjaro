@@ -123,6 +123,8 @@ def run_flip_scan(
     max_spread_bps: float | None = None,
     max_trades_30s: int | None = None,
     block_jst_hours: list[int] | None = None,
+    block_sat_jst_hours: list[int] | None = None,
+    exclude_jst_dates: list[str] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path = _DEFAULT_FEATURES_ROOT,
 ) -> dict:
@@ -168,10 +170,21 @@ def run_flip_scan(
     flips_df["entry_spread_bps"] = (
         (flips_df["entry_ask"] - flips_df["entry_bid"]) / flips_df["entry_bid"] * 10_000
     )
-    flips_df["jst_hour"] = ((flips_df["ts"] + _JST_OFFSET) % 86400 // 3600).astype(int)
+    jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
+    flips_df["jst_hour"]    = (jst_shifted % 86400 // 3600).astype(int)
+    flips_df["jst_weekday"] = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.dayofweek  # 0=Mon 5=Sat
+    flips_df["jst_date"]    = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.date.astype(str)
     n_spread_blocked = 0
     n_rate_blocked   = 0
     n_hour_blocked   = 0
+    n_sat_blocked    = 0
+    n_date_blocked   = 0
+
+    if exclude_jst_dates:
+        date_set = set(exclude_jst_dates)
+        date_mask = flips_df["jst_date"].isin(date_set)
+        n_date_blocked = int(date_mask.sum())
+        flips_df = flips_df[~date_mask].copy()
 
     if max_spread_bps is not None:
         spread_mask = flips_df["entry_spread_bps"] >= max_spread_bps
@@ -207,7 +220,13 @@ def run_flip_scan(
         n_hour_blocked = int(hour_mask.sum())
         flips_df = flips_df[~hour_mask].copy()
 
-    n_flips_raw = len(flips_df) + n_spread_blocked + n_rate_blocked + n_hour_blocked
+    if block_sat_jst_hours:
+        sat_mask = (flips_df["jst_weekday"] == 5) & flips_df["jst_hour"].isin(set(block_sat_jst_hours))
+        n_sat_blocked = int(sat_mask.sum())
+        flips_df = flips_df[~sat_mask].copy()
+
+    n_flips_raw = (len(flips_df) + n_spread_blocked + n_rate_blocked
+                   + n_hour_blocked + n_sat_blocked + n_date_blocked)
     n_flips = len(flips_df)
     n_days  = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
 
@@ -330,13 +349,17 @@ def run_flip_scan(
         "sar_step":        sar_step,
         "execution_size":  execution_size,
         "risk_gates": {
-            "max_spread_bps":   max_spread_bps,
-            "max_trades_30s":   max_trades_30s,
-            "block_jst_hours":  block_jst_hours or [],
-            "n_spread_blocked": n_spread_blocked,
-            "n_rate_blocked":   n_rate_blocked,
-            "n_hour_blocked":   n_hour_blocked,
-            "n_raw_flips":      n_flips_raw,
+            "max_spread_bps":     max_spread_bps,
+            "max_trades_30s":     max_trades_30s,
+            "block_jst_hours":    block_jst_hours or [],
+            "block_sat_jst_hours": block_sat_jst_hours or [],
+            "exclude_jst_dates":  exclude_jst_dates or [],
+            "n_spread_blocked":   n_spread_blocked,
+            "n_rate_blocked":     n_rate_blocked,
+            "n_hour_blocked":     n_hour_blocked,
+            "n_sat_blocked":      n_sat_blocked,
+            "n_date_blocked":     n_date_blocked,
+            "n_raw_flips":        n_flips_raw,
         },
         "fixed_horizon":   horizon_results,
         "between_flip":    between_flip,
@@ -353,13 +376,23 @@ def print_summary(report: dict) -> None:
     rg = report["risk_gates"]
     gates_active = (rg["max_spread_bps"] is not None
                     or rg["max_trades_30s"] is not None
-                    or rg.get("block_jst_hours"))
+                    or rg.get("block_jst_hours")
+                    or rg.get("block_sat_jst_hours")
+                    or rg.get("exclude_jst_dates"))
     if gates_active:
-        hour_tag = f" / block_hours={rg['block_jst_hours']}" if rg.get("block_jst_hours") else ""
-        print(f"Risk gates: spread<{rg['max_spread_bps']} bps / trades_30s<{rg['max_trades_30s']}{hour_tag}")
-        total_blocked = rg['n_spread_blocked'] + rg['n_rate_blocked'] + rg.get('n_hour_blocked', 0)
+        parts = []
+        if rg["max_spread_bps"] is not None: parts.append(f"spread<{rg['max_spread_bps']} bps")
+        if rg["max_trades_30s"] is not None: parts.append(f"trades_30s<{rg['max_trades_30s']}")
+        if rg.get("block_jst_hours"):        parts.append(f"block_hours={rg['block_jst_hours']}")
+        if rg.get("block_sat_jst_hours"):    parts.append(f"block_sat_hours={rg['block_sat_jst_hours']}")
+        if rg.get("exclude_jst_dates"):      parts.append(f"exclude_jst_dates={rg['exclude_jst_dates']}")
+        print(f"Gates: {' / '.join(parts)}")
+        total_blocked = (rg['n_spread_blocked'] + rg['n_rate_blocked']
+                         + rg.get('n_hour_blocked', 0) + rg.get('n_sat_blocked', 0)
+                         + rg.get('n_date_blocked', 0))
         print(f"  Blocked: {rg['n_spread_blocked']} spread + {rg['n_rate_blocked']} rate "
-              f"+ {rg.get('n_hour_blocked', 0)} hour = {total_blocked} of {rg['n_raw_flips']} raw flips")
+              f"+ {rg.get('n_hour_blocked', 0)} hour + {rg.get('n_sat_blocked', 0)} sat "
+              f"+ {rg.get('n_date_blocked', 0)} date = {total_blocked} of {rg['n_raw_flips']} raw flips")
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
 
@@ -390,6 +423,14 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
         if args.block_jst_hours else []
     )
+    block_sat_jst_hours = (
+        [int(h) for h in args.block_sat_jst_hours.split(",") if h.strip()]
+        if args.block_sat_jst_hours else []
+    )
+    exclude_jst_dates = (
+        [d.strip() for d in args.exclude_jst_dates.split(",") if d.strip()]
+        if args.exclude_jst_dates else []
+    )
     report = run_flip_scan(
         flip_exchange=args.flip_exchange,
         flip_symbol=args.flip_symbol,
@@ -405,6 +446,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         max_spread_bps=args.max_spread_bps or None,
         max_trades_30s=args.max_trades_30s or None,
         block_jst_hours=block_jst_hours or None,
+        block_sat_jst_hours=block_sat_jst_hours or None,
+        exclude_jst_dates=exclude_jst_dates or None,
     )
     print_summary(report)
     if args.out:
@@ -433,8 +476,12 @@ def main() -> int:
                    help="Skip flips where GMO spread >= this (bps). 0 to disable.")
     p.add_argument("--max-trades-30s",  type=int,   default=1000,
                    help="Skip flips where BINANCE trades in prior 30s >= this. 0 to disable.")
-    p.add_argument("--block-jst-hours", default="",
-                   help="Comma-separated JST hours to block (e.g. '2,3,5,9,15,21'). Empty = no hour gate.")
+    p.add_argument("--block-jst-hours",     default="",
+                   help="Comma-separated JST hours to block every day (e.g. '1,23'). Empty = no gate.")
+    p.add_argument("--block-sat-jst-hours", default="",
+                   help="Comma-separated JST hours to block on Saturdays only (e.g. '8,9,10,11' for schedule3).")
+    p.add_argument("--exclude-jst-dates",   default="",
+                   help="Comma-separated JST dates (YYYY-MM-DD) to exclude entirely (e.g. '2025-10-11').")
     p.add_argument("--out",             default=None, help="Write JSON report to this path")
     p.set_defaults(func=_cmd_scan)
 
