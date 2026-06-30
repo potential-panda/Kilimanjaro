@@ -67,6 +67,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import deque
 from pathlib import Path
 
 import duckdb
@@ -128,6 +129,8 @@ def run_flip_scan(
     sar_flip_rate_window: float | None = None,
     sar_flip_rate_max: int | None = None,
     sar_flip_rate_cooldown: float = 3600.0,
+    rolling_dd_window_seconds: float | None = None,
+    rolling_dd_threshold_bps: float | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path = _DEFAULT_FEATURES_ROOT,
 ) -> dict:
@@ -253,8 +256,40 @@ def run_flip_scan(
         n_flip_rate_blocked = int(blocked.sum())
         flips_df = flips_df[~blocked].copy()
 
+    n_rolling_dd_blocked = 0
+    if rolling_dd_threshold_bps is not None and rolling_dd_window_seconds is not None and not flips_df.empty:
+        ts_arr     = flips_df["ts"].values
+        ep_ask_arr = flips_df["entry_ask"].values
+        ep_bid_arr = flips_df["entry_bid"].values
+        sar_up_arr = flips_df["sar_up"].values
+        n = len(ts_arr)
+        entry_p   = np.where(sar_up_arr > 0, ep_ask_arr, ep_bid_arr)
+        prov_exit = np.empty(n)
+        prov_exit[:-1] = np.where(sar_up_arr[:-1] > 0, ep_bid_arr[1:], ep_ask_arr[1:])
+        prov_exit[-1]  = np.nan
+        with np.errstate(invalid="ignore"):
+            prov_ret = sar_up_arr * (prov_exit - entry_p) / entry_p * 10000
+        buf     = deque()
+        cum_pnl = 0.0
+        kept    = np.ones(n, dtype=bool)
+        for i in range(n):
+            t = ts_arr[i]
+            while buf and buf[0][0] < t - rolling_dd_window_seconds:
+                buf.popleft()
+            peak_6h = max(v for _, v in buf) if buf else cum_pnl
+            if (peak_6h - cum_pnl) > rolling_dd_threshold_bps:
+                kept[i] = False
+            else:
+                r = prov_ret[i]
+                if not np.isnan(r):
+                    cum_pnl += r
+                    buf.append((t, cum_pnl))
+        n_rolling_dd_blocked = int((~kept).sum())
+        flips_df = flips_df[kept].copy()
+
     n_flips_raw = (len(flips_df) + n_spread_blocked + n_rate_blocked
-                   + n_hour_blocked + n_sat_blocked + n_date_blocked + n_flip_rate_blocked)
+                   + n_hour_blocked + n_sat_blocked + n_date_blocked
+                   + n_flip_rate_blocked + n_rolling_dd_blocked)
     n_flips = len(flips_df)
     n_days  = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
 
@@ -382,16 +417,19 @@ def run_flip_scan(
             "block_jst_hours":         block_jst_hours or [],
             "block_sat_jst_hours":     block_sat_jst_hours or [],
             "exclude_jst_dates":       exclude_jst_dates or [],
-            "sar_flip_rate_window":    sar_flip_rate_window,
-            "sar_flip_rate_max":       sar_flip_rate_max,
-            "sar_flip_rate_cooldown":  sar_flip_rate_cooldown,
-            "n_spread_blocked":        n_spread_blocked,
-            "n_rate_blocked":          n_rate_blocked,
-            "n_hour_blocked":          n_hour_blocked,
-            "n_sat_blocked":           n_sat_blocked,
-            "n_date_blocked":          n_date_blocked,
-            "n_flip_rate_blocked":     n_flip_rate_blocked,
-            "n_raw_flips":             n_flips_raw,
+            "sar_flip_rate_window":       sar_flip_rate_window,
+            "sar_flip_rate_max":          sar_flip_rate_max,
+            "sar_flip_rate_cooldown":     sar_flip_rate_cooldown,
+            "rolling_dd_window_seconds":  rolling_dd_window_seconds,
+            "rolling_dd_threshold_bps":   rolling_dd_threshold_bps,
+            "n_spread_blocked":           n_spread_blocked,
+            "n_rate_blocked":             n_rate_blocked,
+            "n_hour_blocked":             n_hour_blocked,
+            "n_sat_blocked":              n_sat_blocked,
+            "n_date_blocked":             n_date_blocked,
+            "n_flip_rate_blocked":        n_flip_rate_blocked,
+            "n_rolling_dd_blocked":       n_rolling_dd_blocked,
+            "n_raw_flips":                n_flips_raw,
         },
         "fixed_horizon":   horizon_results,
         "between_flip":    between_flip,
@@ -421,13 +459,17 @@ def print_summary(report: dict) -> None:
         if rg.get("exclude_jst_dates"):         parts.append(f"exclude_jst_dates={rg['exclude_jst_dates']}")
         if rg.get("sar_flip_rate_max") is not None:
             parts.append(f"sar_flip_rate<={rg['sar_flip_rate_max']}/{rg['sar_flip_rate_window']}s")
+        if rg.get("rolling_dd_threshold_bps") is not None:
+            parts.append(f"rolling_dd<={rg['rolling_dd_threshold_bps']}bps/{rg['rolling_dd_window_seconds']}s")
         print(f"Gates: {' / '.join(parts)}")
         total_blocked = (rg['n_spread_blocked'] + rg['n_rate_blocked']
                          + rg.get('n_hour_blocked', 0) + rg.get('n_sat_blocked', 0)
-                         + rg.get('n_date_blocked', 0) + rg.get('n_flip_rate_blocked', 0))
+                         + rg.get('n_date_blocked', 0) + rg.get('n_flip_rate_blocked', 0)
+                         + rg.get('n_rolling_dd_blocked', 0))
         print(f"  Blocked: {rg['n_spread_blocked']} spread + {rg['n_rate_blocked']} rate "
               f"+ {rg.get('n_hour_blocked', 0)} hour + {rg.get('n_sat_blocked', 0)} sat "
               f"+ {rg.get('n_date_blocked', 0)} date + {rg.get('n_flip_rate_blocked', 0)} flip_rate"
+              f" + {rg.get('n_rolling_dd_blocked', 0)} rolling_dd"
               f" = {total_blocked} of {rg['n_raw_flips']} raw flips")
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
@@ -487,6 +529,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         sar_flip_rate_window=args.sar_flip_rate_window or None,
         sar_flip_rate_max=args.sar_flip_rate_max or None,
         sar_flip_rate_cooldown=args.sar_flip_rate_cooldown,
+        rolling_dd_window_seconds=args.rolling_dd_window_seconds or None,
+        rolling_dd_threshold_bps=args.rolling_dd_threshold_bps or None,
     )
     print_summary(report)
     if args.out:
@@ -527,6 +571,10 @@ def main() -> int:
                    help="Max SAR flips allowed in the window before blocking (e.g. 300). 0 to disable.")
     p.add_argument("--sar-flip-rate-cooldown", type=float, default=3600.0,
                    help="Seconds to keep gate closed after it fires, even if rate drops (default 3600).")
+    p.add_argument("--rolling-dd-window-seconds", type=float, default=0.0,
+                   help="Window in seconds for rolling peak-drawdown gate (e.g. 21600 for 6h). 0 to disable.")
+    p.add_argument("--rolling-dd-threshold-bps", type=float, default=0.0,
+                   help="Block when cum PnL drops this many bps from rolling peak (e.g. 1000). 0 to disable.")
     p.add_argument("--out",             default=None, help="Write JSON report to this path")
     p.set_defaults(func=_cmd_scan)
 
