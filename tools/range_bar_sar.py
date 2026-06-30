@@ -70,6 +70,17 @@ def _trade_glob(exchange: str, symbol: str) -> str:
     )
 
 
+def _iter_chunks(start_date: str, end_date: str, chunk_days: int):
+    """Yield (chunk_start, chunk_end) date strings covering [start_date, end_date]."""
+    from datetime import date, timedelta
+    cur = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+    delta = timedelta(days=chunk_days - 1)
+    while cur <= end:
+        yield str(cur), str(min(cur + delta, end))
+        cur += timedelta(days=chunk_days)
+
+
 def compute_sar_signal(
     exchange: str,
     symbol: str,
@@ -80,8 +91,13 @@ def compute_sar_signal(
     step: float = 0.02,
     maximum: float = 0.2,
     data_root: Path = _MAKALU_DATA_ROOT,
+    chunk_days: int = 7,
 ) -> pd.DataFrame:
     """Build range bars from `exchange/symbol` trade ticks and detect SAR flips.
+
+    Processes the date range in chunks of `chunk_days` to bound memory usage.
+    SAR state (bar_builder, indicator, position) carries over between chunks so
+    results are identical to a single-pass run.
 
     Returns one row per flip: ts, sar_up (+1.0 = up/buy side, -1.0 = down/sell),
     sar_flip (always 1.0), sar_level (the stop that was crossed).
@@ -90,13 +106,6 @@ def compute_sar_signal(
         data_root / "bronze" / "dataset=Trade"
         / f"exchange={exchange}" / f"symbol={symbol}" / "date=*" / "*.parquet"
     )
-    con = duckdb.connect()
-    trades_df = con.sql(
-        f"SELECT ts, price, size FROM read_parquet('{glob}', hive_partitioning=true) "
-        f"WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}' ORDER BY ts"
-    ).df()
-    if trades_df.empty:
-        raise RangeBarSarError(f"no Trade data for {exchange}/{symbol} {start_date}..{end_date}")
 
     bar_builder = RangeBarBuilder(box_size_rate)
     sar = ParabolicSarIndicator([acceleration, step, maximum])
@@ -105,44 +114,63 @@ def compute_sar_signal(
     sar_up: bool | None = None
     sar_ns: float | None = None
     position_side: bool | None = None  # None until warmup completes
-    rows = []
+    all_rows = []
 
-    for row in trades_df.itertuples(index=False):
-        trade = _Trade(float(row.price), float(row.size), float(row.ts))
-
-        bar = bar_builder.on_update(trade)
-        if bar is not None:
-            bar_deque.append(bar)
-            if len(bar_deque) == _CHART_LEN:
-                result = sar.compute(bar_deque)
-                if result.get("up") is not None:
-                    sar_up, sar_ns = result["up"], result["ns"]
-                    if position_side is None:
-                        # First warmup: assume already aligned so we don't
-                        # spuriously fire on the very first computed SAR.
-                        position_side = sar_up
-
-        if sar_up is None:
+    chunks = list(_iter_chunks(start_date, end_date, chunk_days))
+    for i, (chunk_start, chunk_end) in enumerate(chunks):
+        con = duckdb.connect()
+        trades_df = con.sql(
+            f"SELECT ts, price, size FROM read_parquet('{glob}', hive_partitioning=true) "
+            f"WHERE date >= DATE '{chunk_start}' AND date <= DATE '{chunk_end}' ORDER BY ts"
+        ).df()
+        con.close()
+        if trades_df.empty:
+            print(f"  chunk {i+1}/{len(chunks)} ({chunk_start}..{chunk_end}): no data, skipping")
             continue
 
-        # Tick-level cross check — identical to orion's template.py place_orders()
-        if sar_up is True and trade.price < sar_ns:
-            desired_side = False
-        elif sar_up is False and trade.price > sar_ns:
-            desired_side = True
-        else:
-            desired_side = None
+        print(f"  chunk {i+1}/{len(chunks)} ({chunk_start}..{chunk_end}): {len(trades_df):,} trades", flush=True)
 
-        if desired_side is not None and desired_side != position_side:
-            rows.append({
-                "ts": trade.get_ts(),
-                "sar_up": 1.0 if desired_side else -1.0,
-                "sar_flip": 1.0,
-                "sar_level": sar_ns,
-            })
-            position_side = desired_side
+        for row in trades_df.itertuples(index=False):
+            trade = _Trade(float(row.price), float(row.size), float(row.ts))
 
-    return pd.DataFrame(rows)
+            bar = bar_builder.on_update(trade)
+            if bar is not None:
+                bar_deque.append(bar)
+                if len(bar_deque) == _CHART_LEN:
+                    result = sar.compute(bar_deque)
+                    if result.get("up") is not None:
+                        sar_up, sar_ns = result["up"], result["ns"]
+                        if position_side is None:
+                            # First warmup: assume already aligned so we don't
+                            # spuriously fire on the very first computed SAR.
+                            position_side = sar_up
+
+            if sar_up is None:
+                continue
+
+            # Tick-level cross check — identical to orion's template.py place_orders()
+            if sar_up is True and trade.price < sar_ns:
+                desired_side = False
+            elif sar_up is False and trade.price > sar_ns:
+                desired_side = True
+            else:
+                desired_side = None
+
+            if desired_side is not None and desired_side != position_side:
+                all_rows.append({
+                    "ts": trade.get_ts(),
+                    "sar_up": 1.0 if desired_side else -1.0,
+                    "sar_flip": 1.0,
+                    "sar_level": sar_ns,
+                })
+                position_side = desired_side
+
+        del trades_df  # free memory before next chunk
+
+    if not all_rows:
+        raise RangeBarSarError(f"no Trade data for {exchange}/{symbol} {start_date}..{end_date}")
+
+    return pd.DataFrame(all_rows)
 
 
 def write_sar_signal(
@@ -182,6 +210,9 @@ def main() -> int:
     parser.add_argument("--acceleration", type=float, default=0.02)
     parser.add_argument("--step", type=float, default=0.02)
     parser.add_argument("--maximum", type=float, default=0.2)
+    parser.add_argument("--chunk-days", type=int, default=7,
+                        help="Process this many days per memory chunk (default 7). "
+                             "SAR state carries over between chunks.")
     parser.add_argument("--out-dir", default=str(_DEFAULT_FEATURES_ROOT))
     args = parser.parse_args()
 
@@ -190,6 +221,7 @@ def main() -> int:
         args.start, args.end,
         args.box_size_rate,
         args.acceleration, args.step, args.maximum,
+        chunk_days=args.chunk_days,
     )
     paths = write_sar_signal(df, args.exchange, args.symbol, args.box_size_rate, args.step, Path(args.out_dir))
     flips = int(df["sar_flip"].sum()) if not df.empty else 0
