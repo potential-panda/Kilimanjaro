@@ -125,6 +125,9 @@ def run_flip_scan(
     block_jst_hours: list[int] | None = None,
     block_sat_jst_hours: list[int] | None = None,
     exclude_jst_dates: list[str] | None = None,
+    sar_flip_rate_window: float | None = None,
+    sar_flip_rate_max: int | None = None,
+    sar_flip_rate_cooldown: float = 3600.0,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path = _DEFAULT_FEATURES_ROOT,
 ) -> dict:
@@ -174,11 +177,12 @@ def run_flip_scan(
     flips_df["jst_hour"]    = (jst_shifted % 86400 // 3600).astype(int)
     flips_df["jst_weekday"] = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.dayofweek  # 0=Mon 5=Sat
     flips_df["jst_date"]    = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.date.astype(str)
-    n_spread_blocked = 0
-    n_rate_blocked   = 0
-    n_hour_blocked   = 0
-    n_sat_blocked    = 0
-    n_date_blocked   = 0
+    n_spread_blocked    = 0
+    n_rate_blocked      = 0
+    n_hour_blocked      = 0
+    n_sat_blocked       = 0
+    n_date_blocked      = 0
+    n_flip_rate_blocked = 0
 
     if exclude_jst_dates:
         date_set = set(exclude_jst_dates)
@@ -225,8 +229,32 @@ def run_flip_scan(
         n_sat_blocked = int(sat_mask.sum())
         flips_df = flips_df[~sat_mask].copy()
 
+    if sar_flip_rate_max is not None and sar_flip_rate_window is not None and not flips_df.empty:
+        # Rolling flip-rate gate with cooldown.  All flips (blocked or not) count toward the
+        # rate so the gate stays closed while the market oscillates.  The cooldown prevents
+        # the gate from reopening during brief pauses in a sustained crash.
+        ts_arr = flips_df["ts"].values
+        n = len(ts_arr)
+        counts = np.zeros(n, dtype=int)
+        lo = 0
+        for hi in range(n):
+            while ts_arr[lo] < ts_arr[hi] - sar_flip_rate_window:
+                lo += 1
+            counts[hi] = hi - lo + 1
+        blocked = np.zeros(n, dtype=bool)
+        closed_until = 0.0
+        for hi in range(n):
+            t = ts_arr[hi]
+            if counts[hi] > sar_flip_rate_max:
+                closed_until = t + sar_flip_rate_cooldown
+                blocked[hi] = True
+            elif t < closed_until:
+                blocked[hi] = True
+        n_flip_rate_blocked = int(blocked.sum())
+        flips_df = flips_df[~blocked].copy()
+
     n_flips_raw = (len(flips_df) + n_spread_blocked + n_rate_blocked
-                   + n_hour_blocked + n_sat_blocked + n_date_blocked)
+                   + n_hour_blocked + n_sat_blocked + n_date_blocked + n_flip_rate_blocked)
     n_flips = len(flips_df)
     n_days  = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
 
@@ -349,17 +377,21 @@ def run_flip_scan(
         "sar_step":        sar_step,
         "execution_size":  execution_size,
         "risk_gates": {
-            "max_spread_bps":     max_spread_bps,
-            "max_trades_30s":     max_trades_30s,
-            "block_jst_hours":    block_jst_hours or [],
-            "block_sat_jst_hours": block_sat_jst_hours or [],
-            "exclude_jst_dates":  exclude_jst_dates or [],
-            "n_spread_blocked":   n_spread_blocked,
-            "n_rate_blocked":     n_rate_blocked,
-            "n_hour_blocked":     n_hour_blocked,
-            "n_sat_blocked":      n_sat_blocked,
-            "n_date_blocked":     n_date_blocked,
-            "n_raw_flips":        n_flips_raw,
+            "max_spread_bps":          max_spread_bps,
+            "max_trades_30s":          max_trades_30s,
+            "block_jst_hours":         block_jst_hours or [],
+            "block_sat_jst_hours":     block_sat_jst_hours or [],
+            "exclude_jst_dates":       exclude_jst_dates or [],
+            "sar_flip_rate_window":    sar_flip_rate_window,
+            "sar_flip_rate_max":       sar_flip_rate_max,
+            "sar_flip_rate_cooldown":  sar_flip_rate_cooldown,
+            "n_spread_blocked":        n_spread_blocked,
+            "n_rate_blocked":          n_rate_blocked,
+            "n_hour_blocked":          n_hour_blocked,
+            "n_sat_blocked":           n_sat_blocked,
+            "n_date_blocked":          n_date_blocked,
+            "n_flip_rate_blocked":     n_flip_rate_blocked,
+            "n_raw_flips":             n_flips_raw,
         },
         "fixed_horizon":   horizon_results,
         "between_flip":    between_flip,
@@ -378,21 +410,25 @@ def print_summary(report: dict) -> None:
                     or rg["max_trades_30s"] is not None
                     or rg.get("block_jst_hours")
                     or rg.get("block_sat_jst_hours")
-                    or rg.get("exclude_jst_dates"))
+                    or rg.get("exclude_jst_dates")
+                    or rg.get("sar_flip_rate_max") is not None)
     if gates_active:
         parts = []
-        if rg["max_spread_bps"] is not None: parts.append(f"spread<{rg['max_spread_bps']} bps")
-        if rg["max_trades_30s"] is not None: parts.append(f"trades_30s<{rg['max_trades_30s']}")
-        if rg.get("block_jst_hours"):        parts.append(f"block_hours={rg['block_jst_hours']}")
-        if rg.get("block_sat_jst_hours"):    parts.append(f"block_sat_hours={rg['block_sat_jst_hours']}")
-        if rg.get("exclude_jst_dates"):      parts.append(f"exclude_jst_dates={rg['exclude_jst_dates']}")
+        if rg["max_spread_bps"] is not None:    parts.append(f"spread<{rg['max_spread_bps']} bps")
+        if rg["max_trades_30s"] is not None:    parts.append(f"trades_30s<{rg['max_trades_30s']}")
+        if rg.get("block_jst_hours"):           parts.append(f"block_hours={rg['block_jst_hours']}")
+        if rg.get("block_sat_jst_hours"):       parts.append(f"block_sat_hours={rg['block_sat_jst_hours']}")
+        if rg.get("exclude_jst_dates"):         parts.append(f"exclude_jst_dates={rg['exclude_jst_dates']}")
+        if rg.get("sar_flip_rate_max") is not None:
+            parts.append(f"sar_flip_rate<={rg['sar_flip_rate_max']}/{rg['sar_flip_rate_window']}s")
         print(f"Gates: {' / '.join(parts)}")
         total_blocked = (rg['n_spread_blocked'] + rg['n_rate_blocked']
                          + rg.get('n_hour_blocked', 0) + rg.get('n_sat_blocked', 0)
-                         + rg.get('n_date_blocked', 0))
+                         + rg.get('n_date_blocked', 0) + rg.get('n_flip_rate_blocked', 0))
         print(f"  Blocked: {rg['n_spread_blocked']} spread + {rg['n_rate_blocked']} rate "
               f"+ {rg.get('n_hour_blocked', 0)} hour + {rg.get('n_sat_blocked', 0)} sat "
-              f"+ {rg.get('n_date_blocked', 0)} date = {total_blocked} of {rg['n_raw_flips']} raw flips")
+              f"+ {rg.get('n_date_blocked', 0)} date + {rg.get('n_flip_rate_blocked', 0)} flip_rate"
+              f" = {total_blocked} of {rg['n_raw_flips']} raw flips")
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
 
@@ -448,6 +484,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         block_jst_hours=block_jst_hours or None,
         block_sat_jst_hours=block_sat_jst_hours or None,
         exclude_jst_dates=exclude_jst_dates or None,
+        sar_flip_rate_window=args.sar_flip_rate_window or None,
+        sar_flip_rate_max=args.sar_flip_rate_max or None,
+        sar_flip_rate_cooldown=args.sar_flip_rate_cooldown,
     )
     print_summary(report)
     if args.out:
@@ -482,6 +521,12 @@ def main() -> int:
                    help="Comma-separated JST hours to block on Saturdays only (e.g. '8,9,10,11' for schedule3).")
     p.add_argument("--exclude-jst-dates",   default="",
                    help="Comma-separated JST dates (YYYY-MM-DD) to exclude entirely (e.g. '2025-10-11').")
+    p.add_argument("--sar-flip-rate-window", type=float, default=0.0,
+                   help="Rolling window in seconds for SAR flip-rate gate (e.g. 60). 0 to disable.")
+    p.add_argument("--sar-flip-rate-max",    type=int,   default=0,
+                   help="Max SAR flips allowed in the window before blocking (e.g. 300). 0 to disable.")
+    p.add_argument("--sar-flip-rate-cooldown", type=float, default=3600.0,
+                   help="Seconds to keep gate closed after it fires, even if rate drops (default 3600).")
     p.add_argument("--out",             default=None, help="Write JSON report to this path")
     p.set_defaults(func=_cmd_scan)
 
