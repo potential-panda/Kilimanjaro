@@ -399,6 +399,7 @@ def run_flip_scan(
         })
 
     return {
+        "signal_style":    "skew",
         "flip_exchange":   flip_exchange,
         "flip_symbol":     flip_symbol,
         "target_exchange": target_exchange,
