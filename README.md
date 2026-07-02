@@ -249,6 +249,15 @@ profitable regardless of what the signal predicts.
   (`GMO/BTC_SPOT`): fill probability decreases monotonically with distance,
   and dips during the same low-activity window seen in the volatility wave.
 
+## Docs
+
+Reference documents for established baselines and design decisions:
+
+- [`doc/flip-scan-baseline.md`](doc/flip-scan-baseline.md) — canonical SAR
+  flip scan parameters (box=0.0025, step=0.02, rolling_dd gate only) with
+  gate calibration rationale, validated results for XRP and ETH A–D variants,
+  and the Oct-10-2025 chaos-event protection rationale.
+
 ## First Slice Recommendation
 
 Start with a workflow that does not generate strategy code yet.
