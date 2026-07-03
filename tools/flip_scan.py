@@ -173,7 +173,7 @@ def run_flip_scan(
         flips_df = flips_df[~date_mask].copy()
 
     if block_jst_hours:
-        hour_mask = flips_df["jst_hour"].isin(set(block_jst_hours))
+        hour_mask = (flips_df["jst_weekday"] <= 4) & flips_df["jst_hour"].isin(set(block_jst_hours))
         n_hour_blocked = int(hour_mask.sum())
         flips_df = flips_df[~hour_mask].copy()
 
