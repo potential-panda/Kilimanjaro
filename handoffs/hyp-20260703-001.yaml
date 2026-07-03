@@ -1,0 +1,68 @@
+handoff:
+  hypothesis_id: hyp-20260703-001
+  ledger_approval_event_id: evt-20260703-005
+  intended_strategy_family: Range-bar SAR between-flip execution
+  description: >
+    Baseline flip scan — no schedule filter, uniform params across all hours and
+    days. Enter GMO at each BINANCE SAR flip, hold until next flip, exit. Gate:
+    rolling_dd (6h window, 1000 bps threshold).
+  entry_exit_sketch: >
+    Signal: sar_flip (BINANCE ChartRangeSAR). Go long (enter at ask, exit at
+    bid on next flip) when sar_up=+1; go short (enter at bid, exit at ask on
+    next flip) when sar_up=-1. No fixed horizon — holding period is the
+    between-flip interval (~avg 60–300s depending on box/step). Gate: skip
+    entry if rolling 6h cumulative bps return is >1000 bps below its rolling
+    peak (rolling_dd gate).
+  potential_panda_core_mapping:
+    base_contract: qate.trading.strategy
+    example_variant_reference: orion v601 (between-flip variant, QIN_TENGFEI)
+    schedule_mode: nofilter (all hours, all days — no JST filter)
+    open_questions:
+      - Confirm rolling_dd gate resets between JST days or runs continuously
+      - Confirm execution_size partition matches orion live sizes
+
+  himalaya_run_config:
+    source_param_grid: handoffs/flip_scan_param_grid.yaml
+    combos_for_this_hypothesis:
+      - xrp-nofilter-1
+      - xrp-nofilter-2
+      - eth-nofilter-1
+      - eth-nofilter-2
+      - btc-nofilter-1
+      - btc-nofilter-2
+    markets:
+      - {exchange: BINANCE, symbol: XRP_USDT}
+      - {exchange: GMO,     symbol: XRP_JPY}
+      - {exchange: BINANCE, symbol: ETH_USDT}
+      - {exchange: GMO,     symbol: ETH_JPY}
+      - {exchange: BINANCE, symbol: BTC_USDT}
+      - {exchange: GMO,     symbol: BTC_JPY}
+    train_window:   {start_date: "2025-07-01", end_date: "2026-01-05"}
+    test_window:    {start_date: "2026-01-06", end_date: "2026-03-19"}
+    forward_window: {start_date: "2026-03-20", end_date: "2026-06-29"}
+    execution_model:
+      fees_bps: 0
+      slippage_bps: 0.5
+      latency_ms: 100
+      execution_sizes: {XRP_JPY: "150", ETH_JPY: "0.1", BTC_JPY: "0.002"}
+    gate:
+      rolling_dd_window_seconds: 21600
+      rolling_dd_threshold_bps: 1000
+
+  scan_summary:
+    period: "2025-07-01 to 2026-06-29"
+    markets:
+      XRP_JPY: {top1: "bsr0.003/s0.05 total=+19669", top2: "bsr0.0025/s0.02 total=+18260"}
+      ETH_JPY: {top1: "bsr0.0025/s0.02 total=+30376", top2: "bsr0.003/s0.04 total=+22566"}
+      BTC_JPY: {top1: "bsr0.0025/s0.05 total=+12120", top2: "bsr0.0025/s0.02 total=+8670"}
+
+  expected_outputs:
+    - net_pnl_after_costs
+    - trade_count
+    - turnover
+    - win_rate
+    - sharpe_or_equivalent
+    - max_drawdown
+    - capacity_sensitivity
+    - parameter_surface
+    - regime_breakdown

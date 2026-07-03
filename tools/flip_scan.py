@@ -83,6 +83,44 @@ _DEFAULT_HORIZONS = [30, 120, 300, 600]
 _DEFAULT_COSTS_BPS = 1.0  # round-trip slippage only (~0.5 bps each way);
                           # spread is already baked in via bid/ask execution prices
 
+_ALL_SAT = list(range(24))
+
+# Named schedule presets.  Each entry maps to the two block_* lists passed to
+# run_flip_scan.  "block" means "skip these flips"; the complement is what
+# actually trades.  block_jst_hours applies weekdays-only (Mon–Fri, fixed in
+# the weekday-only bug-fix); block_sat_jst_hours applies on Saturdays only.
+#
+# Convention:
+#   *_active   → trade during the active (higher-spread) window; block all else
+#   *_inactive → trade during the inactive (lower-spread) window; block all else
+#                weekends are included in inactive (no sat block)
+#   nofilter   → no schedule filter; all hours all days
+SCHEDULES: dict[str, dict] = {
+    # ── no schedule filter ─────────────────────────────────────────────────
+    "nofilter": {
+        "block_jst_hours": [],
+        "block_sat_jst_hours": [],
+    },
+    # ── XRP_JPY: active JST 07–21, inactive JST 22–06 ─────────────────────
+    "xrp_active": {
+        "block_jst_hours": [22, 23, 0, 1, 2, 3, 4, 5, 6],
+        "block_sat_jst_hours": _ALL_SAT,
+    },
+    "xrp_inactive": {
+        "block_jst_hours": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        "block_sat_jst_hours": [],
+    },
+    # ── ETH_JPY / BTC_JPY: active JST 06–21, inactive JST 22–05 ──────────
+    "default_active": {
+        "block_jst_hours": [22, 23, 0, 1, 2, 3, 4, 5],
+        "block_sat_jst_hours": _ALL_SAT,
+    },
+    "default_inactive": {
+        "block_jst_hours": [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        "block_sat_jst_hours": [],
+    },
+}
+
 
 def _flip_glob(flip_exchange: str, flip_symbol: str, box_size_rate: float, features_root: Path, sar_step: float = 0.02) -> str:
     return str(
@@ -400,14 +438,22 @@ def print_summary(report: dict) -> None:
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
-    block_jst_hours = (
-        [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
-        if args.block_jst_hours else []
-    )
-    block_sat_jst_hours = (
-        [int(h) for h in args.block_sat_jst_hours.split(",") if h.strip()]
-        if args.block_sat_jst_hours else []
-    )
+    if args.schedule:
+        if args.schedule not in SCHEDULES:
+            print(f"Error: unknown schedule '{args.schedule}'. Choose from: {', '.join(SCHEDULES)}", file=sys.stderr)
+            return 1
+        preset = SCHEDULES[args.schedule]
+        block_jst_hours = preset["block_jst_hours"]
+        block_sat_jst_hours = preset["block_sat_jst_hours"]
+    else:
+        block_jst_hours = (
+            [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
+            if args.block_jst_hours else []
+        )
+        block_sat_jst_hours = (
+            [int(h) for h in args.block_sat_jst_hours.split(",") if h.strip()]
+            if args.block_sat_jst_hours else []
+        )
     exclude_jst_dates = (
         [d.strip() for d in args.exclude_jst_dates.split(",") if d.strip()]
         if args.exclude_jst_dates else []
@@ -430,6 +476,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         rolling_dd_window_seconds=args.rolling_dd_window_seconds or None,
         rolling_dd_threshold_bps=args.rolling_dd_threshold_bps or None,
     )
+    if args.schedule:
+        report["schedule_name"] = args.schedule
     print_summary(report)
     if args.out:
         Path(args.out).write_text(json.dumps(report, indent=2))
@@ -453,10 +501,15 @@ def main() -> int:
     p.add_argument("--execution-size",   default="150", help="MarketPrice execution size partition (e.g. 150 for XRP_JPY, 0.1 for ETH_JPY, 0.002 for BTC_JPY)")
     p.add_argument("--horizons",        default=",".join(str(h) for h in _DEFAULT_HORIZONS))
     p.add_argument("--costs-bps",       type=float, default=_DEFAULT_COSTS_BPS)
+    p.add_argument("--schedule", default="",
+                   help=f"Named schedule preset (overrides --block-jst-hours / --block-sat-jst-hours). "
+                        f"Choices: {', '.join(SCHEDULES)}")
     p.add_argument("--block-jst-hours",     default="",
-                   help="Comma-separated JST hours to block every day (e.g. '1,23'). Empty = no gate.")
+                   help="Comma-separated JST hours to block on weekdays (e.g. '1,23'). Empty = no gate. "
+                        "Ignored when --schedule is set.")
     p.add_argument("--block-sat-jst-hours", default="",
-                   help="Comma-separated JST hours to block on Saturdays only.")
+                   help="Comma-separated JST hours to block on Saturdays only. "
+                        "Ignored when --schedule is set.")
     p.add_argument("--exclude-jst-dates",   default="",
                    help="Comma-separated JST dates (YYYY-MM-DD) to exclude entirely.")
     p.add_argument("--rolling-dd-window-seconds", type=float, default=0.0,
