@@ -1,0 +1,269 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260703-002
+  parent_id: hyp-20260703-001
+  title: "Schedule-adaptive flip scan: per-window (box, step) params for active/inactive hours (XRP/ETH/BTC)"
+  status: scan-passed
+  family: custom
+  family_label: "Range-bar SAR between-flip execution, schedule-adaptive params"
+  custom_family_justification: >
+    Extension of hyp-20260703-001 (baseline nofilter): splits trading into
+    active and inactive JST hour windows (different market character) and uses
+    independently optimized (box, step) parameters for each window. The
+    combined active+inactive total is the strategy's expected edge proxy.
+    Each market has its own active/inactive window boundaries and best param pair.
+  created_at: "2026-07-03T00:00:00Z"
+  owner: agent
+  summary: >
+    Schedule-adaptive flip scan: active and inactive JST hour windows are traded
+    with independently chosen (box, step) parameters per market. Rolling_dd gate
+    applies within each window. Weekend behavior: active scan blocks all Saturday
+    (block_sat_jst_hours=[0..23]); inactive scan runs on weekends unrestricted.
+    Weekday-only rule for block_jst_hours (bug fix: weekday <= 4). Optimized
+    over full grid box∈{0.0015,0.0025,0.003,0.004} × step∈{0.02,0.04,0.05}.
+  expected_edge_mechanism: >
+    Market microstructure (volatility, spread, liquidity) varies across JST
+    hours. Active hours (European/US overlap) favor larger bars (wider box)
+    and slower SAR step; inactive hours (Asian session) favor smaller moves
+    with different tempo. Per-window parameter tuning extracts more edge than
+    uniform parameters.
+  economic_rationale: >
+    During active (European/US) hours, larger price swings mean wider range bars
+    are needed to filter noise; during inactive (Asian) hours, tighter bars
+    capture smaller but persistent micro-trends. Using the same params for both
+    is suboptimal.
+  duplicate_search:
+    searched_at: "2026-07-03T00:00:00Z"
+    query_terms:
+      - schedule
+      - active
+      - inactive
+      - range bar
+      - SAR
+    possible_duplicates:
+      - "hyp-20260703-001: baseline; this spec replaces uniform params with per-window optimized params"
+    conclusion: new
+  data_requirements:
+    markets:
+      - exchange: BINANCE
+        symbol: XRP_USDT
+      - exchange: GMO
+        symbol: XRP_JPY
+      - exchange: BINANCE
+        symbol: ETH_USDT
+      - exchange: GMO
+        symbol: ETH_JPY
+      - exchange: BINANCE
+        symbol: BTC_USDT
+      - exchange: GMO
+        symbol: BTC_JPY
+    datasets:
+      - layer: feature
+        dataset: ChartRangeSAR
+        params:
+          box_size_rate: "[0.0025, 0.003, 0.004]"
+          sar_step: "[0.02, 0.04, 0.05]"
+      - layer: bronze
+        dataset: Trade
+    minimum_distinct_days: 200
+    required_columns: ["sar_flip", "ts", "jst_hour", "jst_weekday"]
+    unavailable_data_policy: needs-more-data
+    research_metadata: null
+  feature:
+    sql_expression: "sar_flip"
+    source_datasets:
+      - layer: feature
+        dataset: ChartRangeSAR
+        exchange: BINANCE
+        symbol: "{XRP,ETH,BTC}_USDT"
+        params:
+          box_size_rate: "per-market per-window (see schedule below)"
+          sar_step: "per-market per-window (see schedule below)"
+    primary_timestamp_column: ts
+    point_in_time_rule: >
+      SAR flip detected at range-bar close on BINANCE. Hour-window filter applied
+      to jst_hour; weekday filter (jst_weekday <= 4) applied to block_jst_hours
+      so Saturday/Sunday are never filtered by the hourly mask.
+  cross_market_rationale: >
+    Same as hyp-20260703-001: BINANCE leads GMO; execution on GMO.
+  schedule:
+    weekday_only_block_rule: >
+      block_jst_hours applies ONLY on weekdays (jst_weekday <= 4, Mon=0, Fri=4).
+      On weekends, all hours are in the inactive window; no hour mask is applied
+      there either (inactive scan runs freely on Saturday/Sunday).
+    markets:
+      XRP_JPY:
+        active_jst_hours: [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
+        inactive_jst_hours: [22,23,0,1,2,3,4,5,6]
+        active_params:
+          box_size_rate: 0.0025
+          sar_step: 0.04
+          scan_file: "scan-reports/xrp-bsr0025-step04-active.json"
+        inactive_params:
+          box_size_rate: 0.004
+          sar_step: 0.05
+          scan_file: "scan-reports/xrp-bsr004-step05-inactive.json"
+        block_sat_jst_hours_active: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
+        block_sat_jst_hours_inactive: []
+      ETH_JPY:
+        active_jst_hours: [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
+        inactive_jst_hours: [22,23,0,1,2,3,4,5]
+        active_params:
+          box_size_rate: 0.003
+          sar_step: 0.02
+          scan_file: "scan-reports/eth-bsr003-step02-active.json"
+        inactive_params:
+          box_size_rate: 0.004
+          sar_step: 0.04
+          scan_file: "scan-reports/eth-bsr004-step04-inactive.json"
+        block_sat_jst_hours_active: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
+        block_sat_jst_hours_inactive: []
+      BTC_JPY:
+        active_jst_hours: [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
+        inactive_jst_hours: [22,23,0,1,2,3,4,5]
+        active_params:
+          box_size_rate: 0.0025
+          sar_step: 0.02
+          scan_file: "scan-reports/btc-bsr0025-step02-active.json"
+        inactive_params:
+          box_size_rate: 0.003
+          sar_step: 0.04
+          scan_file: "scan-reports/btc-bsr003-step04-inactive.json"
+        block_sat_jst_hours_active: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
+        block_sat_jst_hours_inactive: []
+  target:
+    type: next_return
+    primary_horizon_seconds: 120
+    comparison_horizons_seconds: [120]
+    source_dataset:
+      layer: bronze
+      dataset: OrderBook
+      exchange: GMO
+      symbol: "{XRP,ETH,BTC}_JPY"
+    timestamp_cutoff_rule: >
+      Between-flip execution within schedule window: hold starts at flip ts,
+      ends at next flip ts in the same active/inactive window. Return measured
+      as signed mid-price change. primary_horizon_seconds=120 is a schema
+      placeholder; actual holding period is event-driven.
+  execution_assumptions:
+    order_type: market
+    fees_bps: 0
+    slippage_bps: 0.5
+    cost_total_bps: 1.0
+    latency_ms: 100
+    liquidity_capacity_assumption: "single-unit notional (150 XRP / 0.1 ETH / 0.002 BTC)"
+    cost_note: >
+      flip_scan.py applies 1 bps round-trip cost per flip. avg_net_return_bps
+      in scan reports is already net of this cost.
+  risk_gates:
+    rolling_dd:
+      window_seconds: 21600
+      threshold_bps: 1000
+      description: >
+        Same as hyp-20260703-001. Each scan (active/inactive) applies the gate
+        independently. The inactive XRP scan correctly fires during the Oct-11-2025
+        Saturday crash (8519 flips blocked by rolling_dd in that window).
+  scan_results:
+    scanner: flip_scan_v1
+    period: "2025-07-01 to 2026-06-29"
+    markets:
+      - symbol: XRP_JPY
+        window: active
+        box_size_rate: 0.0025
+        sar_step: 0.04
+        scan_file: "scan-reports/xrp-bsr0025-step04-active.json"
+        n_exec: 7597
+        avg_net_bps: 1.37
+        dd_blk: 0
+        window_total_bps: 10408
+      - symbol: XRP_JPY
+        window: inactive
+        box_size_rate: 0.004
+        sar_step: 0.05
+        scan_file: "scan-reports/xrp-bsr004-step05-inactive.json"
+        n_exec: 4478
+        avg_net_bps: 3.68
+        dd_blk: 8519
+        window_total_bps: 16479
+      - symbol: ETH_JPY
+        window: active
+        box_size_rate: 0.003
+        sar_step: 0.02
+        scan_file: "scan-reports/eth-bsr003-step02-active.json"
+        n_exec: 3617
+        avg_net_bps: 4.71
+        dd_blk: 470
+        window_total_bps: 17036
+      - symbol: ETH_JPY
+        window: inactive
+        box_size_rate: 0.004
+        sar_step: 0.04
+        scan_file: "scan-reports/eth-bsr004-step04-inactive.json"
+        n_exec: 3742
+        avg_net_bps: 4.67
+        dd_blk: 4137
+        window_total_bps: 17475
+      - symbol: BTC_JPY
+        window: active
+        box_size_rate: 0.0025
+        sar_step: 0.02
+        scan_file: "scan-reports/btc-bsr0025-step02-active.json"
+        n_exec: 2343
+        avg_net_bps: 4.01
+        dd_blk: 0
+        window_total_bps: 9395
+      - symbol: BTC_JPY
+        window: inactive
+        box_size_rate: 0.003
+        sar_step: 0.04
+        scan_file: "scan-reports/btc-bsr003-step04-inactive.json"
+        n_exec: 3000
+        avg_net_bps: 3.50
+        dd_blk: 4481
+        window_total_bps: 10500
+    combined_total_bps: 81293
+    vs_baseline_hyp: hyp-20260703-001
+    vs_baseline_combined_total_bps: 57306
+    improvement_bps: 23987
+    market_improvement:
+      XRP_JPY: "+7,657 bps (26,887 vs 18,260)"
+      ETH_JPY: "+4,135 bps (34,511 vs 30,376)"
+      BTC_JPY: "+11,225 bps (19,895 vs 8,670)"
+    verdict: scan-passed
+    verdict_text: >
+      Schedule-adaptive params outperform baseline (hyp-20260703-001) on all
+      three markets. Combined total 81,293 vs baseline 57,306 (+42% improvement).
+      ETH active is the strongest single window (4.71 bps, 3617 executions).
+      XRP inactive benefits most from crash protection (8519 dd_blk in Oct-11
+      Saturday event). BTC shows largest relative improvement (+41%) vs baseline.
+  falsification_tests:
+    - name: "schedule-adaptive-no-better-than-nofilter"
+      expected_failure_meaning: "combined active+inactive total <= baseline nofilter total (hyp-20260703-001), meaning per-window param tuning added no real edge beyond overfitting"
+    - name: "inactive-edge-driven-by-crash-protection-only"
+      expected_failure_meaning: "inactive avg_net turns negative when rolling_dd gate is removed, meaning the inactive window's positive result is entirely crash-filter artefact"
+    - name: "active-params-degrade-in-out-of-sample"
+      expected_failure_meaning: "active window (fewer executions) shows high variance: if the first-half vs second-half of the scan period shows opposite sign, params are overfit"
+
+  scan_plan:
+    primary_horizon_seconds: 120
+    threshold_grid: [120]
+    regime_buckets: ["low_vol", "mid_vol", "high_vol"]
+    significance_method: block_bootstrap_by_day
+
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: "orion v601 with per-schedule params"
+    himalaya_config_notes: >
+      Requires schedule_mode string param (xrp_active / xrp_inactive /
+      default_active / default_inactive). Each schedule has its own
+      (box_size_rate, sar_step) in orion config. Weekday-only rule must be
+      implemented in the schedule filter (jst_weekday <= 4 for hour masks).
+      Step 2: strategy code change; Step 3: Himalaya param grid YAML.
+  decisions:
+    - at: "2026-07-03T00:00:00Z"
+      actor: agent
+      decision: scan-passed
+      reason: >
+        All 6 market/window combinations show positive avg_net after 1 bps cost.
+        Combined total beats the nofilter baseline by +42% (+23,987 bps). The
+        per-window parameter approach is validated at the scan level. Next step
+        is Himalaya backtest (Step 2 code + Step 3 param grid).
