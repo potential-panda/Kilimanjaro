@@ -702,42 +702,83 @@ from(bucket: "{bucket}")
                     "time_diff": {}, "price_diff": {}}
 
     if not order_df.empty:
+        _jst = datetime.timezone(datetime.timedelta(hours=9))
         order_df["order_ts"] = order_df["_time"].apply(lambda t: t.timestamp())
         order_df = order_df.sort_values("order_ts").reset_index(drop=True)
         scan_sorted = flips_df.sort_values("ts").reset_index(drop=True)
 
-        # nearest-time match: for each scan flip, find the closest OPEN order
         order_ts_arr = order_df["order_ts"].values
         scan_ts_arr  = scan_sorted["ts"].values
-        idx = np.searchsorted(order_ts_arr, scan_ts_arr, side="left")
-        idx = np.clip(idx, 0, len(order_ts_arr) - 1)
-        # compare both neighbours and take the closer one
-        idx_prev = np.clip(idx - 1, 0, len(order_ts_arr) - 1)
-        d_next = np.abs(order_ts_arr[idx] - scan_ts_arr)
-        d_prev = np.abs(order_ts_arr[idx_prev] - scan_ts_arr)
-        best_idx = np.where(d_prev < d_next, idx_prev, idx)
-        time_diff = order_ts_arr[best_idx] - scan_ts_arr  # positive = order after flip
 
-        flip_price_matched = scan_sorted["flip_price"].values
-        exec_price_matched = order_df["EXEC_PRICE"].values[best_idx]
-        price_diff         = exec_price_matched - flip_price_matched
-        price_diff_bps     = price_diff / flip_price_matched * 10000
+        # Two-pointer threshold match (≤120 s = true pairing; larger = gap)
+        _MATCH_THRESHOLD = 120.0
+        s_to_o = np.full(len(scan_ts_arr), -1, dtype=int)   # scan idx → order idx
+        o_to_s = np.full(len(order_ts_arr), -1, dtype=int)  # order idx → scan idx
+        i, j = 0, 0
+        while i < len(scan_ts_arr) and j < len(order_ts_arr):
+            d = scan_ts_arr[i] - order_ts_arr[j]
+            if abs(d) <= _MATCH_THRESHOLD:
+                s_to_o[i] = j
+                o_to_s[j] = i
+                i += 1
+                j += 1
+            elif d < 0:   # scan flip is earlier; no matching order close enough
+                i += 1
+            else:         # order is earlier; no matching scan flip close enough
+                j += 1
 
-        n_matched = n_scan  # all scans matched to an order (may wrap if counts differ)
+        matched_mask_s = s_to_o >= 0
+        matched_mask_o = o_to_s >= 0
+        n_matched = int(matched_mask_s.sum())
+
+        time_diff  = order_ts_arr[s_to_o[matched_mask_s]] - scan_ts_arr[matched_mask_s]
+        fp_matched = scan_sorted["flip_price"].values[matched_mask_s]
+        ep_matched = order_df["EXEC_PRICE"].values[s_to_o[matched_mask_s]]
+        price_diff     = ep_matched - fp_matched
+        price_diff_bps = price_diff / fp_matched * 10000
+
+        # Collect gap rows for printing
+        gap_scan_idx  = np.where(~matched_mask_s)[0]   # scan flips with no order
+        gap_order_idx = np.where(~matched_mask_o)[0]   # orders with no scan flip
+
+        gap_rows: list[dict] = []
+        for idx in gap_scan_idx:
+            row = scan_sorted.iloc[idx]
+            ts_jst = datetime.datetime.fromtimestamp(row["ts"], tz=_jst)
+            gap_rows.append({
+                "kind":   "scan_only",
+                "ts_jst": ts_jst,
+                "dir":    f"sar_up={int(row['sar_up']):+d}",
+                "price":  f"flip={row['flip_price']:.0f}¥",
+            })
+        for idx in gap_order_idx:
+            row = order_df.iloc[idx]
+            ts_jst = datetime.datetime.fromtimestamp(row["order_ts"], tz=_jst)
+            gap_rows.append({
+                "kind":   "order_only",
+                "ts_jst": ts_jst,
+                "dir":    row.get("SIDE", "?"),
+                "price":  f"exec={row['EXEC_PRICE']:.0f}¥",
+            })
+        gap_rows.sort(key=lambda r: r["ts_jst"])
+
         order_result.update({
             "n_matched":    n_matched,
-            "n_gap":        abs(n_scan - n_orders),
+            "n_gap":        len(gap_scan_idx) + len(gap_order_idx),
+            "n_scan_only":  int(len(gap_scan_idx)),
+            "n_order_only": int(len(gap_order_idx)),
+            "gap_rows":     gap_rows,
             "time_diff": {
-                "mean_s":   float(np.mean(time_diff)),
-                "std_s":    float(np.std(time_diff)),
+                "mean_s":    float(np.mean(time_diff)),
+                "std_s":     float(np.std(time_diff)),
                 "max_abs_s": float(np.max(np.abs(time_diff))),
             },
             "price_diff": {
-                "mean_jpy":     float(np.mean(price_diff)),
-                "std_jpy":      float(np.std(price_diff)),
-                "max_abs_jpy":  float(np.max(np.abs(price_diff))),
-                "mean_bps":     float(np.mean(price_diff_bps)),
-                "std_bps":      float(np.std(price_diff_bps)),
+                "mean_jpy":    float(np.mean(price_diff)),
+                "std_jpy":     float(np.std(price_diff)),
+                "max_abs_jpy": float(np.max(np.abs(price_diff))),
+                "mean_bps":    float(np.mean(price_diff_bps)),
+                "std_bps":     float(np.std(price_diff_bps)),
             },
         })
 
@@ -787,7 +828,10 @@ from(bucket: "{bucket}")
     print(f"\n-- Order match (scan flip price vs backtest OPEN order) --")
     print(f"  scan flips : {order_result['n_scan']}")
     print(f"  orders     : {order_result['n_orders']}")
-    print(f"  gap        : {order_result.get('n_gap', 'n/a')}")
+    print(f"  matched    : {order_result.get('n_matched', 'n/a')}")
+    print(f"  gap        : {order_result.get('n_gap', 'n/a')}"
+          f"  (scan_only={order_result.get('n_scan_only', '?')}"
+          f"  order_only={order_result.get('n_order_only', '?')})")
     if order_result["time_diff"]:
         td = order_result["time_diff"]
         print(f"  time diff  : mean={td['mean_s']:+.3f}s  std={td['std_s']:.3f}s  max={td['max_abs_s']:.3f}s")
@@ -795,6 +839,12 @@ from(bucket: "{bucket}")
         pd_ = order_result["price_diff"]
         print(f"  price diff : mean={pd_['mean_jpy']:+.2f}¥  std={pd_['std_jpy']:.2f}¥"
               f"  mean={pd_['mean_bps']:+.3f}bps  std={pd_['std_bps']:.3f}bps")
+    gap_rows = order_result.get("gap_rows", [])
+    if gap_rows:
+        print(f"\n  {'#':<3}  {'kind':<12}  {'time (JST)':<26}  {'dir':<12}  {'price'}")
+        for k, r in enumerate(gap_rows):
+            print(f"  {k:<3}  {r['kind']:<12}  {r['ts_jst'].strftime('%Y-%m-%d %H:%M:%S'):<26}"
+                  f"  {r['dir']:<12}  {r['price']}")
 
     print(f"\n-- PnL match (scan between-flip JPY vs backtest pnl_change0) --")
     print(f"  scan positions : {pnl_result['n_scan_positions']}")
