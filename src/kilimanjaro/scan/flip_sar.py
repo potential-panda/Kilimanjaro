@@ -633,7 +633,8 @@ def verify(
         )
         SELECT f.ts, f.sar_up,
             CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS flip_price,
-            o.bid AS entry_bid, o.ask AS entry_ask
+            o.bid AS entry_bid, o.ask AS entry_ask,
+            o.ts AS mp_ts
         FROM flips f ASOF JOIN mp o ON o.ts >= f.ts
         ORDER BY f.ts
     """).df().dropna()
@@ -731,7 +732,8 @@ from(bucket: "{bucket}")
         matched_mask_o = o_to_s >= 0
         n_matched = int(matched_mask_s.sum())
 
-        time_diff  = order_ts_arr[s_to_o[matched_mask_s]] - scan_ts_arr[matched_mask_s]
+        mp_ts_arr  = scan_sorted["mp_ts"].values
+        time_diff  = order_ts_arr[s_to_o[matched_mask_s]] - mp_ts_arr[matched_mask_s]
         fp_matched = scan_sorted["flip_price"].values[matched_mask_s]
         ep_matched = order_df["EXEC_PRICE"].values[s_to_o[matched_mask_s]]
         price_diff     = ep_matched - fp_matched
@@ -834,7 +836,8 @@ from(bucket: "{bucket}")
           f"  order_only={order_result.get('n_order_only', '?')})")
     if order_result["time_diff"]:
         td = order_result["time_diff"]
-        print(f"  time diff  : mean={td['mean_s']:+.3f}s  std={td['std_s']:.3f}s  max={td['max_abs_s']:.3f}s")
+        print(f"  time diff  : mean={td['mean_s']:+.3f}s  std={td['std_s']:.3f}s  max={td['max_abs_s']:.3f}s"
+              f"  (GMO mp_ts → backtest fill)")
     if order_result["price_diff"]:
         pd_ = order_result["price_diff"]
         print(f"  price diff : mean={pd_['mean_jpy']:+.2f}¥  std={pd_['std_jpy']:.2f}¥"
