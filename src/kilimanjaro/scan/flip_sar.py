@@ -730,20 +730,24 @@ from(bucket: "{bucket}")
 
         order_ts_arr = order_df["order_ts"].values
         scan_ts_arr  = scan_sorted["ts"].values
+        mp_ts_arr    = scan_sorted["mp_ts"].values
 
-        # Two-pointer threshold match (≤120 s = true pairing; larger = gap)
-        _MATCH_THRESHOLD = 120.0
-        s_to_o = np.full(len(scan_ts_arr), -1, dtype=int)   # scan idx → order idx
+        # Match on mp_ts (= GMO MarketPrice ts) vs order_ts with a 2s threshold.
+        # True matches have mp_ts == order_ts exactly (same record); wrong cascade
+        # matches from gaps would differ by minutes or hours.  Using mp_ts instead
+        # of flip_ts avoids cascading when many gaps are spread across the period.
+        _MATCH_THRESHOLD = 2.0
+        s_to_o = np.full(len(mp_ts_arr), -1, dtype=int)    # scan idx → order idx
         o_to_s = np.full(len(order_ts_arr), -1, dtype=int)  # order idx → scan idx
         i, j = 0, 0
-        while i < len(scan_ts_arr) and j < len(order_ts_arr):
-            d = scan_ts_arr[i] - order_ts_arr[j]
+        while i < len(mp_ts_arr) and j < len(order_ts_arr):
+            d = mp_ts_arr[i] - order_ts_arr[j]
             if abs(d) <= _MATCH_THRESHOLD:
                 s_to_o[i] = j
                 o_to_s[j] = i
                 i += 1
                 j += 1
-            elif d < 0:   # scan flip is earlier; no matching order close enough
+            elif d < 0:   # scan mp_ts is earlier; no matching order close enough
                 i += 1
             else:         # order is earlier; no matching scan flip close enough
                 j += 1
@@ -752,7 +756,6 @@ from(bucket: "{bucket}")
         matched_mask_o = o_to_s >= 0
         n_matched = int(matched_mask_s.sum())
 
-        mp_ts_arr  = scan_sorted["mp_ts"].values
         time_diff  = order_ts_arr[s_to_o[matched_mask_s]] - mp_ts_arr[matched_mask_s]
         fp_matched = scan_sorted["flip_price"].values[matched_mask_s]
         ep_matched = order_df["EXEC_PRICE"].values[s_to_o[matched_mask_s]]
