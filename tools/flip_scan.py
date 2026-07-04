@@ -40,9 +40,12 @@ fixed_horizon[] — one entry per horizon H:
   p25_bps / p75_bps    25th / 75th percentile of signed returns.
   std_bps              Standard deviation of signed returns per flip.
 
-between_flip — hold from this flip until the next SAR cross (orion's actual holding period):
-  n                    Number of flips with a valid next flip (last flip excluded).
-  avg_holding_seconds  Mean time between consecutive flips.
+between_flip — hold from this flip until the next SAR cross from ALL flips (scheduled or not).
+  When a schedule is active this matches orion's behaviour: the position is closed on the
+  first SAR flip regardless of hour (NO_ENTRY allows closes), then stays flat until the next
+  scheduled flip reopens.  For nofilter this is identical to the next consecutive flip.
+  n                    Number of flips with a valid exit (last flip excluded).
+  avg_holding_seconds  Mean hold time (entry → first overall exit flip).
   median_holding_seconds  Median holding period (more robust; mean is skewed by long trends).
   avg_signed_return_bps  Mean signed return over the holding period.
   avg_net_return_bps   avg_signed_return_bps − costs_bps.
@@ -195,6 +198,14 @@ def run_flip_scan(
     if flips_df.empty:
         raise ValueError(f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}")
 
+    # Save ALL flip timestamps before schedule filtering.  After filtering we
+    # use these to find the true exit point: the first SAR flip from ANY hour
+    # (not just the next scheduled flip).  This matches orion's backtest
+    # behaviour — when schedule=NO_ENTRY the strategy closes the position on
+    # the first SAR cross regardless of hour, then stays flat until the next
+    # scheduled flip opens a new position.
+    all_flip_ts = flips_df["ts"].values.copy()  # sorted ascending
+
     # ── Schedule filters and risk gate ───────────────────────────────────────
     _JST_OFFSET = 9 * 3600
     jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
@@ -220,17 +231,49 @@ def run_flip_scan(
         n_sat_blocked = int(sat_mask.sum())
         flips_df = flips_df[~sat_mask].copy()
 
+    # For each scheduled entry, find exit_ts = first flip from ALL flips
+    # (including blocked hours) that comes after this entry's timestamp.
+    # searchsorted(..., side="right") returns the index of the first element
+    # strictly greater than the query value.
+    _exit_idx = np.searchsorted(all_flip_ts, flips_df["ts"].values, side="right")
+    _valid_exit = _exit_idx < len(all_flip_ts)
+    flips_df = flips_df.copy()
+    flips_df["exit_ts"] = np.where(
+        _valid_exit,
+        all_flip_ts[np.clip(_exit_idx, 0, len(all_flip_ts) - 1)],
+        np.nan,
+    )
+
     n_rolling_dd_blocked = 0
     if rolling_dd_threshold_bps is not None and rolling_dd_window_seconds is not None and not flips_df.empty:
-        ts_arr     = flips_df["ts"].values
-        ep_ask_arr = flips_df["entry_ask"].values
-        ep_bid_arr = flips_df["entry_bid"].values
-        sar_up_arr = flips_df["sar_up"].values
+        ts_arr      = flips_df["ts"].values
+        ep_ask_arr  = flips_df["entry_ask"].values
+        ep_bid_arr  = flips_df["entry_bid"].values
+        sar_up_arr  = flips_df["sar_up"].values
+        exit_ts_col = flips_df["exit_ts"].values
         n = len(ts_arr)
-        entry_p   = np.where(sar_up_arr > 0, ep_ask_arr, ep_bid_arr)
-        prov_exit = np.empty(n)
-        prov_exit[:-1] = np.where(sar_up_arr[:-1] > 0, ep_bid_arr[1:], ep_ask_arr[1:])
-        prov_exit[-1]  = np.nan
+        entry_p = np.where(sar_up_arr > 0, ep_ask_arr, ep_bid_arr)
+
+        # Fetch exit prices at exit_ts (first overall flip) via ASOF join.
+        # Using bid when long (long exits at bid), ask when short.
+        _dd_exit_req = pd.DataFrame({
+            "entry_ts": ts_arr,
+            "exit_ts":  exit_ts_col,
+            "sar_up":   sar_up_arr,
+        })
+        con.register("_dd_exit_req", _dd_exit_req.dropna(subset=["exit_ts"]))
+        _dd_exit_mp = con.sql(f"""
+            SELECT e.entry_ts,
+                CASE WHEN e.sar_up > 0 THEN o.bid ELSE o.ask END AS prov_exit_price
+            FROM _dd_exit_req e ASOF JOIN (
+                SELECT ts, bid, ask
+                FROM read_parquet('{mp_glob}', hive_partitioning=true)
+                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+            ) o ON o.ts >= e.exit_ts
+        """).df()
+        _exit_price_map = dict(zip(_dd_exit_mp["entry_ts"], _dd_exit_mp["prov_exit_price"]))
+        prov_exit = np.array([_exit_price_map.get(t, np.nan) for t in ts_arr])
+
         with np.errstate(invalid="ignore"):
             prov_ret = sar_up_arr * (prov_exit - entry_p) / entry_p * 10000
         buf     = deque()
@@ -295,13 +338,17 @@ def run_flip_scan(
         })
 
     # ── Step 3: between-flip return ───────────────────────────────────────────
-    # Exit at the next flip: long exits at next flip's bid, short at next flip's ask.
+    # Exit at the first SAR flip from ALL flips (scheduled or not) after entry.
+    # For nofilter this equals shift(-1) on the full flip list.  For active /
+    # inactive schedules this correctly models orion: when schedule=NO_ENTRY
+    # the strategy closes at the first SAR cross and stays flat until the next
+    # scheduled flip reopens — not holding all the way to the next scheduled flip.
     flips_df = flips_df.reset_index(drop=True)
-    flips_df["next_ts"] = flips_df["ts"].shift(-1)
 
     # Build a pairs table: (ts, sar_up, next_ts) then ASOF JOIN OB at next_ts.
     # This avoids shift-based misalignment when some rows have no OB match.
-    pairs = flips_df[["ts", "sar_up", "next_ts"]].dropna(subset=["next_ts"]).copy()
+    pairs = flips_df[["ts", "sar_up", "exit_ts"]].dropna(subset=["exit_ts"]).copy()
+    pairs = pairs.rename(columns={"exit_ts": "next_ts"})
     con.register("_pairs", pairs)
     exit_ob = con.sql(f"""
         WITH mp AS (
@@ -314,10 +361,8 @@ def run_flip_scan(
         FROM _pairs p ASOF JOIN mp o ON o.ts >= p.next_ts
     """).df().dropna()
 
-    bf = (
-        flips_df.merge(exit_ob, on="ts", how="inner")
-    )
-    bf["holding_seconds"] = bf["next_ts"] - bf["ts"]
+    bf = flips_df.merge(exit_ob, on="ts", how="inner")
+    bf["holding_seconds"] = bf["exit_ts"] - bf["ts"]
     raw_bf    = (bf["exit_price"] - bf["entry_price"]) / bf["entry_price"] * 10000
     signed_bf = bf["sar_up"] * raw_bf
 
