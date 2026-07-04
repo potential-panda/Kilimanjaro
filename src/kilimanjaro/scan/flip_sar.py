@@ -600,6 +600,8 @@ def verify(
     param_set_id: str,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path | None = None,
+    block_jst_hours: list[int] | None = None,
+    block_sat_jst_hours: list[int] | None = None,
 ) -> dict:
     """Compare scan flip prices and PnL against Himalaya backtest InfluxDB data.
 
@@ -642,9 +644,27 @@ def verify(
     if flips_df.empty:
         raise ValueError(f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}")
 
-    # exit_ts = first overall flip strictly after each entry
+    # exit_ts uses ALL flips (same as scan()'s NO_ENTRY close behaviour)
     all_ts = flips_df["ts"].values
-    exit_idx = np.searchsorted(all_ts, all_ts, side="right")
+
+    # ── Schedule filters (mirror scan() logic) ────────────────────────────────
+    _JST_OFFSET = 9 * 3600
+    if block_jst_hours or block_sat_jst_hours:
+        jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
+        flips_df["_jst_hour"] = (jst_shifted % 86400 // 3600).astype(int)
+        flips_df["_jst_wday"] = pd.to_datetime(
+            jst_shifted, unit="s", utc=True
+        ).dt.dayofweek
+        if block_jst_hours:
+            mask = (flips_df["_jst_wday"] <= 4) & flips_df["_jst_hour"].isin(set(block_jst_hours))
+            flips_df = flips_df[~mask].copy()
+        if block_sat_jst_hours:
+            mask = (flips_df["_jst_wday"] == 5) & flips_df["_jst_hour"].isin(set(block_sat_jst_hours))
+            flips_df = flips_df[~mask].copy()
+        flips_df = flips_df.drop(columns=["_jst_hour", "_jst_wday"])
+
+    # exit_ts = first overall flip (from unfiltered all_ts) strictly after each entry
+    exit_idx = np.searchsorted(all_ts, flips_df["ts"].values, side="right")
     valid = exit_idx < len(all_ts)
     flips_df["exit_ts"] = np.where(valid, all_ts[np.clip(exit_idx, 0, len(all_ts) - 1)], np.nan)
 
@@ -826,6 +846,10 @@ from(bucket: "{bucket}")
     print(f"  target  : {target_exchange}/{target_symbol} size={execution_size}")
     print(f"  period  : {start_date} .. {end_date}")
     print(f"  param_id: {param_set_id}")
+    if block_jst_hours:
+        print(f"  block wday hours : {sorted(block_jst_hours)}")
+    if block_sat_jst_hours:
+        print(f"  block sat  hours : {sorted(block_sat_jst_hours)}")
 
     print(f"\n-- Order match (scan flip price vs backtest OPEN order) --")
     print(f"  scan flips : {order_result['n_scan']}")

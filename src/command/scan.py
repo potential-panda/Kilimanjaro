@@ -110,12 +110,18 @@ def _register_verify(sub: argparse._SubParsersAction) -> None:
                    help="InfluxDB backtest bucket")
     v.add_argument("--param-set-id", dest="param_set_id", required=True,
                    help="Backtest param_set_id tag to compare against")
+    v.add_argument("--block-jst-hours", dest="block_jst_hours", default="",
+                   help="Comma-separated JST hours to block on weekdays (e.g. 8,9,10,11)")
+    v.add_argument("--block-sat-jst-hours", dest="block_sat_jst_hours", default="",
+                   help="Comma-separated JST hours to block on Saturdays (e.g. 8,9,10,11)")
     v.set_defaults(func=_run_verify)
 
 
 def _run_verify(args: argparse.Namespace) -> int:
     from kilimanjaro.scan.flip_sar import verify
 
+    block_jst_hours     = [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
+    block_sat_jst_hours = [int(h) for h in args.block_sat_jst_hours.split(",") if h.strip()]
     verify(
         flip_exchange=args.flip_exchange,
         flip_symbol=args.flip_symbol,
@@ -128,5 +134,7 @@ def _run_verify(args: argparse.Namespace) -> int:
         execution_size=args.execution_size,
         bucket=args.bucket,
         param_set_id=args.param_set_id,
+        block_jst_hours=block_jst_hours or None,
+        block_sat_jst_hours=block_sat_jst_hours or None,
     )
     return 0
