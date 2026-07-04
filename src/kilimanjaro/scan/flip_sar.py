@@ -1,0 +1,479 @@
+"""Flip-anchored scan for event-driven signals like orion's Parabolic SAR.
+
+Unlike a continuous signal scanner, this anchors on FLIP events — one row per
+trade decision.  That matches how orion actually works: enter at the flip, hold
+until the next flip.
+
+Two return definitions are computed for each flip:
+  - fixed-horizon: signed mid return at H seconds after the flip
+  - between-flip:  signed mid return from this flip to the next SAR cross from
+    ALL flips (scheduled or not), matching orion's NO_ENTRY close behaviour.
+
+Both are expressed in bps and compared against a configurable round-trip cost.
+
+## Output field definitions
+
+All return fields are signed by signal direction: sar_up=+1 (expect up) or
+sar_up=-1 (expect down). A positive signed return means the signal was correct.
+1 bps = 0.01% = 1/10000 of price.
+
+Top-level:
+  n_flips              Total number of SAR flip events in the window.
+  flips_per_day        n_flips / calendar days in window.
+  costs_bps            Residual round-trip cost not captured by bid/ask prices.
+                       Default 1 bps (slippage only: ~0.5 bps entry + ~0.5 bps exit).
+                       Spread is already baked into returns via actual bid/ask execution
+                       prices (BUY enters at ask, exits at bid; SELL enters at bid, exits
+                       at ask), so only slippage remains here. Fee is 0 for GMO margin.
+
+fixed_horizon[] — one entry per horizon H:
+  horizon_seconds      H in seconds (e.g. 30, 120, 300, 600).
+  n                    Number of flips with a valid exit price at ts+H.
+  avg_signed_return_bps  Mean of (sar_up × mid_return) across all flips.
+  avg_net_return_bps   avg_signed_return_bps − costs_bps.
+  hit_rate             Fraction of flips where signed return > 0.
+  hit_rate_net         Fraction of flips where signed return > costs_bps.
+  median_signed_return_bps  Median signed return.
+  p25_bps / p75_bps    25th / 75th percentile of signed returns.
+  std_bps              Standard deviation of signed returns per flip.
+
+between_flip — hold from this flip until the next SAR cross from ALL flips:
+  n                    Number of flips with a valid exit (last flip excluded).
+  avg_holding_seconds  Mean hold time (entry → first overall exit flip).
+  median_holding_seconds  Median holding period.
+  avg_signed_return_bps  Mean signed return over the holding period.
+  avg_net_return_bps   avg_signed_return_bps − costs_bps.
+  hit_rate             Fraction of flips where the holding-period return > 0.
+  hit_rate_net         Fraction of flips where holding-period return > costs_bps.
+  median_signed_return_bps  Median signed return over holding period.
+  p25_bps / p75_bps    25th / 75th percentile.
+  std_bps              Standard deviation.
+
+by_month[] — between-flip stats grouped by calendar month (YYYY-MM).
+by_jst_hour[] — between-flip stats grouped by JST hour of the flip.
+"""
+
+from __future__ import annotations
+
+from collections import deque
+from pathlib import Path
+
+import duckdb
+import numpy as np
+import pandas as pd
+
+_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_HORIZONS = [30, 120, 300, 600]
+_DEFAULT_COSTS_BPS = 1.0  # round-trip slippage only; spread baked in via bid/ask
+
+_ALL_SAT = list(range(24))
+
+# Named schedule presets.  "block" means skip these flips; the complement trades.
+# block_jst_hours applies weekdays (Mon–Fri); block_sat_jst_hours applies Saturdays.
+SCHEDULES: dict[str, dict] = {
+    "nofilter": {
+        "block_jst_hours": [],
+        "block_sat_jst_hours": [],
+    },
+    # XRP_JPY: active JST 07–21, inactive JST 22–06
+    "xrp_active": {
+        "block_jst_hours": [22, 23, 0, 1, 2, 3, 4, 5, 6],
+        "block_sat_jst_hours": _ALL_SAT,
+    },
+    "xrp_inactive": {
+        "block_jst_hours": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        "block_sat_jst_hours": [],
+    },
+    # ETH_JPY / BTC_JPY: active JST 06–21, inactive JST 22–05
+    "default_active": {
+        "block_jst_hours": [22, 23, 0, 1, 2, 3, 4, 5],
+        "block_sat_jst_hours": _ALL_SAT,
+    },
+    "default_inactive": {
+        "block_jst_hours": [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        "block_sat_jst_hours": [],
+    },
+}
+
+
+def _features_root() -> Path:
+    import qate.env.sys_env as sys_env
+    from qate.store.parquet_store import Layer, ParquetStore
+    return ParquetStore(sys_env.PARQUET_ROOT_DIR).layer_dir[Layer.FEATURE]
+
+
+def _flip_glob(
+    flip_exchange: str,
+    flip_symbol: str,
+    box_size_rate: float,
+    sar_step: float,
+    features_root: Path,
+) -> str:
+    return str(
+        features_root / "dataset=ChartRangeSAR"
+        / f"exchange={flip_exchange}" / f"symbol={flip_symbol}"
+        / f"box_size_rate={box_size_rate}" / f"step={sar_step}"
+        / "date=*" / "*.parquet"
+    )
+
+
+def _mp_glob(
+    exchange: str,
+    symbol: str,
+    execution_size: str,
+    data_root: Path,
+) -> str:
+    return str(
+        data_root / "silver" / "dataset=MarketPrice"
+        / f"exchange={exchange}" / f"symbol={symbol}"
+        / f"execution_size={execution_size}" / "date=*" / "*.parquet"
+    )
+
+
+def run_flip_scan(
+    flip_exchange: str,
+    flip_symbol: str,
+    target_exchange: str,
+    target_symbol: str,
+    start_date: str,
+    end_date: str,
+    box_size_rate: float = 0.0025,
+    sar_step: float = 0.02,
+    execution_size: str = "150",
+    horizons: list[int] = _DEFAULT_HORIZONS,
+    costs_bps: float = _DEFAULT_COSTS_BPS,
+    block_jst_hours: list[int] | None = None,
+    block_sat_jst_hours: list[int] | None = None,
+    exclude_jst_dates: list[str] | None = None,
+    rolling_dd_window_seconds: float | None = None,
+    rolling_dd_threshold_bps: float | None = None,
+    data_root: Path = _DEFAULT_DATA_ROOT,
+    features_root: Path | None = None,
+) -> dict:
+    """Run a flip-anchored SAR scan.
+
+    Returns a report dict with per-flip statistics before and after costs,
+    for both fixed-horizon and between-flip return definitions.
+    """
+    if features_root is None:
+        features_root = _features_root()
+
+    flip_glob = _flip_glob(flip_exchange, flip_symbol, box_size_rate, sar_step, features_root)
+    mp_glob   = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
+    con = duckdb.connect()
+
+    # ── Step 1: load all flips with actual entry execution price ─────────────
+    # Uses silver MarketPrice: bid/ask are VWAP at execution_size depth (more
+    # realistic than best bid0/ask0), and spread > 10 bps rows are pre-filtered.
+    # BUY (sar_up=+1): enter at ask  SELL (sar_up=-1): enter at bid
+    flips_df = con.sql(f"""
+        WITH flips AS (
+            SELECT ts, sar_up
+            FROM read_parquet('{flip_glob}', hive_partitioning=true)
+            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        ),
+        mp AS (
+            SELECT ts, bid, ask
+            FROM read_parquet('{mp_glob}', hive_partitioning=true)
+            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        )
+        SELECT f.ts, f.sar_up,
+            CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS entry_price,
+            (o.bid + o.ask) / 2.0 AS entry_mid,
+            o.bid AS entry_bid,
+            o.ask AS entry_ask
+        FROM flips f ASOF JOIN mp o ON o.ts >= f.ts
+        ORDER BY f.ts
+    """).df().dropna()
+
+    if flips_df.empty:
+        raise ValueError(
+            f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}"
+        )
+
+    # Save ALL flip timestamps before schedule filtering so exit_ts uses the
+    # first overall SAR cross (not just the next scheduled flip), matching
+    # orion's NO_ENTRY close behaviour.
+    all_flip_ts = flips_df["ts"].values.copy()
+
+    # ── Schedule filters ──────────────────────────────────────────────────────
+    _JST_OFFSET = 9 * 3600
+    jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
+    flips_df["jst_hour"]    = (jst_shifted % 86400 // 3600).astype(int)
+    flips_df["jst_weekday"] = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.dayofweek
+    flips_df["jst_date"]    = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.date.astype(str)
+    n_hour_blocked = 0
+    n_sat_blocked  = 0
+    n_date_blocked = 0
+
+    if exclude_jst_dates:
+        mask = flips_df["jst_date"].isin(set(exclude_jst_dates))
+        n_date_blocked = int(mask.sum())
+        flips_df = flips_df[~mask].copy()
+
+    if block_jst_hours:
+        mask = (flips_df["jst_weekday"] <= 4) & flips_df["jst_hour"].isin(set(block_jst_hours))
+        n_hour_blocked = int(mask.sum())
+        flips_df = flips_df[~mask].copy()
+
+    if block_sat_jst_hours:
+        mask = (flips_df["jst_weekday"] == 5) & flips_df["jst_hour"].isin(set(block_sat_jst_hours))
+        n_sat_blocked = int(mask.sum())
+        flips_df = flips_df[~mask].copy()
+
+    # exit_ts = first flip from ALL flips strictly after this entry's ts
+    _exit_idx = np.searchsorted(all_flip_ts, flips_df["ts"].values, side="right")
+    _valid_exit = _exit_idx < len(all_flip_ts)
+    flips_df = flips_df.copy()
+    flips_df["exit_ts"] = np.where(
+        _valid_exit,
+        all_flip_ts[np.clip(_exit_idx, 0, len(all_flip_ts) - 1)],
+        np.nan,
+    )
+
+    # ── Rolling drawdown gate ─────────────────────────────────────────────────
+    n_rolling_dd_blocked = 0
+    if (
+        rolling_dd_threshold_bps is not None
+        and rolling_dd_window_seconds is not None
+        and not flips_df.empty
+    ):
+        ts_arr      = flips_df["ts"].values
+        ep_ask_arr  = flips_df["entry_ask"].values
+        ep_bid_arr  = flips_df["entry_bid"].values
+        sar_up_arr  = flips_df["sar_up"].values
+        exit_ts_col = flips_df["exit_ts"].values
+        entry_p = np.where(sar_up_arr > 0, ep_ask_arr, ep_bid_arr)
+
+        _dd_exit_req = pd.DataFrame({
+            "entry_ts": ts_arr,
+            "exit_ts":  exit_ts_col,
+            "sar_up":   sar_up_arr,
+        })
+        con.register("_dd_exit_req", _dd_exit_req.dropna(subset=["exit_ts"]))
+        _dd_exit_mp = con.sql(f"""
+            SELECT e.entry_ts,
+                CASE WHEN e.sar_up > 0 THEN o.bid ELSE o.ask END AS prov_exit_price
+            FROM _dd_exit_req e ASOF JOIN (
+                SELECT ts, bid, ask
+                FROM read_parquet('{mp_glob}', hive_partitioning=true)
+                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+            ) o ON o.ts >= e.exit_ts
+        """).df()
+        _exit_price_map = dict(zip(_dd_exit_mp["entry_ts"], _dd_exit_mp["prov_exit_price"]))
+        prov_exit = np.array([_exit_price_map.get(t, np.nan) for t in ts_arr])
+
+        with np.errstate(invalid="ignore"):
+            prov_ret = sar_up_arr * (prov_exit - entry_p) / entry_p * 10000
+        buf     = deque()
+        cum_pnl = 0.0
+        kept    = np.ones(len(ts_arr), dtype=bool)
+        for i in range(len(ts_arr)):
+            t = ts_arr[i]
+            while buf and buf[0][0] < t - rolling_dd_window_seconds:
+                buf.popleft()
+            peak = max(v for _, v in buf) if buf else cum_pnl
+            if (peak - cum_pnl) > rolling_dd_threshold_bps:
+                kept[i] = False
+            else:
+                r = prov_ret[i]
+                if not np.isnan(r):
+                    cum_pnl += r
+                    buf.append((t, cum_pnl))
+        n_rolling_dd_blocked = int((~kept).sum())
+        flips_df = flips_df[kept].copy()
+
+    n_flips_raw = (
+        len(flips_df) + n_hour_blocked + n_sat_blocked
+        + n_date_blocked + n_rolling_dd_blocked
+    )
+    n_flips = len(flips_df)
+    n_days  = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
+
+    # ── Step 2: fixed-horizon returns ─────────────────────────────────────────
+    horizon_results = []
+    for h in horizons:
+        exit_df = con.sql(f"""
+            WITH flips AS (
+                SELECT ts, sar_up FROM read_parquet('{flip_glob}', hive_partitioning=true)
+                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+            ),
+            mp AS (
+                SELECT ts, bid, ask
+                FROM read_parquet('{mp_glob}', hive_partitioning=true)
+                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+                    + INTERVAL {max(horizons) // 3600 + 1} DAY
+            )
+            SELECT f.ts,
+                CASE WHEN f.sar_up > 0 THEN o.bid ELSE o.ask END AS exit_price
+            FROM flips f ASOF JOIN mp o ON o.ts >= f.ts + {h}
+            ORDER BY f.ts
+        """).df().dropna()
+
+        merged = flips_df.merge(exit_df, on="ts", how="inner")
+        raw_ret = (merged["exit_price"] - merged["entry_price"]) / merged["entry_price"] * 10000
+        signed  = merged["sar_up"] * raw_ret
+
+        horizon_results.append({
+            "horizon_seconds":            h,
+            "n":                          len(signed),
+            "avg_signed_return_bps":      float(signed.mean()),
+            "avg_net_return_bps":         float(signed.mean() - costs_bps),
+            "hit_rate":                   float((signed > 0).mean()),
+            "hit_rate_net":               float((signed > costs_bps).mean()),
+            "median_signed_return_bps":   float(signed.median()),
+            "p25_bps":                    float(signed.quantile(0.25)),
+            "p75_bps":                    float(signed.quantile(0.75)),
+            "std_bps":                    float(signed.std()),
+        })
+
+    # ── Step 3: between-flip return ───────────────────────────────────────────
+    flips_df = flips_df.reset_index(drop=True)
+    pairs = flips_df[["ts", "sar_up", "exit_ts"]].dropna(subset=["exit_ts"]).copy()
+    pairs = pairs.rename(columns={"exit_ts": "next_ts"})
+    con.register("_pairs", pairs)
+    exit_ob = con.sql(f"""
+        WITH mp AS (
+            SELECT ts, bid, ask
+            FROM read_parquet('{mp_glob}', hive_partitioning=true)
+            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        )
+        SELECT p.ts,
+            CASE WHEN p.sar_up > 0 THEN o.bid ELSE o.ask END AS exit_price
+        FROM _pairs p ASOF JOIN mp o ON o.ts >= p.next_ts
+    """).df().dropna()
+
+    bf = flips_df.merge(exit_ob, on="ts", how="inner")
+    bf["holding_seconds"] = bf["exit_ts"] - bf["ts"]
+    raw_bf    = (bf["exit_price"] - bf["entry_price"]) / bf["entry_price"] * 10000
+    signed_bf = bf["sar_up"] * raw_bf
+
+    between_flip = {
+        "n":                          len(signed_bf),
+        "avg_holding_seconds":        float(bf["holding_seconds"].mean()),
+        "median_holding_seconds":     float(bf["holding_seconds"].median()),
+        "avg_signed_return_bps":      float(signed_bf.mean()),
+        "avg_net_return_bps":         float(signed_bf.mean() - costs_bps),
+        "hit_rate":                   float((signed_bf > 0).mean()),
+        "hit_rate_net":               float((signed_bf > costs_bps).mean()),
+        "median_signed_return_bps":   float(signed_bf.median()),
+        "p25_bps":                    float(signed_bf.quantile(0.25)),
+        "p75_bps":                    float(signed_bf.quantile(0.75)),
+        "std_bps":                    float(signed_bf.std()),
+    }
+
+    # ── Step 4: monthly breakdown (between-flip) ──────────────────────────────
+    bf["month"] = pd.to_datetime(bf["ts"], unit="s", utc=True).dt.strftime("%Y-%m")
+    monthly = []
+    for month, g in bf.groupby("month"):
+        sr = g["sar_up"] * (g["exit_price"] - g["entry_price"]) / g["entry_price"] * 10000
+        monthly.append({
+            "month":                  month,
+            "n_flips":                len(g),
+            "avg_signed_return_bps":  float(sr.mean()),
+            "avg_net_return_bps":     float(sr.mean() - costs_bps),
+            "hit_rate":               float((sr > 0).mean()),
+        })
+
+    # ── Step 5: time-of-day breakdown (between-flip, JST) ────────────────────
+    by_hour = []
+    for hour, g in bf.groupby("jst_hour"):
+        sr = g["sar_up"] * (g["exit_price"] - g["entry_price"]) / g["entry_price"] * 10000
+        by_hour.append({
+            "jst_hour":               int(hour),
+            "n_flips":                len(g),
+            "avg_signed_return_bps":  float(sr.mean()),
+            "avg_net_return_bps":     float(sr.mean() - costs_bps),
+            "hit_rate":               float((sr > 0).mean()),
+        })
+
+    return {
+        "signal_style":    "skew",
+        "flip_exchange":   flip_exchange,
+        "flip_symbol":     flip_symbol,
+        "target_exchange": target_exchange,
+        "target_symbol":   target_symbol,
+        "start_date":      start_date,
+        "end_date":        end_date,
+        "costs_bps":       costs_bps,
+        "n_flips":         n_flips,
+        "flips_per_day":   round(n_flips / n_days, 2),
+        "box_size_rate":   box_size_rate,
+        "sar_step":        sar_step,
+        "execution_size":  execution_size,
+        "risk_gates": {
+            "block_jst_hours":           block_jst_hours or [],
+            "block_sat_jst_hours":       block_sat_jst_hours or [],
+            "exclude_jst_dates":         exclude_jst_dates or [],
+            "rolling_dd_window_seconds": rolling_dd_window_seconds,
+            "rolling_dd_threshold_bps":  rolling_dd_threshold_bps,
+            "n_hour_blocked":            n_hour_blocked,
+            "n_sat_blocked":             n_sat_blocked,
+            "n_date_blocked":            n_date_blocked,
+            "n_rolling_dd_blocked":      n_rolling_dd_blocked,
+            "n_raw_flips":               n_flips_raw,
+        },
+        "fixed_horizon":   horizon_results,
+        "between_flip":    between_flip,
+        "by_month":        monthly,
+        "by_jst_hour":     by_hour,
+    }
+
+
+def print_summary(report: dict) -> None:
+    costs = report["costs_bps"]
+    print(f"\n{'='*60}")
+    print(
+        f"FLIP SCAN: {report['flip_exchange']}/{report['flip_symbol']}"
+        f" → {report['target_exchange']}/{report['target_symbol']}"
+    )
+    print(
+        f"Window: {report['start_date']} .. {report['end_date']}"
+        f"  box_size_rate={report['box_size_rate']}  execution_size={report['execution_size']}"
+    )
+    rg = report["risk_gates"]
+    parts = []
+    if rg.get("block_jst_hours"):           parts.append(f"block_hours={rg['block_jst_hours']}")
+    if rg.get("block_sat_jst_hours"):       parts.append(f"block_sat_hours={rg['block_sat_jst_hours']}")
+    if rg.get("exclude_jst_dates"):         parts.append(f"exclude_jst_dates={rg['exclude_jst_dates']}")
+    if rg.get("rolling_dd_threshold_bps"):  parts.append(f"rolling_dd<={rg['rolling_dd_threshold_bps']}bps/{rg['rolling_dd_window_seconds']}s")
+    if parts:
+        print(f"Gates: {' / '.join(parts)}")
+        total_blocked = (
+            rg.get("n_hour_blocked", 0) + rg.get("n_sat_blocked", 0)
+            + rg.get("n_date_blocked", 0) + rg.get("n_rolling_dd_blocked", 0)
+        )
+        print(
+            f"  Blocked: {rg.get('n_hour_blocked',0)} hour"
+            f" + {rg.get('n_sat_blocked',0)} sat"
+            f" + {rg.get('n_date_blocked',0)} date"
+            f" + {rg.get('n_rolling_dd_blocked',0)} rolling_dd"
+            f" = {total_blocked} of {rg['n_raw_flips']} raw flips"
+        )
+    print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
+    print(f"Round-trip cost assumption: {costs} bps")
+
+    print(f"\n--- Fixed-horizon returns (signed, per flip) ---")
+    print(f"{'Horizon':>10}  {'Avg gross':>10}  {'Avg net':>10}  {'Hit%':>7}  {'Hit% net':>9}")
+    for r in report["fixed_horizon"]:
+        print(
+            f"{r['horizon_seconds']:>9}s  {r['avg_signed_return_bps']:>+9.2f}"
+            f"  {r['avg_net_return_bps']:>+9.2f}  {r['hit_rate']:>6.1%}  {r['hit_rate_net']:>8.1%}"
+        )
+
+    bf = report["between_flip"]
+    print(f"\n--- Between-flip returns (hold until next SAR cross) ---")
+    print(f"  Avg holding:   {bf['avg_holding_seconds']:.0f}s  (median {bf['median_holding_seconds']:.0f}s)")
+    print(f"  Avg gross:     {bf['avg_signed_return_bps']:+.2f} bps")
+    print(f"  Avg net:       {bf['avg_net_return_bps']:+.2f} bps  (after {costs} bps cost)")
+    print(f"  Hit rate:      {bf['hit_rate']:.1%} gross  /  {bf['hit_rate_net']:.1%} net")
+    print(f"  p25/med/p75:   {bf['p25_bps']:+.1f} / {bf['median_signed_return_bps']:+.1f} / {bf['p75_bps']:+.1f} bps")
+
+    print(f"\n--- Monthly breakdown (between-flip, net of {costs} bps) ---")
+    print(f"{'Month':>8}  {'N flips':>8}  {'Avg gross':>10}  {'Avg net':>10}  {'Hit%':>7}")
+    for m in report["by_month"]:
+        print(
+            f"{m['month']:>8}  {m['n_flips']:>8}  {m['avg_signed_return_bps']:>+9.2f}"
+            f"  {m['avg_net_return_bps']:>+9.2f}  {m['hit_rate']:>6.1%}"
+        )
+    print()
