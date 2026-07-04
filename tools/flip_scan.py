@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from kilimanjaro.scan.flip_sar import SCHEDULES, _DEFAULT_COSTS_BPS, _DEFAULT_HORIZONS  # noqa: F401 (re-exported for callers)
-from kilimanjaro.scan.flip_sar import print_summary, run_flip_scan  # noqa: F401
+from kilimanjaro.scan.flip_sar import print_summary, run_flip_scan, scan  # noqa: F401
 
 if __name__ == "__main__":
     import argparse
