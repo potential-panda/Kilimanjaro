@@ -522,6 +522,7 @@ def scan(
 def print_summary(report: dict) -> None:
     costs = report["costs_bps"]
     print(f"\n{'=' * 60}")
+    print(f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(
         f"FLIP SCAN: {report['flip_exchange']}/{report['flip_symbol']}"
         f" → {report['target_exchange']}/{report['target_symbol']}"
@@ -1029,6 +1030,7 @@ def _print_verify_report(
 
     # ── header ────────────────────────────────────────────────────────────────
     print(f"\n{'─' * W}")
+    print(f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(
         f"  {flip_exchange}/{flip_symbol}  →  {target_exchange}/{target_symbol}"
         f"   box={box_size_rate}  step={sar_step}  size={execution_size}"
