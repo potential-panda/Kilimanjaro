@@ -43,6 +43,25 @@ Subcommand modules live in `src/command/` (populate.py, verify.py, scan.py).
 SAR state converges before the target window — backtest runs from Jan 1, cold
 start without warmup diverges ~2% of bars.
 
+## Verification philosophy
+
+The scan is **not** expected to be a 100% replica of the backtest. The goal is
+to confirm the scan reflects the **same signal direction and magnitude trend**
+as the backtest, so it can be used to generate entry signals for live trading.
+
+Known structural differences (not bugs):
+
+| difference | reason |
+|------------|--------|
+| Entry gap (scan_only) | Backtest has rolling DD gate; scan has none |
+| Entry gap (order_only) | Scan over-blocks non-maintenance Saturdays |
+| PnL diff on some matched pairs | Scan exits at next overall SAR flip; backtest may hold through maintenance |
+| Post-maintenance afternoon flips | Backtest re-entry holdout extends beyond 11:59 (exact rule unknown) |
+
+`verify-scan` is a **sanity check**, not an exact reproduction. A clean verify
+means: entry prices exact (0¥ diff), order timing exact (0.000s), and PnL trend
+consistent (≥95% exact, mean diff < 1¥ for the matched subset).
+
 ## Verification status (as of 2026-07)
 
 Verified `BINANCE/ETH_USDT box=0.003 step=0.04` May 2026 against backtest

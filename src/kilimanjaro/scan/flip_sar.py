@@ -844,14 +844,32 @@ from(bucket: "{bucket}")
         n_scan_only_p  = int((~matched_mask_p).sum())
         n_eval_only_p  = int((~matched_mask_e).sum())
 
-        scan_pnl_arr = bf_sorted["scan_pnl"].values[matched_mask_p]
+        _jst = datetime.timezone(datetime.timedelta(hours=9))
+        matched_bf   = bf_sorted[matched_mask_p].reset_index(drop=True)
+        scan_pnl_arr = matched_bf["scan_pnl"].values
         eval_pnl_arr = eval_df["pnl_change0"].values[p_to_e[matched_mask_p]]
         pnl_diff     = scan_pnl_arr - eval_pnl_arr
+
+        # Top-10 largest absolute PnL diff rows
+        top_idx  = np.argsort(np.abs(pnl_diff))[::-1][:10]
+        top_rows = []
+        for idx in top_idx:
+            entry_ts = matched_bf["ts"].values[idx]
+            exit_ts  = matched_bf["exit_ts"].values[idx]
+            top_rows.append({
+                "entry_jst": datetime.datetime.fromtimestamp(entry_ts, tz=_jst),
+                "exit_jst":  datetime.datetime.fromtimestamp(exit_ts,  tz=_jst),
+                "sar_up":    int(matched_bf["sar_up"].values[idx]),
+                "scan_pnl":  float(scan_pnl_arr[idx]),
+                "eval_pnl":  float(eval_pnl_arr[idx]),
+                "diff":      float(pnl_diff[idx]),
+            })
 
         pnl_result.update({
             "n_matched":    n_pnl_matched,
             "n_scan_only":  n_scan_only_p,
             "n_eval_only":  n_eval_only_p,
+            "top_diff_rows": top_rows,
             "pnl_diff": {
                 "mean_jpy":    float(np.mean(pnl_diff)),
                 "std_jpy":     float(np.std(pnl_diff)),
@@ -949,10 +967,24 @@ def _print_verify_report(
         print(f"    {'pnl diff (¥)':<16}  {pd2['mean_jpy']:>+10.2f}  {pd2['std_jpy']:>10.2f}"
               f"  {pd2['max_abs_jpy']:>10.2f}  {pd2['pct_exact']:>8.1f}%")
 
-    # ── gap table ─────────────────────────────────────────────────────────────
+    # ── top-10 PnL diff (matched pairs, largest |diff|) ───────────────────────
+    top_rows = pnl_result.get("top_diff_rows", [])
+    if top_rows:
+        print(f"\n  top-{len(top_rows)} PnL diff  (matched pairs, largest |diff|)")
+        print(f"    {'entry (JST)':<21}  {'exit (JST)':<21}  {'dir':>4}"
+              f"  {'scan_pnl':>10}  {'eval_pnl':>10}  {'diff':>10}")
+        for r in top_rows:
+            print(f"    {r['entry_jst'].strftime('%Y-%m-%d %H:%M:%S'):<21}"
+                  f"  {r['exit_jst'].strftime('%Y-%m-%d %H:%M:%S'):<21}"
+                  f"  {r['sar_up']:>+4}"
+                  f"  {r['scan_pnl']:>10.2f}"
+                  f"  {r['eval_pnl']:>10.2f}"
+                  f"  {r['diff']:>+10.2f}")
+
+    # ── unmatched orders ──────────────────────────────────────────────────────
     gap_rows = order_result.get("gap_rows", [])
     if gap_rows:
-        print(f"\n  gaps  ({len(gap_rows)} items)")
+        print(f"\n  unmatched orders  ({len(gap_rows)} items)")
         print(f"    {'#':<4}  {'kind':<12}  {'time (JST)':<21}  {'dir':<12}  price")
         for k, r in enumerate(gap_rows):
             print(f"    {k:<4}  {r['kind']:<12}"
