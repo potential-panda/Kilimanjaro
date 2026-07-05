@@ -318,13 +318,13 @@ def scan(
         and rolling_dd_window_seconds is not None
         and not flips_df.empty
     ):
-        ts_arr   = flips_df["ts"].values
-        prov_ret = flips_df["pnl_bps"].values
+        exit_ts_arr = flips_df["exit_ts"].values
+        prov_ret    = flips_df["pnl_bps"].values
         buf = deque()
         cum_pnl = 0.0
-        kept = np.ones(len(ts_arr), dtype=bool)
-        for i in range(len(ts_arr)):
-            t = ts_arr[i]
+        kept = np.ones(len(exit_ts_arr), dtype=bool)
+        for i in range(len(exit_ts_arr)):
+            t = exit_ts_arr[i]
             while buf and buf[0][0] < t - rolling_dd_window_seconds:
                 buf.popleft()
             peak = max(v for _, v in buf) if buf else cum_pnl
