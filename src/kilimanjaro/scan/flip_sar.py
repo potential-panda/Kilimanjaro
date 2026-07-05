@@ -872,10 +872,35 @@ from(bucket: "{bucket}")
         eval_pnl_arr = eval_df["pnl_change0"].values[p_to_e[matched_mask_p]]
         pnl_diff = scan_pnl_arr - eval_pnl_arr
 
-        # Top-10 largest absolute PnL diff rows
-        top_idx = np.argsort(np.abs(pnl_diff))[::-1][:10]
+        # scan_only rows (scan position with no matching eval record)
+        scan_only_df = bf_sorted[~matched_mask_p].reset_index(drop=True)
+        scan_only_rows = [
+            {
+                "entry_jst": datetime.datetime.fromtimestamp(row["ts"], tz=_jst),
+                "exit_jst": datetime.datetime.fromtimestamp(row["exit_ts"], tz=_jst),
+                "sar_up": int(row["sar_up"]),
+                "scan_pnl": float(row["scan_pnl"]),
+            }
+            for _, row in scan_only_df.iterrows()
+        ]
+
+        # eval_only rows (backtest record with no matching scan position)
+        eval_only_df = eval_df[~matched_mask_e].reset_index(drop=True)
+        eval_only_rows = [
+            {
+                "eval_jst": datetime.datetime.fromtimestamp(row["eval_ts"], tz=_jst),
+                "eval_pnl": float(row["pnl_change0"]),
+            }
+            for _, row in eval_only_df.iterrows()
+        ]
+
+        # Top-10 largest absolute PnL diff rows, excluding near-zero diffs
+        top_idx = np.argsort(np.abs(pnl_diff))[::-1]
         top_rows = []
         for idx in top_idx:
+            d = float(pnl_diff[idx])
+            if abs(d) < 0.01:
+                continue
             entry_ts = matched_bf["ts"].values[idx]
             exit_ts = matched_bf["exit_ts"].values[idx]
             top_rows.append(
@@ -885,15 +910,19 @@ from(bucket: "{bucket}")
                     "sar_up": int(matched_bf["sar_up"].values[idx]),
                     "scan_pnl": float(scan_pnl_arr[idx]),
                     "eval_pnl": float(eval_pnl_arr[idx]),
-                    "diff": float(pnl_diff[idx]),
+                    "diff": d,
                 }
             )
+            if len(top_rows) == 10:
+                break
 
         pnl_result.update(
             {
                 "n_matched": n_pnl_matched,
                 "n_scan_only": n_scan_only_p,
                 "n_eval_only": n_eval_only_p,
+                "scan_only_rows": scan_only_rows,
+                "eval_only_rows": eval_only_rows,
                 "top_diff_rows": top_rows,
                 "pnl_diff": {
                     "mean_jpy": float(np.mean(pnl_diff)),
@@ -1035,10 +1064,36 @@ def _print_verify_report(
             f"  {pd2['max_abs_jpy']:>10.2f}  {pd2['pct_exact']:>8.1f}%"
         )
 
-    # ── top-10 PnL diff (matched pairs, largest |diff|) ───────────────────────
+    # ── scan_only / eval_only PnL rows ───────────────────────────────────────
+    scan_only_rows = pnl_result.get("scan_only_rows", [])
+    eval_only_rows = pnl_result.get("eval_only_rows", [])
+    if scan_only_rows or eval_only_rows:
+        print(f"\n  unmatched pnl positions")
+        if scan_only_rows:
+            print(f"    scan_only ({len(scan_only_rows)}):")
+            print(
+                f"    {'entry (JST)':<21}  {'exit (JST)':<21}  {'dir':>4}  {'scan_pnl':>10}"
+            )
+            for r in scan_only_rows:
+                print(
+                    f"    {r['entry_jst'].strftime('%Y-%m-%d %H:%M:%S'):<21}"
+                    f"  {r['exit_jst'].strftime('%Y-%m-%d %H:%M:%S'):<21}"
+                    f"  {r['sar_up']:>+4}"
+                    f"  {r['scan_pnl']:>10.2f}"
+                )
+        if eval_only_rows:
+            print(f"    eval_only ({len(eval_only_rows)}):")
+            print(f"    {'exit (JST)':<21}  {'eval_pnl':>10}")
+            for r in eval_only_rows:
+                print(
+                    f"    {r['eval_jst'].strftime('%Y-%m-%d %H:%M:%S'):<21}"
+                    f"  {r['eval_pnl']:>10.2f}"
+                )
+
+    # ── top PnL diff (matched pairs, largest |diff|, excluding <0.01¥) ───────
     top_rows = pnl_result.get("top_diff_rows", [])
     if top_rows:
-        print(f"\n  top-{len(top_rows)} PnL diff  (matched pairs, largest |diff|)")
+        print(f"\n  top-{len(top_rows)} PnL diff  (matched, |diff|≥0.01¥)")
         print(
             f"    {'entry (JST)':<21}  {'exit (JST)':<21}  {'dir':>4}"
             f"  {'scan_pnl':>10}  {'eval_pnl':>10}  {'diff':>10}"
