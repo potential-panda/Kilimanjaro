@@ -1,6 +1,6 @@
 import argparse
 
-from kilimanjaro.scan.flip_sar import SCHEDULES, _DEFAULT_COSTS_BPS, _DEFAULT_HORIZONS
+from kilimanjaro.scan.flip_sar import SCHEDULES, _DEFAULT_COSTS_BPS
 
 _COMMON_FLIP_ARGS = [
     ("--flip-exchange",   dict(required=True, help="Exchange that generates flips (e.g. BINANCE)")),
@@ -33,8 +33,6 @@ def register(sub: argparse._SubParsersAction) -> None:
 def _register_scan(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("scan", help="Run a flip-anchored SAR scan")
     _add_common_flip_args(p)
-    p.add_argument("--horizons", default=",".join(str(h) for h in _DEFAULT_HORIZONS),
-                   help="Comma-separated fixed-horizon seconds")
     p.add_argument("--costs-bps", dest="costs_bps", type=float, default=_DEFAULT_COSTS_BPS,
                    help="Round-trip cost assumption in bps (default 1.0)")
     p.add_argument("--schedule", default="",
@@ -57,7 +55,7 @@ def _run_scan(args: argparse.Namespace) -> int:
     import json
     from pathlib import Path
 
-    from kilimanjaro.scan.flip_sar import SCHEDULES, print_summary, scan
+    from kilimanjaro.scan.flip_sar import print_summary, scan
 
     if args.schedule:
         if args.schedule not in SCHEDULES:
@@ -81,7 +79,6 @@ def _run_scan(args: argparse.Namespace) -> int:
         box_size_rate=args.box_size_rate,
         sar_step=args.sar_step,
         execution_size=args.execution_size,
-        horizons=[int(h) for h in args.horizons.split(",")],
         costs_bps=args.costs_bps,
         block_weekday_hours=block_weekday_hours or None,
         block_weekend_hours=block_weekend_hours or None,

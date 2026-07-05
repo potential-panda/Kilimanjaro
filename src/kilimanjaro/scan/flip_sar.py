@@ -64,7 +64,6 @@ import numpy as np
 import pandas as pd
 
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
-_DEFAULT_HORIZONS = [30, 120, 300, 600]
 _DEFAULT_COSTS_BPS = 1.0  # round-trip slippage only; spread baked in via bid/ask
 
 _INFLUX_URL = "http://localhost:8086"
@@ -227,7 +226,6 @@ def scan(
     box_size_rate: float = 0.0025,
     sar_step: float = 0.02,
     execution_size: str = "150",
-    horizons: list[int] = _DEFAULT_HORIZONS,
     costs_bps: float = _DEFAULT_COSTS_BPS,
     block_weekday_hours: list[int] | None = None,
     block_weekend_hours: list[int] | None = None,
@@ -341,54 +339,7 @@ def scan(
     n_flips = len(flips_df)
     n_days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
 
-    # ── Step 2: fixed-horizon returns ─────────────────────────────────────────
-    horizon_results = []
-    for h in horizons:
-        exit_df = (
-            con.sql(f"""
-            WITH flips AS (
-                SELECT ts, sar_up FROM read_parquet('{flip_glob}', hive_partitioning=true)
-                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-            ),
-            mp AS (
-                SELECT ts, bid, ask
-                FROM read_parquet('{mp_glob}', hive_partitioning=true)
-                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-                    + INTERVAL {max(horizons) // 3600 + 1} DAY
-            )
-            SELECT f.ts,
-                CASE WHEN f.sar_up > 0 THEN o.bid ELSE o.ask END AS h_exit_price
-            FROM flips f ASOF JOIN mp o ON o.ts >= f.ts + {h}
-            ORDER BY f.ts
-        """)
-            .df()
-            .dropna()
-        )
-
-        merged = flips_df.merge(exit_df, on="ts", how="inner")
-        raw_ret = (
-            (merged["h_exit_price"] - merged["entry_price"])
-            / merged["entry_price"]
-            * 10000
-        )
-        signed = merged["sar_up"] * raw_ret
-
-        horizon_results.append(
-            {
-                "horizon_seconds": h,
-                "n": len(signed),
-                "avg_signed_return_bps": float(signed.mean()),
-                "avg_net_return_bps": float(signed.mean() - costs_bps),
-                "hit_rate": float((signed > 0).mean()),
-                "hit_rate_net": float((signed > costs_bps).mean()),
-                "median_signed_return_bps": float(signed.median()),
-                "p25_bps": float(signed.quantile(0.25)),
-                "p75_bps": float(signed.quantile(0.75)),
-                "std_bps": float(signed.std()),
-            }
-        )
-
-    # ── Step 3: between-flip return ───────────────────────────────────────────
+    # ── Step 2: between-flip return ───────────────────────────────────────────
     flips_df = flips_df.reset_index(drop=True)
     bf = flips_df.dropna(subset=["pnl_bps"]).copy()
     bf["holding_seconds"] = bf["exit_ts"] - bf["ts"]
@@ -459,7 +410,6 @@ def scan(
             "n_date_blocked": n_date_blocked,
             "n_rolling_dd_blocked": n_rolling_dd_blocked,
         },
-        "fixed_horizon": horizon_results,
         "between_flip": between_flip,
         "by_month": monthly,
         "by_jst_hour": by_hour,
@@ -506,16 +456,6 @@ def print_summary(report: dict) -> None:
         )
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
-
-    print("\n--- Fixed-horizon returns (signed, per flip) ---")
-    print(
-        f"{'Horizon':>10}  {'Avg gross':>10}  {'Avg net':>10}  {'Hit%':>7}  {'Hit% net':>9}"
-    )
-    for r in report["fixed_horizon"]:
-        print(
-            f"{r['horizon_seconds']:>9}s  {r['avg_signed_return_bps']:>+9.2f}"
-            f"  {r['avg_net_return_bps']:>+9.2f}  {r['hit_rate']:>6.1%}  {r['hit_rate_net']:>8.1%}"
-        )
 
     bf = report["between_flip"]
     print("\n--- Between-flip returns (hold until next SAR cross) ---")
