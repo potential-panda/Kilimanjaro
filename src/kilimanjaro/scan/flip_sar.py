@@ -262,13 +262,13 @@ def _apply_risk_filters(
 ) -> tuple[pd.DataFrame, int]:
     """Rolling drawdown gate.
 
-    Maintains a sliding window of pnl_bps over the last rolling_dd_window_seconds.
+    Maintains a sliding window of pnl_diff_bps over the last rolling_dd_window_seconds.
     When the cumulative sum in the window falls below -rolling_dd_threshold_bps
     (i.e. losses exceed the threshold), the gate closes.  It stays closed for
     rolling_dd_cooldown_seconds, then reopens with the window reset to zero.
     Only active when rolling_dd_threshold_bps > 0 and rolling_dd_window_seconds > 0.
 
-    Requires columns: ts, exit_ts (NaN for last flip), pnl_bps (NaN for last flip).
+    Requires columns: ts, exit_ts (NaN for last flip), pnl_diff_bps (NaN for last flip).
     Returns (filtered_df, n_blocked).
     """
     if flips_df.empty:
@@ -279,9 +279,9 @@ def _apply_risk_filters(
 
     ts_arr = flips_df["ts"].values
     exit_ts_arr = flips_df["exit_ts"].values
-    pnl_bps_arr = flips_df["pnl_bps"].values
+    pnl_diff_bps_arr = flips_df["pnl_diff_bps"].values
 
-    window_trades: deque[tuple[float, float]] = deque()  # (exit_ts, pnl_bps)
+    window_trades: deque[tuple[float, float]] = deque()  # (exit_ts, pnl_diff_bps)
     kept = np.ones(len(ts_arr), dtype=bool)
     gate_open = True
     gate_reopen_ts = -np.inf
@@ -311,7 +311,7 @@ def _apply_risk_filters(
             gate_reopen_ts = t_entry + rolling_dd_cooldown_seconds
             continue
 
-        r = pnl_bps_arr[i]
+        r = pnl_diff_bps_arr[i]
         if not np.isnan(r):
             window_trades.append((t_exit, r))
 
@@ -395,7 +395,7 @@ def scan(
         )
         SELECT *,
             sar_up * (exit_price - entry_price)                       AS pnl,
-            sar_up * (exit_price - entry_price) / entry_price * 10000 AS pnl_bps
+            sar_up * (exit_price - entry_price) / entry_price * 10000 AS pnl_diff_bps
         FROM with_exit
         ORDER BY ts
     """)
@@ -444,21 +444,21 @@ def scan(
 
     # ── Step 2: between-flip return ───────────────────────────────────────────
     flips_df = flips_df.reset_index(drop=True)
-    bf = flips_df.dropna(subset=["pnl_bps"]).copy()
+    bf = flips_df.dropna(subset=["pnl_diff_bps"]).copy()
     bf["holding_seconds"] = bf["exit_exec_ts"] - bf["entry_exec_ts"]
 
     between_flip = {
         "n": len(bf),
         "avg_holding_seconds": float(bf["holding_seconds"].mean()),
         "median_holding_seconds": float(bf["holding_seconds"].median()),
-        "avg_signed_return_bps": float(bf["pnl_bps"].mean()),
-        "avg_net_return_bps": float(bf["pnl_bps"].mean() - costs_bps),
-        "hit_rate": float((bf["pnl_bps"] > 0).mean()),
-        "hit_rate_net": float((bf["pnl_bps"] > costs_bps).mean()),
-        "median_signed_return_bps": float(bf["pnl_bps"].median()),
-        "p25_bps": float(bf["pnl_bps"].quantile(0.25)),
-        "p75_bps": float(bf["pnl_bps"].quantile(0.75)),
-        "std_bps": float(bf["pnl_bps"].std()),
+        "avg_signed_return_bps": float(bf["pnl_diff_bps"].mean()),
+        "avg_net_return_bps": float(bf["pnl_diff_bps"].mean() - costs_bps),
+        "hit_rate": float((bf["pnl_diff_bps"] > 0).mean()),
+        "hit_rate_net": float((bf["pnl_diff_bps"] > costs_bps).mean()),
+        "median_signed_return_bps": float(bf["pnl_diff_bps"].median()),
+        "p25_bps": float(bf["pnl_diff_bps"].quantile(0.25)),
+        "p75_bps": float(bf["pnl_diff_bps"].quantile(0.75)),
+        "std_bps": float(bf["pnl_diff_bps"].std()),
     }
 
     # ── Step 4: monthly breakdown (between-flip) ──────────────────────────────
@@ -469,9 +469,9 @@ def scan(
             {
                 "month": month,
                 "n_flips": len(g),
-                "avg_signed_return_bps": float(g["pnl_bps"].mean()),
-                "avg_net_return_bps": float(g["pnl_bps"].mean() - costs_bps),
-                "hit_rate": float((g["pnl_bps"] > 0).mean()),
+                "avg_signed_return_bps": float(g["pnl_diff_bps"].mean()),
+                "avg_net_return_bps": float(g["pnl_diff_bps"].mean() - costs_bps),
+                "hit_rate": float((g["pnl_diff_bps"] > 0).mean()),
             }
         )
 
@@ -482,9 +482,9 @@ def scan(
             {
                 "jst_hour": int(hour),
                 "n_flips": len(g),
-                "avg_signed_return_bps": float(g["pnl_bps"].mean()),
-                "avg_net_return_bps": float(g["pnl_bps"].mean() - costs_bps),
-                "hit_rate": float((g["pnl_bps"] > 0).mean()),
+                "avg_signed_return_bps": float(g["pnl_diff_bps"].mean()),
+                "avg_net_return_bps": float(g["pnl_diff_bps"].mean() - costs_bps),
+                "hit_rate": float((g["pnl_diff_bps"] > 0).mean()),
             }
         )
 
