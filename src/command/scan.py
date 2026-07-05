@@ -39,10 +39,10 @@ def _register_scan(sub: argparse._SubParsersAction) -> None:
                    help="Round-trip cost assumption in bps (default 1.0)")
     p.add_argument("--schedule", default="",
                    help=f"Named schedule preset. Choices: {', '.join(SCHEDULES)}")
-    p.add_argument("--block-jst-hours", dest="block_jst_hours", default="",
-                   help="Comma-separated JST hours to block on weekdays.")
-    p.add_argument("--block-sat-jst-hours", dest="block_sat_jst_hours", default="",
-                   help="Comma-separated JST hours to block on Saturdays.")
+    p.add_argument("--block-weekday-hours", dest="block_weekday_hours", default="",
+                   help="Comma-separated JST hours to block on weekdays (Mon–Fri).")
+    p.add_argument("--block-weekend-hours", dest="block_weekend_hours", default="",
+                   help="Comma-separated JST hours to block on weekends (Sat–Sun).")
     p.add_argument("--exclude-jst-dates", dest="exclude_jst_dates", default="",
                    help="Comma-separated JST dates (YYYY-MM-DD) to exclude.")
     p.add_argument("--rolling-dd-window-seconds", dest="rolling_dd_window_seconds",
@@ -63,11 +63,11 @@ def _run_scan(args: argparse.Namespace) -> int:
         if args.schedule not in SCHEDULES:
             print(f"Error: unknown schedule '{args.schedule}'. Choices: {', '.join(SCHEDULES)}")
             return 1
-        block_jst_hours     = SCHEDULES[args.schedule]["block_jst_hours"]
-        block_sat_jst_hours = SCHEDULES[args.schedule]["block_sat_jst_hours"]
+        block_weekday_hours = SCHEDULES[args.schedule]["block_weekday_hours"]
+        block_weekend_hours = SCHEDULES[args.schedule]["block_weekend_hours"]
     else:
-        block_jst_hours = [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
-        block_sat_jst_hours = [int(h) for h in args.block_sat_jst_hours.split(",") if h.strip()]
+        block_weekday_hours = [int(h) for h in args.block_weekday_hours.split(",") if h.strip()]
+        block_weekend_hours = [int(h) for h in args.block_weekend_hours.split(",") if h.strip()]
 
     exclude_jst_dates = [d.strip() for d in args.exclude_jst_dates.split(",") if d.strip()]
 
@@ -83,8 +83,8 @@ def _run_scan(args: argparse.Namespace) -> int:
         execution_size=args.execution_size,
         horizons=[int(h) for h in args.horizons.split(",")],
         costs_bps=args.costs_bps,
-        block_jst_hours=block_jst_hours or None,
-        block_sat_jst_hours=block_sat_jst_hours or None,
+        block_weekday_hours=block_weekday_hours or None,
+        block_weekend_hours=block_weekend_hours or None,
         exclude_jst_dates=exclude_jst_dates or None,
         rolling_dd_window_seconds=args.rolling_dd_window_seconds or None,
         rolling_dd_threshold_bps=args.rolling_dd_threshold_bps or None,
@@ -110,7 +110,7 @@ def _register_verify(sub: argparse._SubParsersAction) -> None:
                    help="InfluxDB backtest bucket")
     v.add_argument("--param-set-id", dest="param_set_id", required=True,
                    help="Backtest param_set_id tag to compare against")
-    v.add_argument("--block-jst-hours", dest="block_jst_hours", default="",
+    v.add_argument("--block-weekday-hours", dest="block_weekday_hours", default="",
                    help="Comma-separated JST hours to block on weekdays (e.g. 0,1,2)")
     v.add_argument("--exclude-jst-dates", dest="exclude_jst_dates", default="",
                    help="Extra JST dates to block (YYYY-MM-DD), appended to defaults")
@@ -120,8 +120,8 @@ def _register_verify(sub: argparse._SubParsersAction) -> None:
 def _run_verify(args: argparse.Namespace) -> int:
     from kilimanjaro.scan.flip_sar import verify
 
-    block_jst_hours   = [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
-    exclude_jst_dates = [d.strip() for d in args.exclude_jst_dates.split(",") if d.strip()]
+    block_weekday_hours = [int(h) for h in args.block_weekday_hours.split(",") if h.strip()]
+    exclude_jst_dates   = [d.strip() for d in args.exclude_jst_dates.split(",") if d.strip()]
     verify(
         flip_exchange=args.flip_exchange,
         flip_symbol=args.flip_symbol,
@@ -134,7 +134,7 @@ def _run_verify(args: argparse.Namespace) -> int:
         execution_size=args.execution_size,
         bucket=args.bucket,
         param_set_id=args.param_set_id,
-        block_jst_hours=block_jst_hours or None,
+        block_weekday_hours=block_weekday_hours or None,
         exclude_jst_dates=exclude_jst_dates or None,
     )
     return 0

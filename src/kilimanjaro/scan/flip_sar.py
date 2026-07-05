@@ -83,29 +83,29 @@ _DEFAULT_BLOCK_JST_DATES: list[str] = [
 _GMO_MAINTENANCE_SAT_HOURS: list[int] = [8, 9, 10, 11]
 
 # Named schedule presets.  "block" means skip these flips; the complement trades.
-# block_jst_hours applies weekdays (Mon–Fri); block_sat_jst_hours applies Saturdays.
+# block_weekday_hours applies Mon–Fri; block_weekend_hours applies Sat–Sun.
 SCHEDULES: dict[str, dict] = {
     "nofilter": {
-        "block_jst_hours": [],
-        "block_sat_jst_hours": [],
+        "block_weekday_hours": [],
+        "block_weekend_hours": [],
     },
     # XRP_JPY: active JST 07–21, inactive JST 22–06
     "xrp_active": {
-        "block_jst_hours": [22, 23, 0, 1, 2, 3, 4, 5, 6],
-        "block_sat_jst_hours": _ALL_SAT,
+        "block_weekday_hours": [22, 23, 0, 1, 2, 3, 4, 5, 6],
+        "block_weekend_hours": _ALL_SAT,
     },
     "xrp_inactive": {
-        "block_jst_hours": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-        "block_sat_jst_hours": [],
+        "block_weekday_hours": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        "block_weekend_hours": [],
     },
     # ETH_JPY / BTC_JPY: active JST 06–21, inactive JST 22–05
     "default_active": {
-        "block_jst_hours": [22, 23, 0, 1, 2, 3, 4, 5],
-        "block_sat_jst_hours": _ALL_SAT,
+        "block_weekday_hours": [22, 23, 0, 1, 2, 3, 4, 5],
+        "block_weekend_hours": _ALL_SAT,
     },
     "default_inactive": {
-        "block_jst_hours": [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-        "block_sat_jst_hours": [],
+        "block_weekday_hours": [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        "block_weekend_hours": [],
     },
 }
 
@@ -157,13 +157,14 @@ def _mp_glob(
 def _apply_schedule_filters(
     flips_df: pd.DataFrame,
     target_exchange: str,
-    block_jst_hours: list[int] | None,
-    block_sat_jst_hours: list[int] | None,
+    block_weekday_hours: list[int] | None,
+    block_weekend_hours: list[int] | None,
     exclude_jst_dates: list[str] | None,
 ) -> tuple[pd.DataFrame, int, int, int]:
     """Add JST columns, merge default block dates, auto-apply GMO maintenance.
 
-    Returns (filtered_df, n_date_blocked, n_hour_blocked, n_sat_blocked).
+    Returns (filtered_df, n_date_blocked, n_weekday_blocked, n_sat_blocked).
+    n_sat_blocked combines block_weekend_hours (Sat+Sun) and GMO maintenance (Sat).
     """
     _JST_OFFSET = 9 * 3600
     jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
@@ -183,23 +184,23 @@ def _apply_schedule_filters(
         n_date_blocked = int(mask.sum())
         flips_df = flips_df[~mask].copy()
 
-    n_hour_blocked = 0
-    if block_jst_hours:
-        mask = (flips_df["jst_weekday"] <= 4) & flips_df["jst_hour"].isin(set(block_jst_hours))
-        n_hour_blocked = int(mask.sum())
+    n_weekday_blocked = 0
+    if block_weekday_hours:
+        mask = (flips_df["jst_weekday"] <= 4) & flips_df["jst_hour"].isin(set(block_weekday_hours))
+        n_weekday_blocked = int(mask.sum())
         flips_df = flips_df[~mask].copy()
 
-    # Auto-apply GMO Saturday maintenance; merge with any extra sat hours passed in
-    sat_hours = set(block_sat_jst_hours or [])
-    if target_exchange.upper() == "GMO":
-        sat_hours |= set(_GMO_MAINTENANCE_SAT_HOURS)
     n_sat_blocked = 0
-    if sat_hours:
-        mask = (flips_df["jst_weekday"] == 5) & flips_df["jst_hour"].isin(sat_hours)
-        n_sat_blocked = int(mask.sum())
+    if block_weekend_hours:
+        mask = (flips_df["jst_weekday"] >= 5) & flips_df["jst_hour"].isin(set(block_weekend_hours))
+        n_sat_blocked += int(mask.sum())
+        flips_df = flips_df[~mask].copy()
+    if target_exchange.upper() == "GMO":
+        mask = (flips_df["jst_weekday"] == 5) & flips_df["jst_hour"].isin(_GMO_MAINTENANCE_SAT_HOURS)
+        n_sat_blocked += int(mask.sum())
         flips_df = flips_df[~mask].copy()
 
-    return flips_df, n_date_blocked, n_hour_blocked, n_sat_blocked
+    return flips_df, n_date_blocked, n_weekday_blocked, n_sat_blocked
 
 
 def scan(
@@ -214,8 +215,8 @@ def scan(
     execution_size: str = "150",
     horizons: list[int] = _DEFAULT_HORIZONS,
     costs_bps: float = _DEFAULT_COSTS_BPS,
-    block_jst_hours: list[int] | None = None,
-    block_sat_jst_hours: list[int] | None = None,
+    block_weekday_hours: list[int] | None = None,
+    block_weekend_hours: list[int] | None = None,
     exclude_jst_dates: list[str] | None = None,
     rolling_dd_window_seconds: float | None = None,
     rolling_dd_threshold_bps: float | None = None,
@@ -274,8 +275,8 @@ def scan(
     all_flip_ts = flips_df["ts"].values.copy()
 
     # ── Schedule filters ──────────────────────────────────────────────────────
-    flips_df, n_date_blocked, n_hour_blocked, n_sat_blocked = _apply_schedule_filters(
-        flips_df, target_exchange, block_jst_hours, block_sat_jst_hours, exclude_jst_dates,
+    flips_df, n_date_blocked, n_weekday_blocked, n_sat_blocked = _apply_schedule_filters(
+        flips_df, target_exchange, block_weekday_hours, block_weekend_hours, exclude_jst_dates,
     )
 
     # exit_ts = first flip from ALL flips strictly after this entry's ts
@@ -346,7 +347,7 @@ def scan(
 
     n_flips_raw = (
         len(flips_df)
-        + n_hour_blocked
+        + n_weekday_blocked
         + n_sat_blocked
         + n_date_blocked
         + n_rolling_dd_blocked
@@ -494,12 +495,12 @@ def scan(
         "sar_step": sar_step,
         "execution_size": execution_size,
         "risk_gates": {
-            "block_jst_hours": block_jst_hours or [],
-            "block_sat_jst_hours": block_sat_jst_hours or [],
+            "block_weekday_hours": block_weekday_hours or [],
+            "block_weekend_hours": block_weekend_hours or [],
             "exclude_jst_dates": exclude_jst_dates or [],
             "rolling_dd_window_seconds": rolling_dd_window_seconds,
             "rolling_dd_threshold_bps": rolling_dd_threshold_bps,
-            "n_hour_blocked": n_hour_blocked,
+            "n_weekday_blocked": n_weekday_blocked,
             "n_sat_blocked": n_sat_blocked,
             "n_date_blocked": n_date_blocked,
             "n_rolling_dd_blocked": n_rolling_dd_blocked,
@@ -525,10 +526,10 @@ def print_summary(report: dict) -> None:
     )
     rg = report["risk_gates"]
     parts = []
-    if rg.get("block_jst_hours"):
-        parts.append(f"block_hours={rg['block_jst_hours']}")
-    if rg.get("block_sat_jst_hours"):
-        parts.append(f"block_sat_hours={rg['block_sat_jst_hours']}")
+    if rg.get("block_weekday_hours"):
+        parts.append(f"block_weekday={rg['block_weekday_hours']}")
+    if rg.get("block_weekend_hours"):
+        parts.append(f"block_weekend={rg['block_weekend_hours']}")
     if rg.get("exclude_jst_dates"):
         parts.append(f"exclude_jst_dates={rg['exclude_jst_dates']}")
     if rg.get("rolling_dd_threshold_bps"):
@@ -538,14 +539,14 @@ def print_summary(report: dict) -> None:
     if parts:
         print(f"Gates: {' / '.join(parts)}")
         total_blocked = (
-            rg.get("n_hour_blocked", 0)
+            rg.get("n_weekday_blocked", 0)
             + rg.get("n_sat_blocked", 0)
             + rg.get("n_date_blocked", 0)
             + rg.get("n_rolling_dd_blocked", 0)
         )
         print(
-            f"  Blocked: {rg.get('n_hour_blocked', 0)} hour"
-            f" + {rg.get('n_sat_blocked', 0)} sat"
+            f"  Blocked: {rg.get('n_weekday_blocked', 0)} weekday"
+            f" + {rg.get('n_sat_blocked', 0)} weekend/sat"
             f" + {rg.get('n_date_blocked', 0)} date"
             f" + {rg.get('n_rolling_dd_blocked', 0)} rolling_dd"
             f" = {total_blocked} of {rg['n_raw_flips']} raw flips"
@@ -628,7 +629,7 @@ def verify(
     param_set_id: str,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path | None = None,
-    block_jst_hours: list[int] | None = None,
+    block_weekday_hours: list[int] | None = None,
     exclude_jst_dates: list[str] | None = None,
 ) -> dict:
     """Compare scan flip prices and PnL against Himalaya backtest InfluxDB data.
@@ -681,7 +682,7 @@ def verify(
 
     # ── Schedule filters ──────────────────────────────────────────────────────
     flips_df, _, _, _ = _apply_schedule_filters(
-        flips_df, target_exchange, block_jst_hours, None, exclude_jst_dates,
+        flips_df, target_exchange, block_weekday_hours, None, exclude_jst_dates,
     )
     flips_df = flips_df.drop(
         columns=[c for c in ["jst_hour", "jst_weekday", "jst_date"] if c in flips_df.columns]
@@ -907,7 +908,7 @@ from(bucket: "{bucket}")
         flip_exchange, flip_symbol, target_exchange, target_symbol,
         box_size_rate, sar_step, execution_size,
         start_date, end_date, param_set_id,
-        block_jst_hours, exclude_jst_dates,
+        block_weekday_hours, exclude_jst_dates,
         order_result, pnl_result,
     )
 
@@ -925,7 +926,7 @@ def _print_verify_report(
     start_date: str,
     end_date: str,
     param_set_id: str,
-    block_jst_hours: list[int] | None,
+    block_weekday_hours: list[int] | None,
     exclude_jst_dates: list[str] | None,
     order_result: dict,
     pnl_result: dict,
@@ -939,8 +940,8 @@ def _print_verify_report(
     print(f"  {start_date} .. {end_date}")
     print(f"  {param_set_id}")
     schedule_parts = []
-    if block_jst_hours:
-        schedule_parts.append(f"wday={sorted(block_jst_hours)}")
+    if block_weekday_hours:
+        schedule_parts.append(f"wday={sorted(block_weekday_hours)}")
     if target_exchange.upper() == "GMO":
         schedule_parts.append(f"sat(GMO maintenance)={_GMO_MAINTENANCE_SAT_HOURS}")
     extra_dates = sorted(set(exclude_jst_dates or []) - set(_DEFAULT_BLOCK_JST_DATES))
