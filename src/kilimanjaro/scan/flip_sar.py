@@ -66,7 +66,8 @@ import pandas as pd
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 _DEFAULT_COSTS_BPS = 1.0  # round-trip slippage only; spread baked in via bid/ask
 _DEFAULT_ROLLING_DD_WINDOW_SECONDS = 21600.0
-_DEFAULT_ROLLING_DD_THRESHOLD_BPS = 0.0  # disabled by default; scan starts fresh unlike backtest
+_DEFAULT_ROLLING_DD_THRESHOLD_BPS = 800.0  # 8% (800 bps); 0 = disabled
+_DEFAULT_ROLLING_DD_COOLDOWN_SECONDS = 21600.0  # gate stays closed this long after threshold hit
 
 _INFLUX_URL = "http://localhost:8086"
 _INFLUX_TOKEN = "panda-auth-token"
@@ -257,12 +258,15 @@ def _apply_risk_filters(
     flips_df: pd.DataFrame,
     rolling_dd_window_seconds: float,
     rolling_dd_threshold_bps: float,
+    rolling_dd_cooldown_seconds: float = _DEFAULT_ROLLING_DD_COOLDOWN_SECONDS,
 ) -> tuple[pd.DataFrame, int]:
     """Rolling drawdown gate.
 
-    Block flip[i] if the cumulative PnL within the last rolling_dd_window_seconds
-    has drawn down more than rolling_dd_threshold_bps from its in-window peak.
-    Only active when both parameters are > 0.
+    Maintains a sliding window of pnl_bps over the last rolling_dd_window_seconds.
+    When the cumulative sum in the window falls below -rolling_dd_threshold_bps
+    (i.e. losses exceed the threshold), the gate closes.  It stays closed for
+    rolling_dd_cooldown_seconds, then reopens with the window reset to zero.
+    Only active when rolling_dd_threshold_bps > 0 and rolling_dd_window_seconds > 0.
 
     Requires columns: ts, exit_ts (NaN for last flip), pnl_bps (NaN for last flip).
     Returns (filtered_df, n_blocked).
@@ -279,23 +283,32 @@ def _apply_risk_filters(
 
     window_trades: deque[tuple[float, float]] = deque()  # (exit_ts, pnl_bps)
     kept = np.ones(len(ts_arr), dtype=bool)
+    gate_open = True
+    gate_reopen_ts = -np.inf
 
     for i in range(len(ts_arr)):
+        t_entry = ts_arr[i]
         t_exit = exit_ts_arr[i] if not np.isnan(exit_ts_arr[i]) else ts_arr[i]
 
+        # Reopen gate and reset window after cooldown expires
+        if not gate_open:
+            if t_entry >= gate_reopen_ts:
+                gate_open = True
+                window_trades.clear()
+            else:
+                kept[i] = False
+                continue
+
+        # Evict trades that have aged out of the window
         while window_trades and window_trades[0][0] < t_exit - rolling_dd_window_seconds:
             window_trades.popleft()
 
-        running = 0.0
-        peak = 0.0
-        for _, r in window_trades:
-            running += r
-            if running > peak:
-                peak = running
-        current_dd = peak - running
-
-        if current_dd > rolling_dd_threshold_bps:
+        # Close gate if cumulative loss in window exceeds threshold
+        window_sum = sum(r for _, r in window_trades)
+        if window_sum < -rolling_dd_threshold_bps:
             kept[i] = False
+            gate_open = False
+            gate_reopen_ts = t_entry + rolling_dd_cooldown_seconds
             continue
 
         r = pnl_bps_arr[i]
@@ -322,6 +335,7 @@ def scan(
     exclude_jst_dates: list[str] | None = None,
     rolling_dd_window_seconds: float | None = None,
     rolling_dd_threshold_bps: float | None = None,
+    rolling_dd_cooldown_seconds: float | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path | None = None,
 ) -> dict:
@@ -422,6 +436,7 @@ def scan(
         flips_df,
         rolling_dd_window_seconds if rolling_dd_window_seconds is not None else _DEFAULT_ROLLING_DD_WINDOW_SECONDS,
         rolling_dd_threshold_bps if rolling_dd_threshold_bps is not None else _DEFAULT_ROLLING_DD_THRESHOLD_BPS,
+        rolling_dd_cooldown_seconds if rolling_dd_cooldown_seconds is not None else _DEFAULT_ROLLING_DD_COOLDOWN_SECONDS,
     )
 
     n_flips = len(flips_df)

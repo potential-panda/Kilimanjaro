@@ -2,18 +2,20 @@
 ============================================================
 FLIP SCAN: BINANCE/ETH_USDT → GMO/ETH_JPY
 Window: 2026-02-01 .. 2026-02-28  box_size_rate=0.003  execution_size=0.3
-N flips: 1732  (64.2/day)
+Gates: rolling_dd<=800.0bps/21600.0s
+  Blocked: 0 weekday + 12 weekend/sat + 0 date + 609 rolling_dd = 621 blocked
+N flips: 1730  (64.1/day)
 Round-trip cost assumption: 1.0 bps
 
 --- Between-flip returns (hold until next SAR cross) ---
-  Avg holding:   1370s  (median 579s)
-  Avg gross:     +5.17 bps
-  Avg net:       +4.17 bps  (after 1.0 bps cost)
-  Hit rate:      42.9% gross  /  42.5% net
-  p25/med/p75:   -42.1 / -11.2 / +37.6 bps
+  Avg holding:   1359s  (median 557s)
+  Avg gross:     +3.80 bps
+  Avg net:       +2.80 bps  (after 1.0 bps cost)
+  Hit rate:      41.2% gross  /  40.9% net
+  p25/med/p75:   -42.5 / -14.3 / +34.7 bps
 
 --- Monthly breakdown (between-flip, net of 1.0 bps) ---
    Month   N flips   Avg gross     Avg net     Hit%
- 2026-01        88     +10.55      +9.55   46.6%
- 2026-02      1643      +4.88      +3.88   42.7%
+ 2026-01       139      -0.30      -1.30   35.3%
+ 2026-02      1590      +4.16      +3.16   41.8%
 

@@ -1,6 +1,6 @@
 import argparse
 
-from kilimanjaro.scan.flip_sar import _DEFAULT_COSTS_BPS, SCHEDULES
+from kilimanjaro.scan.flip_sar import _DEFAULT_COSTS_BPS, _DEFAULT_ROLLING_DD_COOLDOWN_SECONDS, SCHEDULES
 
 _COMMON_FLIP_ARGS = [
     (
@@ -103,7 +103,15 @@ def _register_scan(sub: argparse._SubParsersAction) -> None:
         "--rolling-dd-threshold-bps",
         dest="rolling_dd_threshold_bps",
         type=float,
-        default=0.0,
+        default=800.0,
+        help="Gate closes when window PnL sum < -threshold (bps). 0 = disabled. Default 800 (8%%)",
+    )
+    p.add_argument(
+        "--rolling-dd-cooldown-seconds",
+        dest="rolling_dd_cooldown_seconds",
+        type=float,
+        default=_DEFAULT_ROLLING_DD_COOLDOWN_SECONDS,
+        help="Seconds gate stays closed after threshold hit; window resets on reopen. Default 21600",
     )
     p.add_argument("--out", default=None, help="Write JSON report to this path")
     p.set_defaults(func=_run_scan)
@@ -151,6 +159,7 @@ def _run_scan(args: argparse.Namespace) -> int:
         exclude_jst_dates=exclude_jst_dates or None,
         rolling_dd_window_seconds=args.rolling_dd_window_seconds,
         rolling_dd_threshold_bps=args.rolling_dd_threshold_bps,
+        rolling_dd_cooldown_seconds=args.rolling_dd_cooldown_seconds,
     )
     if args.schedule:
         report["schedule_name"] = args.schedule
