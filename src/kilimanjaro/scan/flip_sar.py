@@ -165,13 +165,25 @@ def _apply_schedule_filters(
 
     Returns (filtered_df, n_date_blocked, n_weekday_blocked, n_sat_blocked).
     n_sat_blocked combines block_weekend_hours (Sat+Sun) and GMO maintenance (Sat).
+
+    Hour/weekday filtering uses exit_ts (when the position closes and the backtest
+    makes its re-entry decision), not ts (when the BINANCE signal fires).
+    Date filtering uses ts (entry date).
+    Flips with null exit_ts (last flip) are never hour/weekday blocked — they drop
+    later via dropna(subset=["exit_price"]).
     """
     _JST_OFFSET = 9 * 3600
-    jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
     flips_df = flips_df.copy()
-    flips_df["jst_hour"]    = (jst_shifted % 86400 // 3600).astype(int)
-    flips_df["jst_weekday"] = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.dayofweek
-    flips_df["jst_date"]    = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.date.astype(str)
+
+    # exit_ts-based JST for hour/weekday blocking
+    has_exit = flips_df["exit_ts"].notna()
+    exit_jst = (flips_df["exit_ts"].fillna(flips_df["ts"]) + _JST_OFFSET).astype("int64")
+    flips_df["jst_hour"]    = (exit_jst % 86400 // 3600).astype(int)
+    flips_df["jst_weekday"] = pd.to_datetime(exit_jst, unit="s", utc=True).dt.dayofweek
+
+    # ts-based JST for date blocking (entry date)
+    ts_jst = (flips_df["ts"] + _JST_OFFSET).astype("int64")
+    flips_df["jst_date"]    = pd.to_datetime(ts_jst, unit="s", utc=True).dt.date.astype(str)
 
     # Merge caller-supplied dates with hardcoded defaults
     all_dates = set(_DEFAULT_BLOCK_JST_DATES)
@@ -186,17 +198,19 @@ def _apply_schedule_filters(
 
     n_weekday_blocked = 0
     if block_weekday_hours:
-        mask = (flips_df["jst_weekday"] <= 4) & flips_df["jst_hour"].isin(set(block_weekday_hours))
+        mask = has_exit & (flips_df["jst_weekday"] <= 4) & flips_df["jst_hour"].isin(set(block_weekday_hours))
         n_weekday_blocked = int(mask.sum())
         flips_df = flips_df[~mask].copy()
+        has_exit = has_exit[~mask]
 
     n_sat_blocked = 0
     if block_weekend_hours:
-        mask = (flips_df["jst_weekday"] >= 5) & flips_df["jst_hour"].isin(set(block_weekend_hours))
+        mask = has_exit & (flips_df["jst_weekday"] >= 5) & flips_df["jst_hour"].isin(set(block_weekend_hours))
         n_sat_blocked += int(mask.sum())
         flips_df = flips_df[~mask].copy()
+        has_exit = has_exit[~mask]
     if target_exchange.upper() == "GMO":
-        mask = (flips_df["jst_weekday"] == 5) & flips_df["jst_hour"].isin(_GMO_MAINTENANCE_SAT_HOURS)
+        mask = has_exit & (flips_df["jst_weekday"] == 5) & flips_df["jst_hour"].isin(_GMO_MAINTENANCE_SAT_HOURS)
         n_sat_blocked += int(mask.sum())
         flips_df = flips_df[~mask].copy()
 
