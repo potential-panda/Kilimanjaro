@@ -97,13 +97,13 @@ def _register_scan(sub: argparse._SubParsersAction) -> None:
         "--rolling-dd-window-seconds",
         dest="rolling_dd_window_seconds",
         type=float,
-        default=0.0,
+        default=21600.0,
     )
     p.add_argument(
         "--rolling-dd-threshold-bps",
         dest="rolling_dd_threshold_bps",
         type=float,
-        default=0.0,
+        default=10.0,
     )
     p.add_argument("--out", default=None, help="Write JSON report to this path")
     p.set_defaults(func=_run_scan)
@@ -149,8 +149,8 @@ def _run_scan(args: argparse.Namespace) -> int:
         block_weekday_hours=block_weekday_hours or None,
         block_weekend_hours=block_weekend_hours or None,
         exclude_jst_dates=exclude_jst_dates or None,
-        rolling_dd_window_seconds=args.rolling_dd_window_seconds or None,
-        rolling_dd_threshold_bps=args.rolling_dd_threshold_bps or None,
+        rolling_dd_window_seconds=args.rolling_dd_window_seconds,
+        rolling_dd_threshold_bps=args.rolling_dd_threshold_bps,
     )
     if args.schedule:
         report["schedule_name"] = args.schedule

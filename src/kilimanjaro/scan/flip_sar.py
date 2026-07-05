@@ -366,7 +366,9 @@ def scan(
     n_rolling_dd_blocked = 0
     if (
         rolling_dd_threshold_bps is not None
+        and rolling_dd_threshold_bps > 0
         and rolling_dd_window_seconds is not None
+        and rolling_dd_window_seconds > 0
         and not flips_df.empty
     ):
         exit_ts_arr = flips_df["exit_ts"].values
