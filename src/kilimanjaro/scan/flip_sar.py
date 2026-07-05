@@ -237,10 +237,12 @@ def scan(
     mp_glob = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
     con = duckdb.connect()
 
-    # ── Step 1: load all flips with actual entry execution price ─────────────
-    # Uses silver MarketPrice: bid/ask are VWAP at execution_size depth (more
-    # realistic than best bid0/ask0), and spread > 10 bps rows are pre-filtered.
-    # BUY (sar_up=+1): enter at ask  SELL (sar_up=-1): enter at bid
+    # ── Step 1: load all flips with entry and exit execution prices ───────────
+    # One SQL builds each row as a complete trade: entry flip → ASOF JOIN for
+    # entry exec → LEAD for the next flip (exit) → ASOF LEFT JOIN for exit exec.
+    # exit_ts is the first overall SAR cross (NO_ENTRY close behaviour); the
+    # exit is from ALL flips, so schedule-filtered flips still act as exits.
+    # BUY (sar_up=+1): enter at ask, exit at bid.  SELL: enter at bid, exit at ask.
     flips_df = (
         con.sql(f"""
         WITH flips AS (
@@ -248,20 +250,35 @@ def scan(
             FROM read_parquet('{flip_glob}', hive_partitioning=true)
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
         ),
+        flips_paired AS (
+            SELECT ts, sar_up,
+                LEAD(ts) OVER (ORDER BY ts) AS exit_ts
+            FROM flips
+        ),
         mp AS (
             SELECT ts, bid, ask
             FROM read_parquet('{mp_glob}', hive_partitioning=true)
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        ),
+        with_entry AS (
+            SELECT
+                f.ts, f.sar_up, f.exit_ts,
+                o.ts AS entry_exec_ts,
+                o.bid AS entry_bid,
+                o.ask AS entry_ask,
+                CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS entry_price
+            FROM flips_paired f ASOF JOIN mp o ON o.ts >= f.ts
         )
-        SELECT f.ts, f.sar_up,
-            CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS entry_price,
-            o.bid AS entry_bid,
-            o.ask AS entry_ask
-        FROM flips f ASOF JOIN mp o ON o.ts >= f.ts
-        ORDER BY f.ts
+        SELECT
+            e.ts, e.sar_up, e.entry_exec_ts, e.entry_price, e.entry_bid, e.entry_ask,
+            e.exit_ts,
+            x.ts AS exit_exec_ts,
+            CASE WHEN e.sar_up > 0 THEN x.bid ELSE x.ask END AS exit_price
+        FROM with_entry e ASOF LEFT JOIN mp x ON x.ts >= e.exit_ts
+        ORDER BY e.ts
     """)
         .df()
-        .dropna()
+        .dropna(subset=["entry_price"])
     )
 
     if flips_df.empty:
@@ -269,24 +286,9 @@ def scan(
             f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}"
         )
 
-    # Save ALL flip timestamps before schedule filtering so exit_ts uses the
-    # first overall SAR cross (not just the next scheduled flip), matching
-    # orion's NO_ENTRY close behaviour.
-    all_flip_ts = flips_df["ts"].values.copy()
-
     # ── Schedule filters ──────────────────────────────────────────────────────
     flips_df, n_date_blocked, n_weekday_blocked, n_sat_blocked = _apply_schedule_filters(
         flips_df, target_exchange, block_weekday_hours, block_weekend_hours, exclude_jst_dates,
-    )
-
-    # exit_ts = first flip from ALL flips strictly after this entry's ts
-    _exit_idx = np.searchsorted(all_flip_ts, flips_df["ts"].values, side="right")
-    _valid_exit = _exit_idx < len(all_flip_ts)
-    flips_df = flips_df.copy()
-    flips_df["exit_ts"] = np.where(
-        _valid_exit,
-        all_flip_ts[np.clip(_exit_idx, 0, len(all_flip_ts) - 1)],
-        np.nan,
     )
 
     # ── Rolling drawdown gate ─────────────────────────────────────────────────
@@ -300,30 +302,8 @@ def scan(
         ep_ask_arr = flips_df["entry_ask"].values
         ep_bid_arr = flips_df["entry_bid"].values
         sar_up_arr = flips_df["sar_up"].values
-        exit_ts_col = flips_df["exit_ts"].values
         entry_p = np.where(sar_up_arr > 0, ep_ask_arr, ep_bid_arr)
-
-        _dd_exit_req = pd.DataFrame(
-            {
-                "entry_ts": ts_arr,
-                "exit_ts": exit_ts_col,
-                "sar_up": sar_up_arr,
-            }
-        )
-        con.register("_dd_exit_req", _dd_exit_req.dropna(subset=["exit_ts"]))
-        _dd_exit_mp = con.sql(f"""
-            SELECT e.entry_ts,
-                CASE WHEN e.sar_up > 0 THEN o.bid ELSE o.ask END AS prov_exit_price
-            FROM _dd_exit_req e ASOF JOIN (
-                SELECT ts, bid, ask
-                FROM read_parquet('{mp_glob}', hive_partitioning=true)
-                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-            ) o ON o.ts >= e.exit_ts
-        """).df()
-        _exit_price_map = dict(
-            zip(_dd_exit_mp["entry_ts"], _dd_exit_mp["prov_exit_price"])
-        )
-        prov_exit = np.array([_exit_price_map.get(t, np.nan) for t in ts_arr])
+        prov_exit = flips_df["exit_price"].values
 
         with np.errstate(invalid="ignore"):
             prov_ret = sar_up_arr * (prov_exit - entry_p) / entry_p * 10000
@@ -371,7 +351,7 @@ def scan(
                     + INTERVAL {max(horizons) // 3600 + 1} DAY
             )
             SELECT f.ts,
-                CASE WHEN f.sar_up > 0 THEN o.bid ELSE o.ask END AS exit_price
+                CASE WHEN f.sar_up > 0 THEN o.bid ELSE o.ask END AS h_exit_price
             FROM flips f ASOF JOIN mp o ON o.ts >= f.ts + {h}
             ORDER BY f.ts
         """)
@@ -381,7 +361,7 @@ def scan(
 
         merged = flips_df.merge(exit_df, on="ts", how="inner")
         raw_ret = (
-            (merged["exit_price"] - merged["entry_price"])
+            (merged["h_exit_price"] - merged["entry_price"])
             / merged["entry_price"]
             * 10000
         )
@@ -404,25 +384,7 @@ def scan(
 
     # ── Step 3: between-flip return ───────────────────────────────────────────
     flips_df = flips_df.reset_index(drop=True)
-    pairs = flips_df[["ts", "sar_up", "exit_ts"]].dropna(subset=["exit_ts"]).copy()
-    pairs = pairs.rename(columns={"exit_ts": "next_ts"})
-    con.register("_pairs", pairs)
-    exit_ob = (
-        con.sql(f"""
-        WITH mp AS (
-            SELECT ts, bid, ask
-            FROM read_parquet('{mp_glob}', hive_partitioning=true)
-            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-        )
-        SELECT p.ts,
-            CASE WHEN p.sar_up > 0 THEN o.bid ELSE o.ask END AS exit_price
-        FROM _pairs p ASOF JOIN mp o ON o.ts >= p.next_ts
-    """)
-        .df()
-        .dropna()
-    )
-
-    bf = flips_df.merge(exit_ob, on="ts", how="inner")
+    bf = flips_df.dropna(subset=["exit_price"]).copy()
     bf["holding_seconds"] = bf["exit_ts"] - bf["ts"]
     raw_bf = (bf["exit_price"] - bf["entry_price"]) / bf["entry_price"] * 10000
     signed_bf = bf["sar_up"] * raw_bf
