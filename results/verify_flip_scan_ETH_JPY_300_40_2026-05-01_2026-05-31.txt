@@ -1,0 +1,52 @@
+
+──────────────────────────────────────────────────────────────────
+  BINANCE/ETH_USDT  →  GMO/ETH_JPY   box=0.003  step=0.04  size=0.3
+  2026-05-01 .. 2026-05-31
+  GMO_ETH_JPY_0.3__nofilter_300_40_20_200_21600_10
+  block: sat(GMO maintenance)=[8, 9, 10, 11], dates=2026-04-02..2026-04-09
+──────────────────────────────────────────────────────────────────
+
+  coverage
+    scan flips        347    backtest orders     345    matched     341  (98.3%)
+    gap                10    scan_only             6    order_only      4
+
+  execution  (matched pairs, entry time = GMO mp_ts → backtest fill)
+                            mean         std         max
+    time diff (s)         +0.000       0.000       0.000
+    price diff (¥)         +0.00        0.00        0.00
+    price diff (bps)      +0.000       0.000
+
+  pnl  (scan between-flip JPY  vs  backtest pnl_change0)
+    scan positions    346    eval records        345    matched     343  (99.1%)
+    scan_only           3    eval_only             2
+                            mean         std         max  pct_exact
+    pnl diff (¥)           -1.10       40.92      649.24      99.1%
+
+  top-10 PnL diff  (matched pairs, largest |diff|)
+    entry (JST)            exit (JST)              dir    scan_pnl    eval_pnl        diff
+    2026-05-23 16:07:08    2026-05-23 16:47:38      -1      692.54     1341.78     -649.24
+    2026-05-09 16:08:51    2026-05-10 00:42:15      -1      -23.44     -400.55     +377.11
+    2026-05-30 13:26:58    2026-05-30 15:30:31      -1     -371.34     -265.78     -105.56
+    2026-05-23 04:10:02    2026-05-23 04:33:03      -1      738.00      738.00       -0.00
+    2026-05-10 00:42:15    2026-05-10 09:58:45      +1      331.01      331.01       +0.00
+    2026-05-15 01:51:29    2026-05-15 01:59:03      -1     -331.40     -331.40       -0.00
+    2026-05-19 23:39:07    2026-05-19 23:48:07      +1     -437.10     -437.10       +0.00
+    2026-05-08 21:31:52    2026-05-08 23:05:29      -1      445.35      445.35       -0.00
+    2026-05-05 00:27:04    2026-05-05 00:51:32      +1     -450.81     -450.81       +0.00
+    2026-05-06 23:52:23    2026-05-07 03:18:35      -1      174.52      174.52       -0.00
+
+  unmatched orders  (10 items)
+    #     kind          time (JST)             dir           price
+    0     order_only    2026-05-09 05:57:11    SELL          exec=361447¥
+    1     scan_only     2026-05-09 10:50:54    sar_up=+1     flip=361951¥
+    2     scan_only     2026-05-09 16:08:51    sar_up=-1     flip=362704¥
+    3     order_only    2026-05-16 04:10:40    SELL          exec=352951¥
+    4     order_only    2026-05-23 07:34:04    SELL          exec=329777¥
+    5     scan_only     2026-05-23 10:01:08    sar_up=+1     flip=329083¥
+    6     scan_only     2026-05-23 16:07:08    sar_up=-1     flip=327613¥
+    7     order_only    2026-05-30 06:22:42    SELL          exec=320433¥
+    8     scan_only     2026-05-30 10:10:31    sar_up=+1     flip=320647¥
+    9     scan_only     2026-05-30 13:26:58    sar_up=-1     flip=320081¥
+
+──────────────────────────────────────────────────────────────────
+

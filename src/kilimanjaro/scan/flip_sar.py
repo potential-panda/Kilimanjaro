@@ -344,10 +344,12 @@ def scan(
     # jst_date from ts (entry date for date blocking).
     _JST = 9 * 3600
     exit_jst = (flips_df["exit_ts"].fillna(flips_df["ts"]) + _JST).astype("int64")
-    flips_df["jst_hour"]    = (exit_jst % 86400 // 3600).astype(int)
+    flips_df["jst_hour"] = (exit_jst % 86400 // 3600).astype(int)
     flips_df["jst_weekday"] = pd.to_datetime(exit_jst, unit="s", utc=True).dt.dayofweek
     ts_jst = (flips_df["ts"] + _JST).astype("int64")
-    flips_df["jst_date"]    = pd.to_datetime(ts_jst, unit="s", utc=True).dt.date.astype(str)
+    flips_df["jst_date"] = pd.to_datetime(ts_jst, unit="s", utc=True).dt.date.astype(
+        str
+    )
 
     # ── Schedule filters ──────────────────────────────────────────────────────
     flips_df, n_date_blocked, n_weekday_blocked, n_sat_blocked = (
@@ -576,6 +578,7 @@ def verify(
     features_root: Path | None = None,
     block_weekday_hours: list[int] | None = None,
     exclude_jst_dates: list[str] | None = None,
+    out: Path | str | None = None,
 ) -> dict:
     """Compare scan flip prices and PnL against Himalaya backtest InfluxDB data.
 
@@ -638,10 +641,12 @@ def verify(
     # ── JST columns ───────────────────────────────────────────────────────────
     _JST = 9 * 3600
     exit_jst = (flips_df["exit_ts"].fillna(flips_df["ts"]) + _JST).astype("int64")
-    flips_df["jst_hour"]    = (exit_jst % 86400 // 3600).astype(int)
+    flips_df["jst_hour"] = (exit_jst % 86400 // 3600).astype(int)
     flips_df["jst_weekday"] = pd.to_datetime(exit_jst, unit="s", utc=True).dt.dayofweek
     ts_jst = (flips_df["ts"] + _JST).astype("int64")
-    flips_df["jst_date"]    = pd.to_datetime(ts_jst, unit="s", utc=True).dt.date.astype(str)
+    flips_df["jst_date"] = pd.to_datetime(ts_jst, unit="s", utc=True).dt.date.astype(
+        str
+    )
 
     # ── Schedule filters ──────────────────────────────────────────────────────
     flips_df, _, _, _ = _apply_schedule_filters(
@@ -652,7 +657,9 @@ def verify(
         exclude_jst_dates,
     )
     flips_df = flips_df.drop(
-        columns=[c for c in ["jst_hour", "jst_weekday", "jst_date"] if c in flips_df.columns]
+        columns=[
+            c for c in ["jst_hour", "jst_weekday", "jst_date"] if c in flips_df.columns
+        ]
     )
 
     # exit prices for between-flip PnL
@@ -899,22 +906,33 @@ from(bucket: "{bucket}")
         )
 
     # ── 5. Print report ───────────────────────────────────────────────────────
-    _print_verify_report(
-        flip_exchange,
-        flip_symbol,
-        target_exchange,
-        target_symbol,
-        box_size_rate,
-        sar_step,
-        execution_size,
-        start_date,
-        end_date,
-        param_set_id,
-        block_weekday_hours,
-        exclude_jst_dates,
-        order_result,
-        pnl_result,
-    )
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        _print_verify_report(
+            flip_exchange,
+            flip_symbol,
+            target_exchange,
+            target_symbol,
+            box_size_rate,
+            sar_step,
+            execution_size,
+            start_date,
+            end_date,
+            param_set_id,
+            block_weekday_hours,
+            exclude_jst_dates,
+            order_result,
+            pnl_result,
+        )
+    text = buf.getvalue()
+    print(text, end="")
+    if out is not None:
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        Path(out).write_text(text)
+        print(f"Saved {out}")
 
     return {"order": order_result, "pnl": pnl_result}
 
@@ -967,7 +985,7 @@ def _print_verify_report(
     n_ord_only = order_result.get("n_order_only", 0)
     match_rate = n_matched / n_scan * 100 if n_scan else 0.0
 
-    print(f"\n  coverage")
+    print("\n  coverage")
     print(
         f"    {'scan flips':<14} {n_scan:>6}    {'backtest orders':<16} {n_orders:>6}"
         f"    {'matched':<8} {n_matched:>6}  ({match_rate:.1f}%)"
@@ -981,7 +999,7 @@ def _print_verify_report(
     if order_result["time_diff"] and order_result["price_diff"]:
         td = order_result["time_diff"]
         prd = order_result["price_diff"]
-        print(f"\n  execution  (matched pairs, entry time = GMO mp_ts → backtest fill)")
+        print("\n  execution  (matched pairs, entry time = GMO mp_ts → backtest fill)")
         print(f"    {'':16}  {'mean':>10}  {'std':>10}  {'max':>10}")
         print(
             f"    {'time diff (s)':<16}  {td['mean_s']:>+10.3f}  {td['std_s']:>10.3f}"

@@ -115,10 +115,18 @@ def _register_verify(sub: argparse._SubParsersAction) -> None:
 
 
 def _run_verify(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
     from kilimanjaro.scan.flip_sar import verify
 
     block_weekday_hours = [int(h) for h in args.block_weekday_hours.split(",") if h.strip()]
     exclude_jst_dates   = [d.strip() for d in args.exclude_jst_dates.split(",") if d.strip()]
+
+    box_int  = int(round(args.box_size_rate * 100_000))
+    step_int = int(round(args.sar_step * 1_000))
+    sym      = args.target_symbol.replace("/", "_")
+    out_path = Path("results") / f"verify_flip_scan_{sym}_{box_int}_{step_int}_{args.start}_{args.end}.txt"
+
     verify(
         flip_exchange=args.flip_exchange,
         flip_symbol=args.flip_symbol,
@@ -133,5 +141,6 @@ def _run_verify(args: argparse.Namespace) -> int:
         param_set_id=args.param_set_id,
         block_weekday_hours=block_weekday_hours or None,
         exclude_jst_dates=exclude_jst_dates or None,
+        out=out_path,
     )
     return 0
