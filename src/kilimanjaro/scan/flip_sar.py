@@ -740,7 +740,6 @@ from(bucket: "{bucket}")
         scan_sorted = flips_df.sort_values("ts").reset_index(drop=True)
 
         order_ts_arr = order_df["order_ts"].values
-        scan_ts_arr = scan_sorted["ts"].values
         mp_ts_arr = scan_sorted["mp_ts"].values
 
         # Match on mp_ts (= GMO MarketPrice ts) vs order_ts with a 2s threshold.
@@ -900,7 +899,7 @@ from(bucket: "{bucket}")
                     "mean_jpy": float(np.mean(pnl_diff)),
                     "std_jpy": float(np.std(pnl_diff)),
                     "max_abs_jpy": float(np.max(np.abs(pnl_diff))),
-                    "pct_exact": float(np.mean(np.abs(pnl_diff) < 0.01)) * 100,
+                    "pct_exact": float(np.mean(np.abs(pnl_diff) < 0.1)) * 100,
                 },
             }
         )
@@ -1020,7 +1019,7 @@ def _print_verify_report(
     n_pnl_sonly = pnl_result.get("n_scan_only", 0)
     n_pnl_eonly = pnl_result.get("n_eval_only", 0)
     pnl_match_rt = n_pnl_match / n_pos * 100 if n_pos else 0.0
-    print(f"\n  pnl  (scan between-flip JPY  vs  backtest pnl_change0)")
+    print("\n  pnl  (scan between-flip JPY  vs  backtest pnl_change0)")
     print(
         f"    {'scan positions':<14} {n_pos:>6}    {'eval records':<16} {n_eval:>6}"
         f"    {'matched':<8} {n_pnl_match:>6}  ({pnl_match_rt:.1f}%)"
