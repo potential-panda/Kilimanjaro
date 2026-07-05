@@ -282,14 +282,20 @@ def scan(
                 o.ask AS entry_ask,
                 CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS entry_price
             FROM flips_paired f ASOF JOIN mp o ON o.ts >= f.ts
+        ),
+        with_exit AS (
+            SELECT
+                e.ts, e.sar_up, e.entry_exec_ts, e.entry_price, e.entry_bid, e.entry_ask,
+                e.exit_ts,
+                x.ts AS exit_exec_ts,
+                CASE WHEN e.sar_up > 0 THEN x.bid ELSE x.ask END AS exit_price
+            FROM with_entry e ASOF LEFT JOIN mp x ON x.ts >= e.exit_ts
         )
-        SELECT
-            e.ts, e.sar_up, e.entry_exec_ts, e.entry_price, e.entry_bid, e.entry_ask,
-            e.exit_ts,
-            x.ts AS exit_exec_ts,
-            CASE WHEN e.sar_up > 0 THEN x.bid ELSE x.ask END AS exit_price
-        FROM with_entry e ASOF LEFT JOIN mp x ON x.ts >= e.exit_ts
-        ORDER BY e.ts
+        SELECT *,
+            sar_up * (exit_price - entry_price)                       AS pnl,
+            sar_up * (exit_price - entry_price) / entry_price * 10000 AS pnl_bps
+        FROM with_exit
+        ORDER BY ts
     """)
         .df()
         .dropna(subset=["entry_price"])
@@ -312,15 +318,8 @@ def scan(
         and rolling_dd_window_seconds is not None
         and not flips_df.empty
     ):
-        ts_arr = flips_df["ts"].values
-        ep_ask_arr = flips_df["entry_ask"].values
-        ep_bid_arr = flips_df["entry_bid"].values
-        sar_up_arr = flips_df["sar_up"].values
-        entry_p = np.where(sar_up_arr > 0, ep_ask_arr, ep_bid_arr)
-        prov_exit = flips_df["exit_price"].values
-
-        with np.errstate(invalid="ignore"):
-            prov_ret = sar_up_arr * (prov_exit - entry_p) / entry_p * 10000
+        ts_arr   = flips_df["ts"].values
+        prov_ret = flips_df["pnl_bps"].values
         buf = deque()
         cum_pnl = 0.0
         kept = np.ones(len(ts_arr), dtype=bool)
@@ -398,61 +397,47 @@ def scan(
 
     # ── Step 3: between-flip return ───────────────────────────────────────────
     flips_df = flips_df.reset_index(drop=True)
-    bf = flips_df.dropna(subset=["exit_price"]).copy()
+    bf = flips_df.dropna(subset=["pnl_bps"]).copy()
     bf["holding_seconds"] = bf["exit_ts"] - bf["ts"]
-    raw_bf = (bf["exit_price"] - bf["entry_price"]) / bf["entry_price"] * 10000
-    signed_bf = bf["sar_up"] * raw_bf
 
     between_flip = {
-        "n": len(signed_bf),
+        "n": len(bf),
         "avg_holding_seconds": float(bf["holding_seconds"].mean()),
         "median_holding_seconds": float(bf["holding_seconds"].median()),
-        "avg_signed_return_bps": float(signed_bf.mean()),
-        "avg_net_return_bps": float(signed_bf.mean() - costs_bps),
-        "hit_rate": float((signed_bf > 0).mean()),
-        "hit_rate_net": float((signed_bf > costs_bps).mean()),
-        "median_signed_return_bps": float(signed_bf.median()),
-        "p25_bps": float(signed_bf.quantile(0.25)),
-        "p75_bps": float(signed_bf.quantile(0.75)),
-        "std_bps": float(signed_bf.std()),
+        "avg_signed_return_bps": float(bf["pnl_bps"].mean()),
+        "avg_net_return_bps": float(bf["pnl_bps"].mean() - costs_bps),
+        "hit_rate": float((bf["pnl_bps"] > 0).mean()),
+        "hit_rate_net": float((bf["pnl_bps"] > costs_bps).mean()),
+        "median_signed_return_bps": float(bf["pnl_bps"].median()),
+        "p25_bps": float(bf["pnl_bps"].quantile(0.25)),
+        "p75_bps": float(bf["pnl_bps"].quantile(0.75)),
+        "std_bps": float(bf["pnl_bps"].std()),
     }
 
     # ── Step 4: monthly breakdown (between-flip) ──────────────────────────────
     bf["month"] = pd.to_datetime(bf["ts"], unit="s", utc=True).dt.strftime("%Y-%m")
     monthly = []
     for month, g in bf.groupby("month"):
-        sr = (
-            g["sar_up"]
-            * (g["exit_price"] - g["entry_price"])
-            / g["entry_price"]
-            * 10000
-        )
         monthly.append(
             {
                 "month": month,
                 "n_flips": len(g),
-                "avg_signed_return_bps": float(sr.mean()),
-                "avg_net_return_bps": float(sr.mean() - costs_bps),
-                "hit_rate": float((sr > 0).mean()),
+                "avg_signed_return_bps": float(g["pnl_bps"].mean()),
+                "avg_net_return_bps": float(g["pnl_bps"].mean() - costs_bps),
+                "hit_rate": float((g["pnl_bps"] > 0).mean()),
             }
         )
 
     # ── Step 5: time-of-day breakdown (between-flip, JST) ────────────────────
     by_hour = []
     for hour, g in bf.groupby("jst_hour"):
-        sr = (
-            g["sar_up"]
-            * (g["exit_price"] - g["entry_price"])
-            / g["entry_price"]
-            * 10000
-        )
         by_hour.append(
             {
                 "jst_hour": int(hour),
                 "n_flips": len(g),
-                "avg_signed_return_bps": float(sr.mean()),
-                "avg_net_return_bps": float(sr.mean() - costs_bps),
-                "hit_rate": float((sr > 0).mean()),
+                "avg_signed_return_bps": float(g["pnl_bps"].mean()),
+                "avg_net_return_bps": float(g["pnl_bps"].mean() - costs_bps),
+                "hit_rate": float((g["pnl_bps"] > 0).mean()),
             }
         )
 
