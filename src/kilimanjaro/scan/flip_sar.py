@@ -576,8 +576,6 @@ def verify(
     param_set_id: str,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path | None = None,
-    block_weekday_hours: list[int] | None = None,
-    exclude_jst_dates: list[str] | None = None,
     out: Path | str | None = None,
 ) -> dict:
     """Compare scan flip prices and PnL against Himalaya backtest InfluxDB data.
@@ -586,9 +584,9 @@ def verify(
       order   — flip time vs ORDER._time, flip price vs ORDER.EXEC_PRICE
       pnl     — scan between-flip PnL (JPY) vs EVAL.pnl_change0
 
-    GMO Saturday maintenance (08:00-11:59 JST) is blocked automatically when
+    GMO Saturday maintenance (JST) is blocked automatically when
     target_exchange == "GMO". Default block dates (_DEFAULT_BLOCK_JST_DATES) are
-    always applied; extra dates can be appended via exclude_jst_dates.
+    always applied.
 
     Returns a result dict and prints a summary.
     """
@@ -652,9 +650,9 @@ def verify(
     flips_df, _, _, _ = _apply_schedule_filters(
         flips_df,
         target_exchange,
-        block_weekday_hours,
         None,
-        exclude_jst_dates,
+        None,
+        None,
     )
     flips_df = flips_df.drop(
         columns=[
@@ -950,8 +948,6 @@ from(bucket: "{bucket}")
             start_date,
             end_date,
             param_set_id,
-            block_weekday_hours,
-            exclude_jst_dates,
             order_result,
             pnl_result,
         )
@@ -976,8 +972,6 @@ def _print_verify_report(
     start_date: str,
     end_date: str,
     param_set_id: str,
-    block_weekday_hours: list[int] | None,
-    exclude_jst_dates: list[str] | None,
     order_result: dict,
     pnl_result: dict,
 ) -> None:
@@ -992,15 +986,10 @@ def _print_verify_report(
     print(f"  {start_date} .. {end_date}")
     print(f"  {param_set_id}")
     schedule_parts = []
-    if block_weekday_hours:
-        schedule_parts.append(f"wday={sorted(block_weekday_hours)}")
     if target_exchange.upper() == "GMO":
         schedule_parts.append(f"sat(GMO maintenance)={_GMO_MAINTENANCE_SAT_HOURS}")
-    extra_dates = sorted(set(exclude_jst_dates or []) - set(_DEFAULT_BLOCK_JST_DATES))
-    all_dates = sorted(set(_DEFAULT_BLOCK_JST_DATES) | set(exclude_jst_dates or []))
+    all_dates = sorted(_DEFAULT_BLOCK_JST_DATES)
     schedule_parts.append(f"dates={all_dates[0]}..{all_dates[-1]}" if all_dates else "")
-    if extra_dates:
-        schedule_parts.append(f"extra_dates={extra_dates}")
     print(f"  block: {', '.join(p for p in schedule_parts if p)}")
     print(f"{'─' * W}")
 
