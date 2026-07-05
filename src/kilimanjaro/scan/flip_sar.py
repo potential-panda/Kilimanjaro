@@ -812,29 +812,46 @@ from(bucket: "{bucket}")
     n_eval    = len(eval_df)
 
     pnl_result = {"n_scan_positions": n_bf_scan, "n_eval": n_eval, "n_matched": 0,
-                  "pnl_diff": {}}
+                  "n_scan_only": 0, "n_eval_only": 0, "pnl_diff": {}}
 
     if not eval_df.empty and not bf.empty:
         eval_df["eval_ts"] = eval_df["_time"].apply(lambda t: t.timestamp())
         eval_df = eval_df.sort_values("eval_ts").reset_index(drop=True)
+        bf_sorted = bf.sort_values("exit_ts").reset_index(drop=True)
 
-        # match each scan position's exit_ts to nearest EVAL timestamp
-        eval_ts_arr  = eval_df["eval_ts"].values
-        exit_ts_arr  = bf["exit_ts"].values
-        idx = np.searchsorted(eval_ts_arr, exit_ts_arr, side="left")
-        idx = np.clip(idx, 0, len(eval_ts_arr) - 1)
-        idx_prev = np.clip(idx - 1, 0, len(eval_ts_arr) - 1)
-        d_next = np.abs(eval_ts_arr[idx] - exit_ts_arr)
-        d_prev = np.abs(eval_ts_arr[idx_prev] - exit_ts_arr)
-        best_idx = np.where(d_prev < d_next, idx_prev, idx)
+        # Two-pointer threshold match on exit_ts vs eval_ts (same 2s threshold)
+        eval_ts_arr = eval_df["eval_ts"].values
+        exit_ts_arr = bf_sorted["exit_ts"].values
+        _PNL_THRESHOLD = 2.0
+        p_to_e = np.full(len(exit_ts_arr), -1, dtype=int)
+        e_to_p = np.full(len(eval_ts_arr), -1, dtype=int)
+        i, j = 0, 0
+        while i < len(exit_ts_arr) and j < len(eval_ts_arr):
+            d = exit_ts_arr[i] - eval_ts_arr[j]
+            if abs(d) <= _PNL_THRESHOLD:
+                p_to_e[i] = j
+                e_to_p[j] = i
+                i += 1
+                j += 1
+            elif d < 0:
+                i += 1
+            else:
+                j += 1
 
-        scan_pnl_arr = bf["scan_pnl"].values
-        eval_pnl_arr = eval_df["pnl_change0"].values[best_idx]
+        matched_mask_p = p_to_e >= 0
+        matched_mask_e = e_to_p >= 0
+        n_pnl_matched  = int(matched_mask_p.sum())
+        n_scan_only_p  = int((~matched_mask_p).sum())
+        n_eval_only_p  = int((~matched_mask_e).sum())
+
+        scan_pnl_arr = bf_sorted["scan_pnl"].values[matched_mask_p]
+        eval_pnl_arr = eval_df["pnl_change0"].values[p_to_e[matched_mask_p]]
         pnl_diff     = scan_pnl_arr - eval_pnl_arr
 
         pnl_result.update({
-            "n_matched": len(bf),
-            "n_gap":     abs(n_bf_scan - n_eval),
+            "n_matched":    n_pnl_matched,
+            "n_scan_only":  n_scan_only_p,
+            "n_eval_only":  n_eval_only_p,
             "pnl_diff": {
                 "mean_jpy":    float(np.mean(pnl_diff)),
                 "std_jpy":     float(np.std(pnl_diff)),
@@ -916,12 +933,16 @@ def _print_verify_report(
         print(f"    {'price diff (bps)':<16}  {prd['mean_bps']:>+10.3f}  {prd['std_bps']:>10.3f}")
 
     # ── pnl comparison ────────────────────────────────────────────────────────
-    n_pos     = pnl_result["n_scan_positions"]
-    n_eval    = pnl_result["n_eval"]
-    n_pnl_gap = pnl_result.get("n_gap", 0)
+    n_pos        = pnl_result["n_scan_positions"]
+    n_eval       = pnl_result["n_eval"]
+    n_pnl_match  = pnl_result.get("n_matched", 0)
+    n_pnl_sonly  = pnl_result.get("n_scan_only", 0)
+    n_pnl_eonly  = pnl_result.get("n_eval_only", 0)
+    pnl_match_rt = n_pnl_match / n_pos * 100 if n_pos else 0.0
     print(f"\n  pnl  (scan between-flip JPY  vs  backtest pnl_change0)")
     print(f"    {'scan positions':<14} {n_pos:>6}    {'eval records':<16} {n_eval:>6}"
-          f"    {'gap':<8} {n_pnl_gap:>6}")
+          f"    {'matched':<8} {n_pnl_match:>6}  ({pnl_match_rt:.1f}%)")
+    print(f"    {'scan_only':<14} {n_pnl_sonly:>6}    {'eval_only':<16} {n_pnl_eonly:>6}")
     if pnl_result["pnl_diff"]:
         pd2 = pnl_result["pnl_diff"]
         print(f"    {'':16}  {'mean':>10}  {'std':>10}  {'max':>10}  {'pct_exact':>9}")
