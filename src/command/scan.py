@@ -1,6 +1,6 @@
 import argparse
 
-from kilimanjaro.scan.flip_sar import _DEFAULT_COSTS_BPS, SCHEDULES
+from kilimanjaro.scan.flip_sar import _DEFAULT_COSTS_BPS, _DEFAULT_MIN_FLIP_GAP_SECONDS, SCHEDULES
 
 _COMMON_FLIP_ARGS = [
     (
@@ -103,7 +103,14 @@ def _register_scan(sub: argparse._SubParsersAction) -> None:
         "--rolling-dd-threshold-bps",
         dest="rolling_dd_threshold_bps",
         type=float,
-        default=10.0,
+        default=0.0,
+    )
+    p.add_argument(
+        "--min-flip-gap-seconds",
+        dest="min_flip_gap_seconds",
+        type=float,
+        default=_DEFAULT_MIN_FLIP_GAP_SECONDS,
+        help="Circuit breaker: block flip if gap from previous flip < this threshold (seconds)",
     )
     p.add_argument("--out", default=None, help="Write JSON report to this path")
     p.set_defaults(func=_run_scan)
@@ -151,6 +158,7 @@ def _run_scan(args: argparse.Namespace) -> int:
         exclude_jst_dates=exclude_jst_dates or None,
         rolling_dd_window_seconds=args.rolling_dd_window_seconds,
         rolling_dd_threshold_bps=args.rolling_dd_threshold_bps,
+        min_flip_gap_seconds=args.min_flip_gap_seconds,
     )
     if args.schedule:
         report["schedule_name"] = args.schedule
