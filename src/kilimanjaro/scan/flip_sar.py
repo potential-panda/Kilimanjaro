@@ -253,27 +253,16 @@ def _apply_schedule_filters(
     return flips_df, n_date_blocked, n_weekday_blocked, n_sat_blocked
 
 
-_DEFAULT_MIN_FLIP_GAP_SECONDS = 2.7  # circuit breaker: min gap between consecutive flips
-
-
 def _apply_risk_filters(
     flips_df: pd.DataFrame,
     rolling_dd_window_seconds: float,
     rolling_dd_threshold_bps: float,
-    min_flip_gap_seconds: float = _DEFAULT_MIN_FLIP_GAP_SECONDS,
 ) -> tuple[pd.DataFrame, int]:
-    """Rolling drawdown gate + flash-crash circuit breaker.
+    """Rolling drawdown gate.
 
-    Two independent filters applied in order:
-
-    1. Circuit breaker: block flip[i] if ts[i] - ts[i-1] < min_flip_gap_seconds.
-       Consecutive SAR flips within a few seconds indicate a flash crash — the gate
-       blocks every flip in the burst and re-opens the moment the burst ends (no
-       fixed hold-off timer).  Normal flips are hours apart so are never affected.
-
-    2. Rolling DD gate: block if the equity curve within the last
-       rolling_dd_window_seconds drew down more than rolling_dd_threshold_bps from
-       its in-window peak.  Only active when both parameters are > 0.
+    Block flip[i] if the cumulative PnL within the last rolling_dd_window_seconds
+    has drawn down more than rolling_dd_threshold_bps from its in-window peak.
+    Only active when both parameters are > 0.
 
     Requires columns: ts, exit_ts (NaN for last flip), pnl_bps (NaN for last flip).
     Returns (filtered_df, n_blocked).
@@ -281,38 +270,33 @@ def _apply_risk_filters(
     if flips_df.empty:
         return flips_df, 0
 
+    if rolling_dd_threshold_bps <= 0 or rolling_dd_window_seconds <= 0:
+        return flips_df, 0
+
     ts_arr = flips_df["ts"].values
     exit_ts_arr = flips_df["exit_ts"].values
     pnl_bps_arr = flips_df["pnl_bps"].values
 
-    window_trades: deque[tuple[float, float]] = deque()  # (exit_ts, incremental_pnl_bps)
+    window_trades: deque[tuple[float, float]] = deque()  # (exit_ts, pnl_bps)
     kept = np.ones(len(ts_arr), dtype=bool)
 
     for i in range(len(ts_arr)):
         t_exit = exit_ts_arr[i] if not np.isnan(exit_ts_arr[i]) else ts_arr[i]
 
-        # ── Circuit breaker: block burst flips ────────────────────────────────
-        if min_flip_gap_seconds > 0 and i > 0:
-            if ts_arr[i] - ts_arr[i - 1] < min_flip_gap_seconds:
-                kept[i] = False
-                continue
+        while window_trades and window_trades[0][0] < t_exit - rolling_dd_window_seconds:
+            window_trades.popleft()
 
-        # ── Rolling DD gate ───────────────────────────────────────────────────
-        if rolling_dd_threshold_bps > 0 and rolling_dd_window_seconds > 0:
-            while window_trades and window_trades[0][0] < t_exit - rolling_dd_window_seconds:
-                window_trades.popleft()
+        running = 0.0
+        peak = 0.0
+        for _, r in window_trades:
+            running += r
+            if running > peak:
+                peak = running
+        current_dd = peak - running
 
-            running = 0.0
-            peak = 0.0
-            for _, r in window_trades:
-                running += r
-                if running > peak:
-                    peak = running
-            current_dd = peak - running
-
-            if current_dd > rolling_dd_threshold_bps:
-                kept[i] = False
-                continue
+        if current_dd > rolling_dd_threshold_bps:
+            kept[i] = False
+            continue
 
         r = pnl_bps_arr[i]
         if not np.isnan(r):
@@ -338,7 +322,6 @@ def scan(
     exclude_jst_dates: list[str] | None = None,
     rolling_dd_window_seconds: float | None = None,
     rolling_dd_threshold_bps: float | None = None,
-    min_flip_gap_seconds: float = _DEFAULT_MIN_FLIP_GAP_SECONDS,
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path | None = None,
 ) -> dict:
@@ -439,7 +422,6 @@ def scan(
         flips_df,
         rolling_dd_window_seconds if rolling_dd_window_seconds is not None else _DEFAULT_ROLLING_DD_WINDOW_SECONDS,
         rolling_dd_threshold_bps if rolling_dd_threshold_bps is not None else _DEFAULT_ROLLING_DD_THRESHOLD_BPS,
-        min_flip_gap_seconds=min_flip_gap_seconds,
     )
 
     n_flips = len(flips_df)
