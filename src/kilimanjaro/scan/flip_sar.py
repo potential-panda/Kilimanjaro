@@ -197,7 +197,6 @@ def scan(
         )
         SELECT f.ts, f.sar_up,
             CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS entry_price,
-            (o.bid + o.ask) / 2.0 AS entry_mid,
             o.bid AS entry_bid,
             o.ask AS entry_ask
         FROM flips f ASOF JOIN mp o ON o.ts >= f.ts
