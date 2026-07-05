@@ -40,7 +40,7 @@ _INFLUX_ORG = "panda-org"
 
 LOG = logging.getLogger(__name__)
 
-_CHART_LEN = 5   # matches orion's BarChart(max_len=5)
+_CHART_LEN = 5  # matches orion's BarChart(max_len=5)
 _CHUNK_DAYS = 7  # process this many days per memory chunk
 
 
@@ -102,10 +102,13 @@ def populate(
     full_range = DtRange.from_strings(start_date, end_date)
     skip_dates: set[str] = set() if recreate else _existing_dates(out_store, full_range)
     if skip_dates:
-        LOG.info(f"Skipping {len(skip_dates)} existing date(s) (pass --recreate to overwrite)")
+        LOG.info(
+            f"Skipping {len(skip_dates)} existing date(s) (pass --recreate to overwrite)"
+        )
 
     warmup_start = (
-        datetime.datetime.strptime(start_date, "%Y-%m-%d") - datetime.timedelta(days=warmup_days)
+        datetime.datetime.strptime(start_date, "%Y-%m-%d")
+        - datetime.timedelta(days=warmup_days)
     ).strftime("%Y-%m-%d")
     process_range = DtRange.from_strings(warmup_start, end_date)
     # Unix timestamp of the first moment of start_date in local (JST) time
@@ -159,11 +162,14 @@ def populate(
             if date_str in skip_dates:
                 continue
 
-            out_store.add(ts, {
-                "sar_up":    1.0 if desired_side else -1.0,
-                "sar_flip":  1.0,
-                "sar_level": sar_ns,
-            })
+            out_store.add(
+                ts,
+                {
+                    "sar_up": 1.0 if desired_side else -1.0,
+                    "sar_flip": 1.0,
+                    "sar_level": sar_ns,
+                },
+            )
             total_flips += 1
 
     out_store.close()
@@ -205,7 +211,8 @@ def verify(
     trade_store = TradeStore(str(parquet_store.layer_dir[Layer.BRONZE]), market)
 
     warmup_start = (
-        datetime.datetime.strptime(start_date, "%Y-%m-%d") - datetime.timedelta(days=warmup_days)
+        datetime.datetime.strptime(start_date, "%Y-%m-%d")
+        - datetime.timedelta(days=warmup_days)
     ).strftime("%Y-%m-%d")
     process_range = DtRange.from_strings(warmup_start, end_date)
     cutoff_ts = datetime.datetime.strptime(start_date, "%Y-%m-%d").timestamp()
@@ -230,19 +237,23 @@ def verify(
             b = bar.as_dict()
             if b["ts"] < cutoff_ts:
                 continue  # warmup: update state, don't collect
-            local_rows.append({
-                "ts":     b["ts"],
-                "open":   b["open"],
-                "high":   b["high"],
-                "low":    b["low"],
-                "close":  b["close"],
-                "sar_s":  result["s"],
-                "sar_ns": result["ns"],
-                "sar_up": 1.0 if result["up"] else 0.0,
-            })
+            local_rows.append(
+                {
+                    "ts": b["ts"],
+                    "open": b["open"],
+                    "high": b["high"],
+                    "low": b["low"],
+                    "close": b["close"],
+                    "sar_s": result["s"],
+                    "sar_ns": result["ns"],
+                    "sar_up": 1.0 if result["up"] else 0.0,
+                }
+            )
 
     if not local_rows:
-        raise ValueError(f"No bars computed locally for {market} {start_date}..{end_date}")
+        raise ValueError(
+            f"No bars computed locally for {market} {start_date}..{end_date}"
+        )
 
     local_df = pd.DataFrame(local_rows)
     LOG.info(f"Local: {len(local_df)} bars computed")
@@ -258,10 +269,14 @@ def verify(
         "%Y-%m-%dT%H:%M:%SZ"
     )
     end_utc = (
-        datetime.datetime.strptime(end_date, "%Y-%m-%d") + datetime.timedelta(days=1) - _jst
+        datetime.datetime.strptime(end_date, "%Y-%m-%d")
+        + datetime.timedelta(days=1)
+        - _jst
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    client = InfluxDBClient(url=_INFLUX_URL, token=_INFLUX_TOKEN, org=_INFLUX_ORG, timeout=120_000)
+    client = InfluxDBClient(
+        url=_INFLUX_URL, token=_INFLUX_TOKEN, org=_INFLUX_ORG, timeout=120_000
+    )
     qapi = client.query_api()
 
     # Auto-detect param_set_id: any matching box_int / step_int is fine because
@@ -315,7 +330,9 @@ from(bucket: "{bucket}")
 
     LOG.info(f"Remote: {len(remote_df)} bars from InfluxDB")
 
-    remote_df = remote_df.rename(columns={"sar:s": "sar_s", "sar:ns": "sar_ns", "sar:up": "sar_up_bool"})
+    remote_df = remote_df.rename(
+        columns={"sar:s": "sar_s", "sar:ns": "sar_ns", "sar:up": "sar_up_bool"}
+    )
     remote_df["sar_up"] = remote_df["sar_up_bool"].astype(float)
     remote_df["ts"] = remote_df["ts"].astype(float)
 
@@ -330,11 +347,11 @@ from(bucket: "{bucket}")
 
     # ── 4. Per-field diff statistics ─────────────────────────────────────────
     _pairs = [
-        ("open",   "open_L",   "open_R"),
-        ("high",   "high_L",   "high_R"),
-        ("low",    "low_L",    "low_R"),
-        ("close",  "close_L",  "close_R"),
-        ("sar_s",  "sar_s_L",  "sar_s_R"),
+        ("open", "open_L", "open_R"),
+        ("high", "high_L", "high_R"),
+        ("low", "low_L", "low_R"),
+        ("close", "close_L", "close_R"),
+        ("sar_s", "sar_s_L", "sar_s_R"),
         ("sar_ns", "sar_ns_L", "sar_ns_R"),
         ("sar_up", "sar_up_L", "sar_up_R"),
     ]
@@ -345,30 +362,34 @@ from(bucket: "{bucket}")
         diff = (merged[lc] - merged[rc]).abs()
         stats[field] = {
             "mean_diff": float(diff.mean()),
-            "std_diff":  float(diff.std()),
-            "max_diff":  float(diff.max()),
-            "n_exact":   int((diff == 0.0).sum()),
-            "n_total":   n_matched,
+            "std_diff": float(diff.std()),
+            "max_diff": float(diff.max()),
+            "n_exact": int((diff == 0.0).sum()),
+            "n_total": n_matched,
         }
 
     result = {
-        "param_set_id":  param_set_id,
-        "n_local":       n_local,
-        "n_remote":      n_remote,
-        "n_matched":     n_matched,
-        "n_local_only":  n_local - n_matched,
+        "param_set_id": param_set_id,
+        "n_local": n_local,
+        "n_remote": n_remote,
+        "n_matched": n_matched,
+        "n_local_only": n_local - n_matched,
         "n_remote_only": n_remote - n_matched,
-        "fields":        stats,
+        "fields": stats,
     }
 
     # ── 5. Summary print ─────────────────────────────────────────────────────
-    print(f"\n=== ChartRangeSAR verify ===")
+    print("\n=== ChartRangeSAR verify ===")
     print(f"  market    : {market.exchange_name.name}/{market.symbol.name}")
-    print(f"  params    : box={box_size_rate}  step={step}  accel={acceleration}  max={maximum}")
+    print(
+        f"  params    : box={box_size_rate}  step={step}  accel={acceleration}  max={maximum}"
+    )
     print(f"  period    : {start_date} .. {end_date}")
     print(f"  param_id  : {param_set_id}")
     print(f"  bars      : local={n_local}  remote={n_remote}  matched={n_matched}")
-    print(f"              local_only={n_local - n_matched}  remote_only={n_remote - n_matched}")
+    print(
+        f"              local_only={n_local - n_matched}  remote_only={n_remote - n_matched}"
+    )
     if n_matched > 0:
         header = f"\n  {'field':<10} {'mean_diff':>14} {'std_diff':>14} {'max_diff':>14} {'pct_exact':>10}"
         print(header)
