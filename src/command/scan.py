@@ -111,17 +111,17 @@ def _register_verify(sub: argparse._SubParsersAction) -> None:
     v.add_argument("--param-set-id", dest="param_set_id", required=True,
                    help="Backtest param_set_id tag to compare against")
     v.add_argument("--block-jst-hours", dest="block_jst_hours", default="",
-                   help="Comma-separated JST hours to block on weekdays (e.g. 8,9,10,11)")
-    v.add_argument("--block-sat-jst-hours", dest="block_sat_jst_hours", default="",
-                   help="Comma-separated JST hours to block on Saturdays (e.g. 8,9,10,11)")
+                   help="Comma-separated JST hours to block on weekdays (e.g. 0,1,2)")
+    v.add_argument("--exclude-jst-dates", dest="exclude_jst_dates", default="",
+                   help="Extra JST dates to block (YYYY-MM-DD), appended to defaults")
     v.set_defaults(func=_run_verify)
 
 
 def _run_verify(args: argparse.Namespace) -> int:
     from kilimanjaro.scan.flip_sar import verify
 
-    block_jst_hours     = [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
-    block_sat_jst_hours = [int(h) for h in args.block_sat_jst_hours.split(",") if h.strip()]
+    block_jst_hours   = [int(h) for h in args.block_jst_hours.split(",") if h.strip()]
+    exclude_jst_dates = [d.strip() for d in args.exclude_jst_dates.split(",") if d.strip()]
     verify(
         flip_exchange=args.flip_exchange,
         flip_symbol=args.flip_symbol,
@@ -135,6 +135,6 @@ def _run_verify(args: argparse.Namespace) -> int:
         bucket=args.bucket,
         param_set_id=args.param_set_id,
         block_jst_hours=block_jst_hours or None,
-        block_sat_jst_hours=block_sat_jst_hours or None,
+        exclude_jst_dates=exclude_jst_dates or None,
     )
     return 0

@@ -73,6 +73,15 @@ _INFLUX_ORG = "panda-org"
 
 _ALL_SAT = list(range(24))
 
+# Dates to always block (GMO system downtime, market closures, etc.)
+_DEFAULT_BLOCK_JST_DATES: list[str] = [
+    "2026-04-02", "2026-04-03", "2026-04-04", "2026-04-05",
+    "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09",
+]
+
+# GMO exchange Saturday maintenance window (JST hours, inclusive)
+_GMO_MAINTENANCE_SAT_HOURS: list[int] = [8, 9, 10, 11]
+
 # Named schedule presets.  "block" means skip these flips; the complement trades.
 # block_jst_hours applies weekdays (Mon–Fri); block_sat_jst_hours applies Saturdays.
 SCHEDULES: dict[str, dict] = {
@@ -143,6 +152,54 @@ def _mp_glob(
         / "date=*"
         / "*.parquet"
     )
+
+
+def _apply_schedule_filters(
+    flips_df: pd.DataFrame,
+    target_exchange: str,
+    block_jst_hours: list[int] | None,
+    block_sat_jst_hours: list[int] | None,
+    exclude_jst_dates: list[str] | None,
+) -> tuple[pd.DataFrame, int, int, int]:
+    """Add JST columns, merge default block dates, auto-apply GMO maintenance.
+
+    Returns (filtered_df, n_date_blocked, n_hour_blocked, n_sat_blocked).
+    """
+    _JST_OFFSET = 9 * 3600
+    jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
+    flips_df = flips_df.copy()
+    flips_df["jst_hour"]    = (jst_shifted % 86400 // 3600).astype(int)
+    flips_df["jst_weekday"] = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.dayofweek
+    flips_df["jst_date"]    = pd.to_datetime(jst_shifted, unit="s", utc=True).dt.date.astype(str)
+
+    # Merge caller-supplied dates with hardcoded defaults
+    all_dates = set(_DEFAULT_BLOCK_JST_DATES)
+    if exclude_jst_dates:
+        all_dates |= set(exclude_jst_dates)
+
+    n_date_blocked = 0
+    if all_dates:
+        mask = flips_df["jst_date"].isin(all_dates)
+        n_date_blocked = int(mask.sum())
+        flips_df = flips_df[~mask].copy()
+
+    n_hour_blocked = 0
+    if block_jst_hours:
+        mask = (flips_df["jst_weekday"] <= 4) & flips_df["jst_hour"].isin(set(block_jst_hours))
+        n_hour_blocked = int(mask.sum())
+        flips_df = flips_df[~mask].copy()
+
+    # Auto-apply GMO Saturday maintenance; merge with any extra sat hours passed in
+    sat_hours = set(block_sat_jst_hours or [])
+    if target_exchange.upper() == "GMO":
+        sat_hours |= set(_GMO_MAINTENANCE_SAT_HOURS)
+    n_sat_blocked = 0
+    if sat_hours:
+        mask = (flips_df["jst_weekday"] == 5) & flips_df["jst_hour"].isin(sat_hours)
+        n_sat_blocked = int(mask.sum())
+        flips_df = flips_df[~mask].copy()
+
+    return flips_df, n_date_blocked, n_hour_blocked, n_sat_blocked
 
 
 def scan(
@@ -217,37 +274,9 @@ def scan(
     all_flip_ts = flips_df["ts"].values.copy()
 
     # ── Schedule filters ──────────────────────────────────────────────────────
-    _JST_OFFSET = 9 * 3600
-    jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
-    flips_df["jst_hour"] = (jst_shifted % 86400 // 3600).astype(int)
-    flips_df["jst_weekday"] = pd.to_datetime(
-        jst_shifted, unit="s", utc=True
-    ).dt.dayofweek
-    flips_df["jst_date"] = pd.to_datetime(
-        jst_shifted, unit="s", utc=True
-    ).dt.date.astype(str)
-    n_hour_blocked = 0
-    n_sat_blocked = 0
-    n_date_blocked = 0
-
-    if exclude_jst_dates:
-        mask = flips_df["jst_date"].isin(set(exclude_jst_dates))
-        n_date_blocked = int(mask.sum())
-        flips_df = flips_df[~mask].copy()
-
-    if block_jst_hours:
-        mask = (flips_df["jst_weekday"] <= 4) & flips_df["jst_hour"].isin(
-            set(block_jst_hours)
-        )
-        n_hour_blocked = int(mask.sum())
-        flips_df = flips_df[~mask].copy()
-
-    if block_sat_jst_hours:
-        mask = (flips_df["jst_weekday"] == 5) & flips_df["jst_hour"].isin(
-            set(block_sat_jst_hours)
-        )
-        n_sat_blocked = int(mask.sum())
-        flips_df = flips_df[~mask].copy()
+    flips_df, n_date_blocked, n_hour_blocked, n_sat_blocked = _apply_schedule_filters(
+        flips_df, target_exchange, block_jst_hours, block_sat_jst_hours, exclude_jst_dates,
+    )
 
     # exit_ts = first flip from ALL flips strictly after this entry's ts
     _exit_idx = np.searchsorted(all_flip_ts, flips_df["ts"].values, side="right")
@@ -600,13 +629,17 @@ def verify(
     data_root: Path = _DEFAULT_DATA_ROOT,
     features_root: Path | None = None,
     block_jst_hours: list[int] | None = None,
-    block_sat_jst_hours: list[int] | None = None,
+    exclude_jst_dates: list[str] | None = None,
 ) -> dict:
     """Compare scan flip prices and PnL against Himalaya backtest InfluxDB data.
 
     Compares:
       order   — flip time vs ORDER._time, flip price vs ORDER.EXEC_PRICE
       pnl     — scan between-flip PnL (JPY) vs EVAL.pnl_change0
+
+    GMO Saturday maintenance (08:00-11:59 JST) is blocked automatically when
+    target_exchange == "GMO". Default block dates (_DEFAULT_BLOCK_JST_DATES) are
+    always applied; extra dates can be appended via exclude_jst_dates.
 
     Returns a result dict and prints a summary.
     """
@@ -646,21 +679,13 @@ def verify(
     # exit_ts uses ALL flips (same as scan()'s NO_ENTRY close behaviour)
     all_ts = flips_df["ts"].values
 
-    # ── Schedule filters (mirror scan() logic) ────────────────────────────────
-    _JST_OFFSET = 9 * 3600
-    if block_jst_hours or block_sat_jst_hours:
-        jst_shifted = (flips_df["ts"] + _JST_OFFSET).astype("int64")
-        flips_df["_jst_hour"] = (jst_shifted % 86400 // 3600).astype(int)
-        flips_df["_jst_wday"] = pd.to_datetime(
-            jst_shifted, unit="s", utc=True
-        ).dt.dayofweek
-        if block_jst_hours:
-            mask = (flips_df["_jst_wday"] <= 4) & flips_df["_jst_hour"].isin(set(block_jst_hours))
-            flips_df = flips_df[~mask].copy()
-        if block_sat_jst_hours:
-            mask = (flips_df["_jst_wday"] == 5) & flips_df["_jst_hour"].isin(set(block_sat_jst_hours))
-            flips_df = flips_df[~mask].copy()
-        flips_df = flips_df.drop(columns=["_jst_hour", "_jst_wday"])
+    # ── Schedule filters ──────────────────────────────────────────────────────
+    flips_df, _, _, _ = _apply_schedule_filters(
+        flips_df, target_exchange, block_jst_hours, None, exclude_jst_dates,
+    )
+    flips_df = flips_df.drop(
+        columns=[c for c in ["jst_hour", "jst_weekday", "jst_date"] if c in flips_df.columns]
+    )
 
     # exit_ts = first overall flip (from unfiltered all_ts) strictly after each entry
     exit_idx = np.searchsorted(all_ts, flips_df["ts"].values, side="right")
@@ -882,7 +907,7 @@ from(bucket: "{bucket}")
         flip_exchange, flip_symbol, target_exchange, target_symbol,
         box_size_rate, sar_step, execution_size,
         start_date, end_date, param_set_id,
-        block_jst_hours, block_sat_jst_hours,
+        block_jst_hours, exclude_jst_dates,
         order_result, pnl_result,
     )
 
@@ -901,7 +926,7 @@ def _print_verify_report(
     end_date: str,
     param_set_id: str,
     block_jst_hours: list[int] | None,
-    block_sat_jst_hours: list[int] | None,
+    exclude_jst_dates: list[str] | None,
     order_result: dict,
     pnl_result: dict,
 ) -> None:
@@ -916,10 +941,14 @@ def _print_verify_report(
     schedule_parts = []
     if block_jst_hours:
         schedule_parts.append(f"wday={sorted(block_jst_hours)}")
-    if block_sat_jst_hours:
-        schedule_parts.append(f"sat={sorted(block_sat_jst_hours)}")
-    if schedule_parts:
-        print(f"  block: {', '.join(schedule_parts)}")
+    if target_exchange.upper() == "GMO":
+        schedule_parts.append(f"sat(GMO maintenance)={_GMO_MAINTENANCE_SAT_HOURS}")
+    extra_dates = sorted(set(exclude_jst_dates or []) - set(_DEFAULT_BLOCK_JST_DATES))
+    all_dates   = sorted(set(_DEFAULT_BLOCK_JST_DATES) | set(exclude_jst_dates or []))
+    schedule_parts.append(f"dates={all_dates[0]}..{all_dates[-1]}" if all_dates else "")
+    if extra_dates:
+        schedule_parts.append(f"extra_dates={extra_dates}")
+    print(f"  block: {', '.join(p for p in schedule_parts if p)}")
     print(f"{'─' * W}")
 
     # ── coverage ──────────────────────────────────────────────────────────────
