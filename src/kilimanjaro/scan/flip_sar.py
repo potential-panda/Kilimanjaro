@@ -843,47 +843,99 @@ from(bucket: "{bucket}")
             },
         })
 
-    # ── 5. Print summary ──────────────────────────────────────────────────────
-    print(f"\n=== Flip scan verify ===")
-    print(f"  signal  : {flip_exchange}/{flip_symbol} box={box_size_rate} step={sar_step}")
-    print(f"  target  : {target_exchange}/{target_symbol} size={execution_size}")
-    print(f"  period  : {start_date} .. {end_date}")
-    print(f"  param_id: {param_set_id}")
-    if block_jst_hours:
-        print(f"  block wday hours : {sorted(block_jst_hours)}")
-    if block_sat_jst_hours:
-        print(f"  block sat  hours : {sorted(block_sat_jst_hours)}")
-
-    print(f"\n-- Order match (scan flip price vs backtest OPEN order) --")
-    print(f"  scan flips : {order_result['n_scan']}")
-    print(f"  orders     : {order_result['n_orders']}")
-    print(f"  matched    : {order_result.get('n_matched', 'n/a')}")
-    print(f"  gap        : {order_result.get('n_gap', 'n/a')}"
-          f"  (scan_only={order_result.get('n_scan_only', '?')}"
-          f"  order_only={order_result.get('n_order_only', '?')})")
-    if order_result["time_diff"]:
-        td = order_result["time_diff"]
-        print(f"  time diff  : mean={td['mean_s']:+.3f}s  std={td['std_s']:.3f}s  max={td['max_abs_s']:.3f}s"
-              f"  (GMO mp_ts → backtest fill)")
-    if order_result["price_diff"]:
-        pd_ = order_result["price_diff"]
-        print(f"  price diff : mean={pd_['mean_jpy']:+.2f}¥  std={pd_['std_jpy']:.2f}¥"
-              f"  mean={pd_['mean_bps']:+.3f}bps  std={pd_['std_bps']:.3f}bps")
-    gap_rows = order_result.get("gap_rows", [])
-    if gap_rows:
-        print(f"\n  {'#':<3}  {'kind':<12}  {'time (JST)':<26}  {'dir':<12}  {'price'}")
-        for k, r in enumerate(gap_rows):
-            print(f"  {k:<3}  {r['kind']:<12}  {r['ts_jst'].strftime('%Y-%m-%d %H:%M:%S'):<26}"
-                  f"  {r['dir']:<12}  {r['price']}")
-
-    print(f"\n-- PnL match (scan between-flip JPY vs backtest pnl_change0) --")
-    print(f"  scan positions : {pnl_result['n_scan_positions']}")
-    print(f"  eval records   : {pnl_result['n_eval']}")
-    print(f"  gap            : {pnl_result.get('n_gap', 'n/a')}")
-    if pnl_result["pnl_diff"]:
-        pd2 = pnl_result["pnl_diff"]
-        print(f"  pnl diff  : mean={pd2['mean_jpy']:+.4f}¥  std={pd2['std_jpy']:.4f}¥"
-              f"  max={pd2['max_abs_jpy']:.4f}¥  pct_exact={pd2['pct_exact']:.1f}%")
-    print()
+    # ── 5. Print report ───────────────────────────────────────────────────────
+    _print_verify_report(
+        flip_exchange, flip_symbol, target_exchange, target_symbol,
+        box_size_rate, sar_step, execution_size,
+        start_date, end_date, param_set_id,
+        block_jst_hours, block_sat_jst_hours,
+        order_result, pnl_result,
+    )
 
     return {"order": order_result, "pnl": pnl_result}
+
+
+def _print_verify_report(
+    flip_exchange: str,
+    flip_symbol: str,
+    target_exchange: str,
+    target_symbol: str,
+    box_size_rate: float,
+    sar_step: float,
+    execution_size: str,
+    start_date: str,
+    end_date: str,
+    param_set_id: str,
+    block_jst_hours: list[int] | None,
+    block_sat_jst_hours: list[int] | None,
+    order_result: dict,
+    pnl_result: dict,
+) -> None:
+    W = 66
+
+    # ── header ────────────────────────────────────────────────────────────────
+    print(f"\n{'─' * W}")
+    print(f"  {flip_exchange}/{flip_symbol}  →  {target_exchange}/{target_symbol}"
+          f"   box={box_size_rate}  step={sar_step}  size={execution_size}")
+    print(f"  {start_date} .. {end_date}")
+    print(f"  {param_set_id}")
+    schedule_parts = []
+    if block_jst_hours:
+        schedule_parts.append(f"wday={sorted(block_jst_hours)}")
+    if block_sat_jst_hours:
+        schedule_parts.append(f"sat={sorted(block_sat_jst_hours)}")
+    if schedule_parts:
+        print(f"  block: {', '.join(schedule_parts)}")
+    print(f"{'─' * W}")
+
+    # ── coverage ──────────────────────────────────────────────────────────────
+    n_scan      = order_result["n_scan"]
+    n_orders    = order_result["n_orders"]
+    n_matched   = order_result.get("n_matched", 0)
+    n_gap       = order_result.get("n_gap", 0)
+    n_scan_only = order_result.get("n_scan_only", 0)
+    n_ord_only  = order_result.get("n_order_only", 0)
+    match_rate  = n_matched / n_scan * 100 if n_scan else 0.0
+
+    print(f"\n  coverage")
+    print(f"    {'scan flips':<14} {n_scan:>6}    {'backtest orders':<16} {n_orders:>6}"
+          f"    {'matched':<8} {n_matched:>6}  ({match_rate:.1f}%)")
+    print(f"    {'gap':<14} {n_gap:>6}    {'scan_only':<16} {n_scan_only:>6}"
+          f"    {'order_only':<8} {n_ord_only:>6}")
+
+    # ── execution quality (matched pairs) ─────────────────────────────────────
+    if order_result["time_diff"] and order_result["price_diff"]:
+        td  = order_result["time_diff"]
+        prd = order_result["price_diff"]
+        print(f"\n  execution  (matched pairs, entry time = GMO mp_ts → backtest fill)")
+        print(f"    {'':16}  {'mean':>10}  {'std':>10}  {'max':>10}")
+        print(f"    {'time diff (s)':<16}  {td['mean_s']:>+10.3f}  {td['std_s']:>10.3f}"
+              f"  {td['max_abs_s']:>10.3f}")
+        print(f"    {'price diff (¥)':<16}  {prd['mean_jpy']:>+10.2f}  {prd['std_jpy']:>10.2f}"
+              f"  {prd['max_abs_jpy']:>10.2f}")
+        print(f"    {'price diff (bps)':<16}  {prd['mean_bps']:>+10.3f}  {prd['std_bps']:>10.3f}")
+
+    # ── pnl comparison ────────────────────────────────────────────────────────
+    n_pos     = pnl_result["n_scan_positions"]
+    n_eval    = pnl_result["n_eval"]
+    n_pnl_gap = pnl_result.get("n_gap", 0)
+    print(f"\n  pnl  (scan between-flip JPY  vs  backtest pnl_change0)")
+    print(f"    {'scan positions':<14} {n_pos:>6}    {'eval records':<16} {n_eval:>6}"
+          f"    {'gap':<8} {n_pnl_gap:>6}")
+    if pnl_result["pnl_diff"]:
+        pd2 = pnl_result["pnl_diff"]
+        print(f"    {'':16}  {'mean':>10}  {'std':>10}  {'max':>10}  {'pct_exact':>9}")
+        print(f"    {'pnl diff (¥)':<16}  {pd2['mean_jpy']:>+10.2f}  {pd2['std_jpy']:>10.2f}"
+              f"  {pd2['max_abs_jpy']:>10.2f}  {pd2['pct_exact']:>8.1f}%")
+
+    # ── gap table ─────────────────────────────────────────────────────────────
+    gap_rows = order_result.get("gap_rows", [])
+    if gap_rows:
+        print(f"\n  gaps  ({len(gap_rows)} items)")
+        print(f"    {'#':<4}  {'kind':<12}  {'time (JST)':<21}  {'dir':<12}  price")
+        for k, r in enumerate(gap_rows):
+            print(f"    {k:<4}  {r['kind']:<12}"
+                  f"  {r['ts_jst'].strftime('%Y-%m-%d %H:%M:%S'):<21}"
+                  f"  {r['dir']:<12}  {r['price']}")
+
+    print(f"\n{'─' * W}\n")
