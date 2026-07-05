@@ -154,7 +154,24 @@ def _run_scan(args: argparse.Namespace) -> int:
     )
     if args.schedule:
         report["schedule_name"] = args.schedule
-    print_summary(report)
+
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        print_summary(report)
+    text = buf.getvalue()
+    print(text, end="")
+
+    box_int  = int(round(args.box_size_rate * 100_000))
+    step_int = int(round(args.sar_step * 1_000))
+    sym      = args.target_symbol.replace("/", "_")
+    txt_path = Path("results") / f"scan_flip_{sym}_{box_int}_{step_int}_{args.start}_{args.end}.txt"
+    txt_path.parent.mkdir(parents=True, exist_ok=True)
+    txt_path.write_text(text)
+    print(f"Saved {txt_path}")
+
     if args.out:
         Path(args.out).write_text(json.dumps(report, indent=2))
         print(f"Wrote {args.out}")
