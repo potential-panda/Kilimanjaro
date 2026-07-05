@@ -601,7 +601,7 @@ def verify(
     size_f = float(execution_size)
     con = duckdb.connect()
 
-    # ── 1. Scan: compute all flips with entry & exit prices ───────────────────
+    # ── 1. Scan: compute all flips with entry prices and LEAD-based exit_ts ───
     flips_df = (
         con.sql(f"""
         WITH flips AS (
@@ -609,29 +609,31 @@ def verify(
             FROM read_parquet('{flip_glob}', hive_partitioning=true)
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
         ),
+        flips_paired AS (
+            SELECT ts, sar_up,
+                LEAD(ts) OVER (ORDER BY ts) AS exit_ts
+            FROM flips
+        ),
         mp AS (
             SELECT ts, bid, ask
             FROM read_parquet('{mp_glob}', hive_partitioning=true)
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
         )
-        SELECT f.ts, f.sar_up,
+        SELECT f.ts, f.sar_up, f.exit_ts,
             CASE WHEN f.sar_up > 0 THEN o.ask ELSE o.bid END AS flip_price,
             o.bid AS entry_bid, o.ask AS entry_ask,
             o.ts AS mp_ts
-        FROM flips f ASOF JOIN mp o ON o.ts >= f.ts
+        FROM flips_paired f ASOF JOIN mp o ON o.ts >= f.ts
         ORDER BY f.ts
     """)
         .df()
-        .dropna()
+        .dropna(subset=["flip_price"])
     )
 
     if flips_df.empty:
         raise ValueError(
             f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}"
         )
-
-    # exit_ts uses ALL flips (same as scan()'s NO_ENTRY close behaviour)
-    all_ts = flips_df["ts"].values
 
     # ── JST columns ───────────────────────────────────────────────────────────
     _JST = 9 * 3600
@@ -651,13 +653,6 @@ def verify(
     )
     flips_df = flips_df.drop(
         columns=[c for c in ["jst_hour", "jst_weekday", "jst_date"] if c in flips_df.columns]
-    )
-
-    # exit_ts = first overall flip (from unfiltered all_ts) strictly after each entry
-    exit_idx = np.searchsorted(all_ts, flips_df["ts"].values, side="right")
-    valid = exit_idx < len(all_ts)
-    flips_df["exit_ts"] = np.where(
-        valid, all_ts[np.clip(exit_idx, 0, len(all_ts) - 1)], np.nan
     )
 
     # exit prices for between-flip PnL
