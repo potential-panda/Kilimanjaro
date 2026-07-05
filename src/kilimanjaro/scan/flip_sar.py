@@ -338,13 +338,6 @@ def scan(
         n_rolling_dd_blocked = int((~kept).sum())
         flips_df = flips_df[kept].copy()
 
-    n_flips_raw = (
-        len(flips_df)
-        + n_weekday_blocked
-        + n_sat_blocked
-        + n_date_blocked
-        + n_rolling_dd_blocked
-    )
     n_flips = len(flips_df)
     n_days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
 
@@ -465,7 +458,6 @@ def scan(
             "n_sat_blocked": n_sat_blocked,
             "n_date_blocked": n_date_blocked,
             "n_rolling_dd_blocked": n_rolling_dd_blocked,
-            "n_raw_flips": n_flips_raw,
         },
         "fixed_horizon": horizon_results,
         "between_flip": between_flip,
@@ -510,7 +502,7 @@ def print_summary(report: dict) -> None:
             f" + {rg.get('n_sat_blocked', 0)} weekend/sat"
             f" + {rg.get('n_date_blocked', 0)} date"
             f" + {rg.get('n_rolling_dd_blocked', 0)} rolling_dd"
-            f" = {total_blocked} of {rg['n_raw_flips']} raw flips"
+            f" = {total_blocked} blocked"
         )
     print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
     print(f"Round-trip cost assumption: {costs} bps")
