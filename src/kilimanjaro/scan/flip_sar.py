@@ -85,7 +85,7 @@ _DEFAULT_BLOCK_JST_DATES: list[str] = [
 ]
 
 # GMO exchange Saturday maintenance window (JST hours, inclusive)
-_GMO_MAINTENANCE_SAT_HOURS: list[int] = [8, 9, 10, 11]
+_GMO_MAINTENANCE_SAT_HOURS: list[int] = [9, 10, 11]
 
 # Named schedule presets.  "block" means skip these flips; the complement trades.
 # block_weekday_hours applies Mon–Fri; block_weekend_hours applies Sat–Sun.
@@ -1068,7 +1068,7 @@ def _print_verify_report(
     scan_only_rows = pnl_result.get("scan_only_rows", [])
     eval_only_rows = pnl_result.get("eval_only_rows", [])
     if scan_only_rows or eval_only_rows:
-        print(f"\n  unmatched pnl positions")
+        print("\n  unmatched pnl positions")
         if scan_only_rows:
             print(f"    scan_only ({len(scan_only_rows)}):")
             print(
