@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Run a parameter grid scan for ETH (BINANCE/ETH_USDT → GMO/ETH_JPY).
+"""Run a parameter grid scan for a given market (ETH / XRP / BTC).
 
 Iterates all (box, step, schedule) combinations, collects per-trade statistics,
 writes results to CSV, and prints a grouped summary sorted by total_net_bps.
 
 Usage
 -----
-    python tools/grid_scan_eth.py --start 2026-01-01 --end 2026-06-30
-    python tools/grid_scan_eth.py --start 2026-01-01 --end 2026-06-30 --out results/my_grid.csv
-    python tools/grid_scan_eth.py --start 2026-01-01 --end 2026-06-30 --top 5 --p-threshold 0.05
+    python tools/grid_scan.py --market eth --start 2025-07-01 --end 2026-06-30
+    python tools/grid_scan.py --market xrp --start 2025-07-01 --end 2026-06-30
+    python tools/grid_scan.py --market btc --start 2025-07-01 --end 2026-06-30
+    python tools/grid_scan.py --market eth --start 2026-01-01 --end 2026-06-30 --out results/my_grid.csv
 
 Columns in CSV and table
 ------------------------
@@ -47,15 +48,52 @@ BOXES = [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.004, 0.005]
 STEPS = [0.01, 0.02, 0.03, 0.04, 0.05]
 
 _SCHED_ORDER = {"nofilter": 0, "active": 1, "inactive": 2}
+_ALL_WEEKEND  = list(range(24))
 
-# ETH_JPY / BTC_JPY schedule presets (mirror flip_sar.SCHEDULES["default_*"])
-# active:   trade weekday JST 06–21 only (block night + all weekends)
-# inactive: trade weekday night JST 22–05 + all weekends (block weekday daytime)
-_ALL_WEEKEND = list(range(24))
-SCHEDULES: dict[str, dict] = {
-    "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
-    "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=_ALL_WEEKEND),
-    "inactive": dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
+# Per-market config: flip source, execution target, execution size, and schedules.
+# Schedule hours are JST. "block" = skip flips in those hours.
+# active:   trade peak hours only (block nights + weekends)
+# inactive: trade off-peak hours (block peak weekday hours; weekends unblocked)
+MARKET_CONFIGS: dict[str, dict] = {
+    "eth": {
+        "flip_exchange":  "BINANCE",
+        "flip_symbol":    "ETH_USDT",
+        "target_exchange": "GMO",
+        "target_symbol":  "ETH_JPY",
+        "execution_size": "0.3",
+        # ETH/BTC active JST 06–21; inactive JST 22–05 + weekends
+        "schedules": {
+            "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
+            "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=_ALL_WEEKEND),
+            "inactive": dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
+        },
+    },
+    "xrp": {
+        "flip_exchange":  "BINANCE",
+        "flip_symbol":    "XRP_USDT",
+        "target_exchange": "GMO",
+        "target_symbol":  "XRP_JPY",
+        "execution_size": "150",
+        # XRP active JST 07–21; inactive JST 22–06 + weekends
+        "schedules": {
+            "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
+            "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5, 6], block_weekend_hours=_ALL_WEEKEND),
+            "inactive": dict(block_weekday_hours=[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
+        },
+    },
+    "btc": {
+        "flip_exchange":  "BINANCE",
+        "flip_symbol":    "BTC_USDT",
+        "target_exchange": "GMO",
+        "target_symbol":  "BTC_JPY",
+        "execution_size": "0.002",
+        # BTC active JST 06–21; inactive JST 22–05 + weekends
+        "schedules": {
+            "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
+            "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=_ALL_WEEKEND),
+            "inactive": dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
+        },
+    },
 }
 
 _CSV_FIELDS = [
@@ -67,22 +105,25 @@ _CSV_FIELDS = [
 ]
 
 
-def _run_grid(start: str, end: str) -> list[dict]:
-    total = len(BOXES) * len(STEPS) * len(SCHEDULES)
+def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
+    schedules = market_cfg["schedules"]
+    total = len(BOXES) * len(STEPS) * len(schedules)
     rows: list[dict] = []
     done = 0
 
     for box in BOXES:
         for step in STEPS:
-            for sched_name, sched_kwargs in SCHEDULES.items():
+            for sched_name, sched_kwargs in schedules.items():
                 done += 1
                 try:
                     r = scan(
-                        flip_exchange="BINANCE", flip_symbol="ETH_USDT",
-                        target_exchange="GMO", target_symbol="ETH_JPY",
+                        flip_exchange=market_cfg["flip_exchange"],
+                        flip_symbol=market_cfg["flip_symbol"],
+                        target_exchange=market_cfg["target_exchange"],
+                        target_symbol=market_cfg["target_symbol"],
                         start_date=start, end_date=end,
                         box_size_rate=box, sar_step=step,
-                        execution_size="0.3",
+                        execution_size=market_cfg["execution_size"],
                         rolling_dd_window_seconds=10800,
                         rolling_dd_threshold_bps=500,
                         rolling_dd_cooldown_seconds=21600,
@@ -177,7 +218,6 @@ def _print_grouped(rows: list[dict], top_n: int, p_threshold: float) -> None:
     if top_n > 0:
         print(f"\n  * = p < {p_threshold} and avg_net > 0  (statistically significant)")
 
-    # Top-N per schedule summary
     if top_n > 0:
         print(f"\n{'=' * 90}")
         print(f"  TOP {top_n} PER SCHEDULE  (p < {p_threshold}, avg_net > 0, ranked by t_stat)")
@@ -209,19 +249,25 @@ def _print_grouped(rows: list[dict], top_n: int, p_threshold: float) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
-    ap.add_argument("--end",   required=True, help="End date YYYY-MM-DD")
-    ap.add_argument(
-        "--out", default=None,
-        help="CSV output path (default: results/grid_scan_ETH_<start>_<end>.csv)",
-    )
+    ap.add_argument("--market", required=True, choices=list(MARKET_CONFIGS), help="Market to scan: eth / xrp / btc")
+    ap.add_argument("--start",  required=True, help="Start date YYYY-MM-DD")
+    ap.add_argument("--end",    required=True, help="End date YYYY-MM-DD")
+    ap.add_argument("--out",    default=None,  help="CSV output path (default: results/grid_scan_<MARKET>_<start>_<end>.csv)")
     ap.add_argument("--top",         type=int,   default=5,    help="Top-N candidates per schedule (0 = skip, default 5)")
     ap.add_argument("--p-threshold", type=float, default=0.05, help="p-value threshold for significance marker (default 0.05)")
     args = ap.parse_args()
 
-    out = args.out or f"results/grid_scan_ETH_{args.start}_{args.end}.csv"
+    market_cfg = MARKET_CONFIGS[args.market]
+    out = args.out or f"results/grid_scan_{args.market.upper()}_{args.start}_{args.end}.csv"
 
-    rows = _run_grid(args.start, args.end)
+    print(
+        f"Grid scan: {market_cfg['flip_exchange']}/{market_cfg['flip_symbol']}"
+        f" → {market_cfg['target_exchange']}/{market_cfg['target_symbol']}"
+        f"  size={market_cfg['execution_size']}"
+        f"  {args.start} .. {args.end}"
+    )
+
+    rows = _run_grid(market_cfg, args.start, args.end)
     _save_csv(rows, out)
     _print_grouped(rows, args.top, args.p_threshold)
 
