@@ -259,7 +259,7 @@ def _apply_risk_filters(
     rolling_dd_window_seconds: float,
     rolling_dd_threshold_bps: float,
     rolling_dd_cooldown_seconds: float = _DEFAULT_ROLLING_DD_COOLDOWN_SECONDS,
-) -> tuple[pd.DataFrame, int]:
+) -> tuple[pd.DataFrame, int, list[dict]]:
     """Rolling drawdown gate.
 
     Maintains a sliding window of pnl_diff_bps over the last rolling_dd_window_seconds.
@@ -269,13 +269,14 @@ def _apply_risk_filters(
     Only active when rolling_dd_threshold_bps > 0 and rolling_dd_window_seconds > 0.
 
     Requires columns: ts, exit_ts (NaN for last flip), pnl_diff_bps (NaN for last flip).
-    Returns (filtered_df, n_blocked).
+    Returns (filtered_df, n_blocked, triggers) where triggers is a list of dicts with
+    keys: close_ts, reopen_ts, window_sum_bps, n_blocked_in_cooldown.
     """
     if flips_df.empty:
-        return flips_df, 0
+        return flips_df, 0, []
 
     if rolling_dd_threshold_bps <= 0 or rolling_dd_window_seconds <= 0:
-        return flips_df, 0
+        return flips_df, 0, []
 
     ts_arr = flips_df["ts"].values
     exit_ts_arr = flips_df["exit_ts"].values
@@ -285,6 +286,8 @@ def _apply_risk_filters(
     kept = np.ones(len(ts_arr), dtype=bool)
     gate_open = True
     gate_reopen_ts = -np.inf
+    triggers: list[dict] = []
+    current_trigger_blocked = 0
 
     for i in range(len(ts_arr)):
         t_entry = ts_arr[i]
@@ -293,10 +296,13 @@ def _apply_risk_filters(
         # Reopen gate and reset window after cooldown expires
         if not gate_open:
             if t_entry >= gate_reopen_ts:
+                triggers[-1]["n_blocked"] = current_trigger_blocked
                 gate_open = True
                 window_trades.clear()
+                current_trigger_blocked = 0
             else:
                 kept[i] = False
+                current_trigger_blocked += 1
                 continue
 
         # Evict trades that have aged out of the window
@@ -309,14 +315,25 @@ def _apply_risk_filters(
             kept[i] = False
             gate_open = False
             gate_reopen_ts = t_entry + rolling_dd_cooldown_seconds
+            current_trigger_blocked = 1
+            triggers.append({
+                "close_ts": t_entry,
+                "reopen_ts": gate_reopen_ts,
+                "window_sum_bps": window_sum,
+                "n_blocked": 0,  # filled when gate reopens
+            })
             continue
 
         r = pnl_diff_bps_arr[i]
         if not np.isnan(r):
             window_trades.append((t_exit, r))
 
+    # close out last trigger if gate never reopened
+    if not gate_open and triggers:
+        triggers[-1]["n_blocked"] = current_trigger_blocked
+
     n_blocked = int((~kept).sum())
-    return flips_df[kept].copy(), n_blocked
+    return flips_df[kept].copy(), n_blocked, triggers
 
 
 def scan(
@@ -432,7 +449,7 @@ def scan(
     )
 
     # ── Rolling drawdown gate ─────────────────────────────────────────────────
-    flips_df, n_rolling_dd_blocked = _apply_risk_filters(
+    flips_df, n_rolling_dd_blocked, dd_triggers = _apply_risk_filters(
         flips_df,
         rolling_dd_window_seconds if rolling_dd_window_seconds is not None else _DEFAULT_ROLLING_DD_WINDOW_SECONDS,
         rolling_dd_threshold_bps if rolling_dd_threshold_bps is not None else _DEFAULT_ROLLING_DD_THRESHOLD_BPS,
@@ -447,18 +464,39 @@ def scan(
     bf = flips_df.dropna(subset=["pnl_diff_bps"]).copy()
     bf["holding_seconds"] = bf["exit_exec_ts"] - bf["entry_exec_ts"]
 
+    n_bf = len(bf)
+    net_returns = bf["pnl_diff_bps"] - costs_bps
+    avg_net = float(net_returns.mean())
+    std_net = float(net_returns.std())
+    if n_bf > 1 and std_net > 0:
+        from scipy import stats as _stats
+
+        t_stat = float(avg_net / (std_net / np.sqrt(n_bf)))
+        p_value_1sided = float(_stats.t.sf(t_stat, df=n_bf - 1))
+        sharpe_per_trade = avg_net / std_net
+    else:
+        t_stat = float("nan")
+        p_value_1sided = float("nan")
+        sharpe_per_trade = float("nan")
+    skewness = float(net_returns.skew()) if n_bf > 2 else float("nan")
+
     between_flip = {
-        "n": len(bf),
+        "n": n_bf,
         "avg_holding_seconds": float(bf["holding_seconds"].mean()),
         "median_holding_seconds": float(bf["holding_seconds"].median()),
         "avg_signed_return_bps": float(bf["pnl_diff_bps"].mean()),
-        "avg_net_return_bps": float(bf["pnl_diff_bps"].mean() - costs_bps),
+        "avg_net_return_bps": avg_net,
         "hit_rate": float((bf["pnl_diff_bps"] > 0).mean()),
         "hit_rate_net": float((bf["pnl_diff_bps"] > costs_bps).mean()),
         "median_signed_return_bps": float(bf["pnl_diff_bps"].median()),
         "p25_bps": float(bf["pnl_diff_bps"].quantile(0.25)),
         "p75_bps": float(bf["pnl_diff_bps"].quantile(0.75)),
         "std_bps": float(bf["pnl_diff_bps"].std()),
+        "t_stat": t_stat,
+        "p_value_1sided": p_value_1sided,
+        "sharpe_per_trade": sharpe_per_trade,
+        "skewness": skewness,
+        "total_net_bps": float(n_bf * avg_net),
     }
 
     # ── Step 4: monthly breakdown (between-flip) ──────────────────────────────
@@ -512,6 +550,7 @@ def scan(
             "n_sat_blocked": n_sat_blocked,
             "n_date_blocked": n_date_blocked,
             "n_rolling_dd_blocked": n_rolling_dd_blocked,
+            "dd_triggers": dd_triggers,
         },
         "between_flip": between_flip,
         "by_month": monthly,
@@ -586,6 +625,19 @@ def print_summary(report: dict) -> None:
             f"{m['month']:>8}  {m['n_flips']:>8}  {m['avg_signed_return_bps']:>+9.2f}"
             f"  {m['avg_net_return_bps']:>+9.2f}  {m['hit_rate']:>6.1%}"
         )
+
+    triggers = rg.get("dd_triggers", [])
+    if triggers:
+        _JST = 9 * 3600
+        print(f"\n--- Rolling DD gate triggers ({len(triggers)}) ---")
+        print(f"  {'Close (JST)':>19}  {'Reopen (JST)':>19}  {'WinSum bps':>11}  {'Blocked':>7}")
+        for t in triggers:
+            close_jst = datetime.datetime.utcfromtimestamp(t["close_ts"] + _JST).strftime("%Y-%m-%d %H:%M")
+            reopen_jst = datetime.datetime.utcfromtimestamp(t["reopen_ts"] + _JST).strftime("%Y-%m-%d %H:%M")
+            print(
+                f"  {close_jst:>19}  {reopen_jst:>19}  {t['window_sum_bps']:>+10.1f}  {t['n_blocked']:>7}"
+            )
+
     print()
 
 
