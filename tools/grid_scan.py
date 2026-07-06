@@ -47,13 +47,32 @@ from kilimanjaro.scan.flip_sar import scan
 BOXES = [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.004, 0.005]
 STEPS = [0.01, 0.02, 0.03, 0.04, 0.05]
 
-_SCHED_ORDER = {"nofilter": 0, "active": 1, "inactive": 2}
-_ALL_WEEKEND  = list(range(24))
+_SCHED_ORDER = {
+    "nofilter": 0, "active": 1, "inactive": 2,
+    "weekday": 3, "weekend": 4, "us_on": 5, "us_off": 6,
+}
+_ALL_HOURS   = list(range(24))
+_ALL_WEEKEND = _ALL_HOURS  # alias
 
 # Per-market config: flip source, execution target, execution size, and schedules.
 # Schedule hours are JST. "block" = skip flips in those hours.
-# active:   trade peak hours only (block nights + weekends)
-# inactive: trade off-peak hours (block peak weekday hours; weekends unblocked)
+#
+# active:   GMO peak hours (JST 06–21 weekdays only)
+# inactive: GMO off-peak (JST 22–05 weekdays + all weekends)
+# weekday:  all 24h on weekdays, no weekends
+# weekend:  weekends only, no weekdays
+# us_on:    US market open on weekdays (JST 22–05; block weekday 06–21 + weekends)
+# us_off:   US market closed (weekday JST 06–21 + all weekends; block weekday 22–05)
+_ETH_BTC_SCHEDULES = {
+    "nofilter": dict(block_weekday_hours=None,                                                        block_weekend_hours=None),
+    "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5],                                 block_weekend_hours=_ALL_HOURS),
+    "inactive": dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
+    "weekday":  dict(block_weekday_hours=None,                                                        block_weekend_hours=_ALL_HOURS),
+    "weekend":  dict(block_weekday_hours=_ALL_HOURS,                                                  block_weekend_hours=None),
+    "us_on":    dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=_ALL_HOURS),
+    "us_off":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5],                                 block_weekend_hours=None),
+}
+
 MARKET_CONFIGS: dict[str, dict] = {
     "eth": {
         "flip_exchange":  "BINANCE",
@@ -61,12 +80,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange": "GMO",
         "target_symbol":  "ETH_JPY",
         "execution_size": "0.3",
-        # ETH/BTC active JST 06–21; inactive JST 22–05 + weekends
-        "schedules": {
-            "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
-            "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=_ALL_WEEKEND),
-            "inactive": dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
-        },
+        "schedules": _ETH_BTC_SCHEDULES,
     },
     "xrp": {
         "flip_exchange":  "BINANCE",
@@ -74,11 +88,15 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange": "GMO",
         "target_symbol":  "XRP_JPY",
         "execution_size": "150",
-        # XRP active JST 07–21; inactive JST 22–06 + weekends
+        # XRP active JST 07–21 (one extra hour blocked vs ETH); us_on/us_off use same US boundary
         "schedules": {
-            "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
-            "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5, 6], block_weekend_hours=_ALL_WEEKEND),
-            "inactive": dict(block_weekday_hours=[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
+            "nofilter": dict(block_weekday_hours=None,                                                              block_weekend_hours=None),
+            "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5, 6],                                    block_weekend_hours=_ALL_HOURS),
+            "inactive": dict(block_weekday_hours=[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],        block_weekend_hours=None),
+            "weekday":  dict(block_weekday_hours=None,                                                              block_weekend_hours=_ALL_HOURS),
+            "weekend":  dict(block_weekday_hours=_ALL_HOURS,                                                        block_weekend_hours=None),
+            "us_on":    dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],     block_weekend_hours=_ALL_HOURS),
+            "us_off":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5],                                       block_weekend_hours=None),
         },
     },
     "btc": {
@@ -87,12 +105,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange": "GMO",
         "target_symbol":  "BTC_JPY",
         "execution_size": "0.002",
-        # BTC active JST 06–21; inactive JST 22–05 + weekends
-        "schedules": {
-            "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
-            "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=_ALL_WEEKEND),
-            "inactive": dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
-        },
+        "schedules": _ETH_BTC_SCHEDULES,
     },
 }
 
@@ -188,7 +201,7 @@ def _print_grouped(rows: list[dict], top_n: int, p_threshold: float) -> None:
     hdr = f"  {'box':>8}  {'step':>5}  {'n':>6}  {'avg_net':>8}  {'total':>8}  {'std':>7}  {'sharpe':>7}  {'t_stat':>7}  {'p':>7}  {'skew':>6}"
     sep = "  " + "-" * (len(hdr) - 2)
 
-    for sched in ["nofilter", "active", "inactive"]:
+    for sched in ["nofilter", "active", "inactive", "weekday", "weekend", "us_on", "us_off"]:
         group = [r for r in ok if r["schedule"] == sched]
         group.sort(key=lambda r: (-float(r["total_net_bps"]), -int(r["n_flips"])))
 
@@ -222,7 +235,7 @@ def _print_grouped(rows: list[dict], top_n: int, p_threshold: float) -> None:
         print(f"\n{'=' * 90}")
         print(f"  TOP {top_n} PER SCHEDULE  (p < {p_threshold}, avg_net > 0, ranked by t_stat)")
         print(f"{'=' * 90}")
-        for sched in ["nofilter", "active", "inactive"]:
+        for sched in ["nofilter", "active", "inactive", "weekday", "weekend", "us_on", "us_off"]:
             candidates = [
                 r for r in ok
                 if r["schedule"] == sched
