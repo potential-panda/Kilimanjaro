@@ -119,11 +119,20 @@ def _run_grid(start: str, end: str) -> list[dict]:
 
 
 def _save_csv(rows: list[dict], path: str) -> None:
+    ok = [r for r in rows if r.get("status") == "ok"]
+    errors = [r for r in rows if r.get("status") != "ok"]
+
+    ok.sort(key=lambda r: (
+        _SCHED_ORDER.get(r["schedule"], 99),
+        -float(r["total_net_bps"]),
+        -int(r["n_flips"]),
+    ))
+
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
         w.writeheader()
-        w.writerows(rows)
+        w.writerows(ok + errors)
     print(f"\nSaved {path}")
 
 
