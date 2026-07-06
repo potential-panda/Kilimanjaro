@@ -45,13 +45,18 @@ from kilimanjaro.scan.flip_sar import scan
 # ── Grid parameters ────────────────────────────────────────────────────────────
 BOXES = [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.004, 0.005]
 STEPS = [0.01, 0.02, 0.03, 0.04, 0.05]
-SCHEDULES: dict[str, dict] = {
-    "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
-    "active":   dict(block_weekday_hours=None, block_weekend_hours=list(range(24))),
-    "inactive": dict(block_weekday_hours=list(range(24)), block_weekend_hours=None),
-}
 
 _SCHED_ORDER = {"nofilter": 0, "active": 1, "inactive": 2}
+
+# ETH_JPY / BTC_JPY schedule presets (mirror flip_sar.SCHEDULES["default_*"])
+# active:   trade weekday JST 06–21 only (block night + all weekends)
+# inactive: trade weekday night JST 22–05 + all weekends (block weekday daytime)
+_ALL_WEEKEND = list(range(24))
+SCHEDULES: dict[str, dict] = {
+    "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
+    "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=_ALL_WEEKEND),
+    "inactive": dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
+}
 
 _CSV_FIELDS = [
     "box", "step", "schedule", "n_flips",
