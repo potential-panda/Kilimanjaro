@@ -41,6 +41,16 @@ Schema — one row per second (1s resampled):
 
 EMA halflives stored: 10s, 30s, 60s, 120s, 300s
 EMA depths stored: k1, k3, k5, k10
+
+Age columns
+-----------
+For each EMA column, a corresponding age column tracks how many seconds the
+EMA sign has been continuously unchanged:
+    age_k{depth}_{w}s  int32  seconds since EMA last changed sign (0 = just flipped)
+
+age=0 means the EMA just crossed zero — the freshest, most actionable signal.
+age=60 means the EMA has held the same sign for 60 seconds — likely already priced in.
+The scanner can filter on max_age_seconds to trade only fresh crossings.
 """
 
 from __future__ import annotations
@@ -49,6 +59,7 @@ import datetime
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -86,6 +97,20 @@ def _date_range(start_date: str, end_date: str) -> list[str]:
     return [(start + datetime.timedelta(days=i)).isoformat() for i in range(days)]
 
 
+def _sign_age(series: pd.Series) -> pd.Series:
+    """Seconds the sign of `series` has been continuously unchanged.
+
+    Returns 0 at sign-change moments (the crossing instant) and increments
+    each second the sign holds. Resets to 0 whenever sign is 0 (neutral OBI).
+    """
+    sign = np.sign(series)
+    changed = (sign != sign.shift(1)) | (sign == 0)
+    group = changed.cumsum()
+    age = group.groupby(group).cumcount().astype(np.int32)
+    age[sign == 0] = 0
+    return age
+
+
 def _resample_and_compute_emas(df: pd.DataFrame) -> pd.DataFrame:
     """Resample tick data to 1s grid and compute EMA columns.
 
@@ -108,9 +133,9 @@ def _resample_and_compute_emas(df: pd.DataFrame) -> pd.DataFrame:
     for depth in _EMA_DEPTHS:
         raw_col = f"vol_imb_k{depth}"
         for hw in _EMA_HALFLIVES_S:
-            df_1s[f"ema_k{depth}_{hw}s"] = df_1s[raw_col].ewm(
-                halflife=hw, adjust=True
-            ).mean()
+            ema_col = f"ema_k{depth}_{hw}s"
+            df_1s[ema_col] = df_1s[raw_col].ewm(halflife=hw, adjust=True).mean()
+            df_1s[f"age_k{depth}_{hw}s"] = _sign_age(df_1s[ema_col])
 
     df_1s.index.name = "ts"
     df_1s = df_1s.reset_index()

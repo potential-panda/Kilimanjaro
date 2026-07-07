@@ -100,6 +100,13 @@ def _signal_col(depth: int, obi_halflife: int | None) -> str:
     return f"ema_k{depth}_{obi_halflife}s"
 
 
+def _age_col(depth: int, obi_halflife: int | None) -> str | None:
+    """Return the age column for the given signal, or None for raw OBI."""
+    if obi_halflife is None:
+        return None
+    return f"age_k{depth}_{obi_halflife}s"
+
+
 def _apply_schedule_filters(
     df: pd.DataFrame,
     target_exchange: str,
@@ -181,6 +188,7 @@ def scan(
     threshold: float = 0.3,
     horizon_seconds: int = 60,
     obi_halflife: int | None = 60,
+    max_age_seconds: int | None = None,
     execution_size: str = "0.3",
     costs_bps: float = _DEFAULT_COSTS_BPS,
     block_weekday_hours: list[int] | None = None,
@@ -208,6 +216,10 @@ def scan(
     obi_halflife : int | None
         EMA halflife in seconds (10, 30, 60, 120, 300), or None for raw OBI.
         EMA is preferred — it captures sustained imbalance rather than tick noise.
+    max_age_seconds : int | None
+        Maximum seconds the EMA sign may have been unchanged. None = no filter.
+        age=0 = just crossed zero (freshest signal). Smaller values select only
+        fresh crossings, reducing autocorrelated signal bursts.
     execution_size : str
         MarketPrice execution_size partition key.
     """
@@ -217,6 +229,9 @@ def scan(
         raise ValueError(f"obi_halflife must be one of {sorted(_VALID_HALFLIVES)} or None, got {obi_halflife}")
 
     col = _signal_col(depth, obi_halflife)
+    acol = _age_col(depth, obi_halflife)
+    age_filter = f"AND {acol} < {max_age_seconds}" if (acol and max_age_seconds is not None) else ""
+
     obi_glob = _obi_glob(signal_exchange, signal_symbol, data_root)
     mp_glob = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
     con = duckdb.connect()
@@ -227,6 +242,7 @@ def scan(
             FROM read_parquet('{obi_glob}', hive_partitioning=true)
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
               AND abs({col}) > {threshold}
+              {age_filter}
         ),
         mp AS (
             SELECT ts, (bid + ask) / 2.0 AS mid
@@ -293,6 +309,7 @@ def scan(
         "depth": depth,
         "signal_col": col,
         "obi_halflife": obi_halflife,
+        "max_age_seconds": max_age_seconds,
         "threshold": threshold,
         "horizon_seconds": horizon_seconds,
         "execution_size": execution_size,
