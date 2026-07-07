@@ -66,7 +66,7 @@ recently available end date.
 |---|---|
 | GMO:XRP_JPY | 150 |
 | GMO:ETH_JPY | 0.1 |
-| GMO:BTC_JPY | 0.002 |
+| GMO:BTC_JPY | 0.01 |
 
 ## Active/Inactive Windows
 

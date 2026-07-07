@@ -281,7 +281,7 @@ LIMIT 50
 ```sql
 SELECT DISTINCT param_id
 FROM volspread
-WHERE exchange='GMO' AND symbol='BTC_JPY' AND execution_size='0.002'
+WHERE exchange='GMO' AND symbol='BTC_JPY' AND execution_size='0.01'
 LIMIT 50
 ```
 

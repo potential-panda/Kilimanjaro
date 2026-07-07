@@ -104,7 +104,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "flip_symbol":    "BTC_USDT",
         "target_exchange": "GMO",
         "target_symbol":  "BTC_JPY",
-        "execution_size": "0.002",
+        "execution_size": "0.01",
         "schedules": _ETH_BTC_SCHEDULES,
     },
 }
