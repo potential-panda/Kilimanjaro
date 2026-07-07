@@ -4,12 +4,22 @@ Unlike the flip-anchored skew scanner, this anchors on SIGNAL events — rows wh
 abs(OBI) exceeds a threshold — and measures the return over a fixed forward window H.
 That matches the precision style: high hit rate, small gains per trade.
 
-OBI source:  Makalu silver BookState  (vol_imb_k{depth})
-Target:      GMO MarketPrice          (mid = (bid + ask) / 2)
+OBI source:  OBIFeature dataset (1s-resampled, EMA-smoothed)
+             Path: feature/dataset=OBIFeature/exchange=.../symbol=.../date=*
+Target:      GMO MarketPrice  (mid = (bid + ask) / 2)
+
+Signal column
+-------------
+  obi_halflife=None  → raw vol_imb_k{depth}   (last tick per second, no smoothing)
+  obi_halflife=N     → ema_k{depth}_{N}s      (exponential MA with halflife=N seconds)
+
+EMA is preferred over raw OBI: it captures sustained imbalance pressure rather
+than momentary tick noise, reducing autocorrelated signal bursts and producing
+a more actionable signal. Available halflives: 10, 30, 60, 120, 300.
 
 Signal definition
 -----------------
-  direction = sign(obi)
+  direction = sign(obi_value)
     +1 → long  (bid pressure > ask → expect price up)
     -1 → short (ask pressure > bid → expect price down)
 
@@ -20,23 +30,13 @@ Return definition
   exit_mid:  GMO mid at the first MarketPrice tick at or after signal_ts + horizon_seconds
   net_return_bps = signed_return_bps − costs_bps
 
-OBI depth columns (from BookState):
-  depth=1  → vol_imb_k1   (best bid/ask only)
-  depth=3  → vol_imb_k3
-  depth=5  → vol_imb_k5
-  depth=10 → vol_imb_k10
-  depth=20 → vol_imb_k20
-
-Note on signal density
-----------------------
-BookState snapshots are per-tick, so raw signal count can be very high when
-threshold is low. Serial autocorrelation within a burst inflates effective
-t-stats. The scan reports IC (Pearson correlation between obi and return_bps)
-alongside t_stat as a complementary measure that is less sensitive to this.
+Available depth levels: 1, 3, 5, 10
+Available EMA halflives: 10, 30, 60, 120, 300 seconds
 
 Output dict keys
 ----------------
 signal_style         "precision"
+signal_col           the OBIFeature column used as signal (e.g. "ema_k5_60s")
 n_signals            signal events after schedule filters
 signals_per_day      n_signals / calendar days
 fixed_horizon        per-signal return stats (see below)
@@ -44,7 +44,7 @@ by_month             monthly breakdown
 by_jst_hour          JST hour-of-day breakdown
 
 fixed_horizon keys:
-  n                    signals with valid exit (those within horizon of data end may be NaN)
+  n                    signals with valid exit
   avg_signed_return_bps
   avg_net_return_bps   avg_signed_return_bps − costs_bps
   hit_rate             fraction where signed_return > 0
@@ -52,7 +52,7 @@ fixed_horizon keys:
   std_bps
   sharpe_per_trade     avg_net / std_net
   t_stat               avg_net / (std_net / √n)
-  p_value_1sided       P(mean ≤ 0 | data) one-sided t-test
+  p_value_1sided       P(mean ≤ 0 | data)
   skewness
   ic                   Pearson correlation between obi value and return_bps
   total_net_bps        n × avg_net_return_bps
@@ -71,14 +71,15 @@ _DEFAULT_COSTS_BPS = 1.0
 
 _JST_OFFSET = 9 * 3600
 
-_DEPTH_COLS = {1: "vol_imb_k1", 3: "vol_imb_k3", 5: "vol_imb_k5", 10: "vol_imb_k10", 20: "vol_imb_k20"}
+_VALID_DEPTHS = {1, 3, 5, 10}
+_VALID_HALFLIVES = {10, 30, 60, 120, 300}
 
 _GMO_MAINTENANCE_SAT_HOURS: list[int] = [9, 10, 11]
 
 
-def _bs_glob(exchange: str, symbol: str, data_root: Path) -> str:
+def _obi_glob(exchange: str, symbol: str, data_root: Path) -> str:
     return str(
-        data_root / "silver" / "dataset=BookState"
+        data_root / "feature" / "dataset=OBIFeature"
         / f"exchange={exchange}" / f"symbol={symbol}"
         / "date=*" / "*.parquet"
     )
@@ -93,13 +94,18 @@ def _mp_glob(exchange: str, symbol: str, execution_size: str, data_root: Path) -
     )
 
 
+def _signal_col(depth: int, obi_halflife: int | None) -> str:
+    if obi_halflife is None:
+        return f"vol_imb_k{depth}"
+    return f"ema_k{depth}_{obi_halflife}s"
+
+
 def _apply_schedule_filters(
     df: pd.DataFrame,
     target_exchange: str,
     block_weekday_hours: list[int] | None,
     block_weekend_hours: list[int] | None,
 ) -> tuple[pd.DataFrame, int, int]:
-    """Filter signal rows by schedule rules. Returns (filtered_df, n_weekday_blocked, n_sat_blocked)."""
     jst_ts = (df["ts"] + _JST_OFFSET).astype("int64")
     df = df.copy()
     df["jst_hour"] = (jst_ts % 86400 // 3600).astype(int)
@@ -126,15 +132,14 @@ def _apply_schedule_filters(
 
 
 def _agg_stats(returns: pd.Series, obi: pd.Series, costs_bps: float) -> dict:
-    """Compute aggregated stats for a series of signed returns."""
     n = len(returns)
     if n == 0:
-        return {
-            "n": 0, "avg_signed_return_bps": float("nan"), "avg_net_return_bps": float("nan"),
-            "hit_rate": float("nan"), "hit_rate_net": float("nan"), "std_bps": float("nan"),
-            "sharpe_per_trade": float("nan"), "t_stat": float("nan"), "p_value_1sided": float("nan"),
-            "skewness": float("nan"), "ic": float("nan"), "total_net_bps": float("nan"),
-        }
+        nan = float("nan")
+        return {k: nan for k in [
+            "avg_signed_return_bps", "avg_net_return_bps", "hit_rate", "hit_rate_net",
+            "std_bps", "sharpe_per_trade", "t_stat", "p_value_1sided", "skewness", "ic",
+            "total_net_bps",
+        ]} | {"n": 0}
 
     net = returns - costs_bps
     avg_gross = float(returns.mean())
@@ -149,10 +154,6 @@ def _agg_stats(returns: pd.Series, obi: pd.Series, costs_bps: float) -> dict:
     else:
         t_stat = p_value = sharpe = float("nan")
 
-    skewness = float(net.skew()) if n > 2 else float("nan")
-
-    ic = float(obi.corr(returns)) if n > 2 else float("nan")
-
     return {
         "n": n,
         "avg_signed_return_bps": avg_gross,
@@ -163,8 +164,8 @@ def _agg_stats(returns: pd.Series, obi: pd.Series, costs_bps: float) -> dict:
         "sharpe_per_trade": sharpe,
         "t_stat": t_stat,
         "p_value_1sided": p_value,
-        "skewness": skewness,
-        "ic": ic,
+        "skewness": float(net.skew()) if n > 2 else float("nan"),
+        "ic": float(obi.corr(returns)) if n > 2 else float("nan"),
         "total_net_bps": float(n * avg_net),
     }
 
@@ -179,52 +180,53 @@ def scan(
     depth: int = 5,
     threshold: float = 0.3,
     horizon_seconds: int = 60,
+    obi_halflife: int | None = 60,
     execution_size: str = "0.3",
     costs_bps: float = _DEFAULT_COSTS_BPS,
     block_weekday_hours: list[int] | None = None,
     block_weekend_hours: list[int] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
 ) -> dict:
-    """Run a fixed-horizon OBI scan.
-
-    Returns a report dict with per-signal statistics.
+    """Run a fixed-horizon OBI scan using the pre-computed OBIFeature dataset.
 
     Parameters
     ----------
     signal_exchange : str
-        Exchange for BookState signal source, e.g. "BINANCE".
+        Exchange for OBIFeature source, e.g. "BINANCE".
     signal_symbol : str
-        Symbol for BookState, e.g. "ETH_USDT".
+        Symbol for OBIFeature, e.g. "ETH_USDT".
     target_exchange : str
         Exchange for execution price lookup, e.g. "GMO".
     target_symbol : str
         Symbol for MarketPrice, e.g. "ETH_JPY".
     depth : int
-        OBI depth level: 1, 3, 5, 10, or 20.
+        OBI depth level: 1, 3, 5, or 10.
     threshold : float
         Minimum |OBI| to qualify as a signal event.
     horizon_seconds : int
         Fixed forward window H in seconds.
+    obi_halflife : int | None
+        EMA halflife in seconds (10, 30, 60, 120, 300), or None for raw OBI.
+        EMA is preferred — it captures sustained imbalance rather than tick noise.
     execution_size : str
         MarketPrice execution_size partition key.
     """
-    if depth not in _DEPTH_COLS:
-        raise ValueError(f"depth must be one of {sorted(_DEPTH_COLS)}, got {depth}")
+    if depth not in _VALID_DEPTHS:
+        raise ValueError(f"depth must be one of {sorted(_VALID_DEPTHS)}, got {depth}")
+    if obi_halflife is not None and obi_halflife not in _VALID_HALFLIVES:
+        raise ValueError(f"obi_halflife must be one of {sorted(_VALID_HALFLIVES)} or None, got {obi_halflife}")
 
-    obi_col = _DEPTH_COLS[depth]
-    bs_glob = _bs_glob(signal_exchange, signal_symbol, data_root)
+    col = _signal_col(depth, obi_halflife)
+    obi_glob = _obi_glob(signal_exchange, signal_symbol, data_root)
     mp_glob = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
     con = duckdb.connect()
 
-    # Load signal events with entry and exit mid prices via ASOF JOIN.
-    # exit is looked up at signal_ts + horizon_seconds (not entry_exec_ts + H),
-    # so H is always measured from the signal timestamp.
     signals_df = con.sql(f"""
         WITH signals AS (
-            SELECT ts, {obi_col} AS obi
-            FROM read_parquet('{bs_glob}', hive_partitioning=true)
+            SELECT ts, {col} AS obi
+            FROM read_parquet('{obi_glob}', hive_partitioning=true)
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-              AND abs({obi_col}) > {threshold}
+              AND abs({col}) > {threshold}
         ),
         mp AS (
             SELECT ts, (bid + ask) / 2.0 AS mid
@@ -233,7 +235,7 @@ def scan(
         ),
         with_entry AS (
             SELECT s.ts, s.obi,
-                   e.ts AS entry_exec_ts,
+                   e.ts  AS entry_exec_ts,
                    e.mid AS entry_mid
             FROM signals s ASOF JOIN mp e ON e.ts >= s.ts
         ),
@@ -252,11 +254,10 @@ def scan(
 
     if signals_df.empty:
         raise ValueError(
-            f"no BookState data for {signal_exchange}/{signal_symbol}"
-            f" in {start_date}..{end_date} with depth={depth} threshold={threshold}"
+            f"no OBIFeature data for {signal_exchange}/{signal_symbol}"
+            f" in {start_date}..{end_date} with depth={depth} halflife={obi_halflife} threshold={threshold}"
         )
 
-    # Schedule filters
     signals_df, n_weekday_blocked, n_sat_blocked = _apply_schedule_filters(
         signals_df, target_exchange, block_weekday_hours, block_weekend_hours
     )
@@ -264,29 +265,22 @@ def scan(
     n_signals = len(signals_df)
     n_days = max((pd.to_datetime(end_date) - pd.to_datetime(start_date)).days, 1)
 
-    # Stats over signals with valid exit (drop rows where horizon extends past data end)
     valid = signals_df.dropna(subset=["return_bps"])
     fh = _agg_stats(valid["return_bps"], valid["obi"], costs_bps)
 
-    # Monthly breakdown
     valid = valid.copy()
     valid["month"] = pd.to_datetime(valid["ts"], unit="s", utc=True).dt.strftime("%Y-%m")
     by_month = []
     for month, g in valid.groupby("month"):
-        stats = _agg_stats(g["return_bps"], g["obi"], costs_bps)
-        by_month.append({"month": month, "n": stats["n"],
-                         "avg_gross": stats["avg_signed_return_bps"],
-                         "avg_net": stats["avg_net_return_bps"],
-                         "hit_rate": stats["hit_rate"]})
+        s = _agg_stats(g["return_bps"], g["obi"], costs_bps)
+        by_month.append({"month": month, "n": s["n"], "avg_gross": s["avg_signed_return_bps"],
+                         "avg_net": s["avg_net_return_bps"], "hit_rate": s["hit_rate"], "ic": s["ic"]})
 
-    # JST hour breakdown
     by_hour = []
     for hour, g in valid.groupby("jst_hour"):
-        stats = _agg_stats(g["return_bps"], g["obi"], costs_bps)
-        by_hour.append({"jst_hour": int(hour), "n": stats["n"],
-                        "avg_gross": stats["avg_signed_return_bps"],
-                        "avg_net": stats["avg_net_return_bps"],
-                        "hit_rate": stats["hit_rate"]})
+        s = _agg_stats(g["return_bps"], g["obi"], costs_bps)
+        by_hour.append({"jst_hour": int(hour), "n": s["n"], "avg_gross": s["avg_signed_return_bps"],
+                        "avg_net": s["avg_net_return_bps"], "hit_rate": s["hit_rate"], "ic": s["ic"]})
 
     return {
         "signal_style": "precision",
@@ -297,7 +291,8 @@ def scan(
         "start_date": start_date,
         "end_date": end_date,
         "depth": depth,
-        "obi_col": obi_col,
+        "signal_col": col,
+        "obi_halflife": obi_halflife,
         "threshold": threshold,
         "horizon_seconds": horizon_seconds,
         "execution_size": execution_size,
@@ -327,16 +322,13 @@ def print_summary(report: dict) -> None:
     )
     print(
         f"Window: {report['start_date']} .. {report['end_date']}"
-        f"  depth={report['depth']}  threshold={report['threshold']}"
+        f"  signal={report['signal_col']}  threshold={report['threshold']}"
         f"  H={report['horizon_seconds']}s"
     )
     if rg.get("block_weekday_hours") or rg.get("block_weekend_hours"):
         print(f"Gates: block_weekday={rg['block_weekday_hours']}  block_weekend={rg['block_weekend_hours']}")
-        print(
-            f"  Blocked: {rg['n_weekday_blocked']} weekday + {rg['n_sat_blocked']} weekend/sat"
-        )
     print(f"N signals: {report['n_signals']}  ({report['signals_per_day']:.1f}/day)")
-    print(f"Round-trip cost assumption: {costs} bps")
+    print(f"Round-trip cost: {costs} bps")
 
     print("\n--- Fixed-horizon returns ---")
     print(f"  N with valid exit:  {fh['n']}")
@@ -345,16 +337,17 @@ def print_summary(report: dict) -> None:
     print(f"  Hit rate:           {fh['hit_rate']:.1%} gross  /  {fh['hit_rate_net']:.1%} net")
     print(f"  Std:                {fh['std_bps']:.3f} bps")
     print(f"  Sharpe/trade:       {fh['sharpe_per_trade']:+.4f}")
-    print(f"  t-stat / p-value:   {fh['t_stat']:+.2f}  /  {fh['p_value_1sided']:.4f}")
+    print(f"  t-stat / p-value:   {fh['t_stat']:+.2f}  /  {fh['p_value_1sided']:.5f}")
     print(f"  IC (OBI↔return):    {fh['ic']:+.4f}")
     print(f"  Skewness:           {fh['skewness']:+.3f}")
     print(f"  Total net:          {fh['total_net_bps']:+.0f} bps")
 
-    print(f"\n--- Monthly breakdown (net of {costs} bps) ---")
-    print(f"  {'Month':>8}  {'N':>6}  {'Avg gross':>10}  {'Avg net':>10}  {'Hit%':>7}")
+    print(f"\n--- Monthly (net of {costs} bps) ---")
+    print(f"  {'Month':>8}  {'N':>7}  {'Avg gross':>10}  {'Avg net':>10}  {'Hit%':>7}  {'IC':>7}")
     for m in report["by_month"]:
         print(
-            f"  {m['month']:>8}  {m['n']:>6}"
-            f"  {m['avg_gross']:>+9.3f}  {m['avg_net']:>+9.3f}  {m['hit_rate']:>6.1%}"
+            f"  {m['month']:>8}  {m['n']:>7}"
+            f"  {m['avg_gross']:>+9.3f}  {m['avg_net']:>+9.3f}"
+            f"  {m['hit_rate']:>6.1%}  {m['ic']:>+6.4f}"
         )
     print()
