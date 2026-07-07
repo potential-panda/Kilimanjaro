@@ -265,13 +265,17 @@ def main() -> None:
     ap.add_argument("--market", required=True, choices=list(MARKET_CONFIGS), help="Market to scan: eth / xrp / btc")
     ap.add_argument("--start",  required=True, help="Start date YYYY-MM-DD")
     ap.add_argument("--end",    required=True, help="End date YYYY-MM-DD")
-    ap.add_argument("--out",    default=None,  help="CSV output path (default: results/grid_scan_<MARKET>_<start>_<end>.csv)")
+    ap.add_argument("--size",   default=None,  help="Override execution_size (e.g. 0.01); default from market config")
+    ap.add_argument("--out",    default=None,  help="CSV output path (default: results/grid_scan_<MARKET>_<size>_<start>_<end>.csv)")
     ap.add_argument("--top",         type=int,   default=5,    help="Top-N candidates per schedule (0 = skip, default 5)")
     ap.add_argument("--p-threshold", type=float, default=0.05, help="p-value threshold for significance marker (default 0.05)")
     args = ap.parse_args()
 
-    market_cfg = MARKET_CONFIGS[args.market]
-    out = args.out or f"results/grid_scan_{args.market.upper()}_{args.start}_{args.end}.csv"
+    market_cfg = dict(MARKET_CONFIGS[args.market])  # shallow copy so we can override
+    if args.size is not None:
+        market_cfg["execution_size"] = args.size
+    size_tag = market_cfg["execution_size"]
+    out = args.out or f"results/grid_scan_{args.market.upper()}_{size_tag}_{args.start}_{args.end}.csv"
 
     print(
         f"Grid scan: {market_cfg['flip_exchange']}/{market_cfg['flip_symbol']}"
