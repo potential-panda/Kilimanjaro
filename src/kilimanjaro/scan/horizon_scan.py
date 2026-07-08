@@ -215,6 +215,7 @@ def scan(
     threshold: float = 0.3,
     horizon_seconds: int = 60,
     obi_halflife: int | None = 60,
+    min_age_seconds: int | None = None,
     max_age_seconds: int | None = None,
     execution_size: str = "0.3",
     costs_bps: float = _DEFAULT_COSTS_BPS,
@@ -244,13 +245,16 @@ def scan(
     obi_halflife : int | None
         EMA halflife in seconds (10, 30, 60, 120, 300), or None for raw OBI.
         EMA is preferred — it captures sustained imbalance rather than tick noise.
+    min_age_seconds : int | None
+        Minimum steps since EMA crossed `threshold` from below. None = no lower bound.
+        Use to skip noisy fresh crossings (age=0–30s are often fake breakouts).
+        e.g. min_age=30 means only trade once the episode has held 30s.
     max_age_seconds : int | None
-        Maximum steps since the EMA last crossed `threshold` from below.
-        age=0 = the crossing instant (EMA just reached threshold).
-        age=1 = one second after crossing, etc.
-        None = no filter (level signal — every second above threshold fires).
-        Computed dynamically against the threshold, not the zero-crossing, so
-        age=0 and abs(obi)>threshold always co-occur and produce real data.
+        Maximum steps since EMA crossed `threshold` from below. None = no upper bound.
+        Use to avoid exhausted episodes where the move is already priced in.
+        e.g. max_age=180 means stop trading after 3 minutes into an episode.
+        Together, (min_age, max_age) define the target window within each episode:
+        the confirmed-but-not-exhausted middle rather than noisy start or tired tail.
     execution_size : str
         MarketPrice execution_size partition key.
     """
@@ -277,12 +281,16 @@ def scan(
             ORDER BY ts
         """).df()
 
-    # Apply threshold + dynamic age filter in pandas.
-    if max_age_seconds is not None:
+    # Apply threshold + dynamic age window filter in pandas.
+    needs_age = min_age_seconds is not None or max_age_seconds is not None
+    if needs_age:
         obi_df["_age"] = _threshold_age(obi_df["obi"], threshold)
-        obi_df = obi_df[
-            (obi_df["obi"].abs() > threshold) & (obi_df["_age"] < max_age_seconds)
-        ][["ts", "obi"]]
+        mask = obi_df["obi"].abs() > threshold
+        if min_age_seconds is not None:
+            mask &= obi_df["_age"] >= min_age_seconds
+        if max_age_seconds is not None:
+            mask &= obi_df["_age"] < max_age_seconds
+        obi_df = obi_df[mask][["ts", "obi"]]
     else:
         obi_df = obi_df[obi_df["obi"].abs() > threshold][["ts", "obi"]]
 
@@ -354,6 +362,7 @@ def scan(
         "depth": depth,
         "signal_col": col,
         "obi_halflife": obi_halflife,
+        "min_age_seconds": min_age_seconds,
         "max_age_seconds": max_age_seconds,
         "threshold": threshold,
         "horizon_seconds": horizon_seconds,

@@ -39,10 +39,26 @@ from kilimanjaro.scan.horizon_scan import load_obi_series, scan
 
 # ── Grid parameters ────────────────────────────────────────────────────────────
 DEPTHS      = [1, 3, 5, 10]
-HALFLIVES   = [10, 30, 60, 120, 300]          # EMA halflives; raw OBI excluded (level signal, not crossing)
+HALFLIVES   = [10, 30, 60, 120, 300]
 THRESHOLDS  = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
 HORIZONS    = [10, 30, 60, 120, 300, 600]
-MAX_AGES    = [1, 5, 10, 30, None]            # None = no age filter (level signal)
+
+# (min_age, max_age) windows in seconds. None = no bound on that side.
+# Informed by age histogram: episodes are exponential-decay shaped, with
+# fresh crossings noisy (0–30s) and late episodes exhausted (>300s).
+# Target the confirmed-but-not-exhausted middle of each episode.
+AGE_WINDOWS: list[tuple[int | None, int | None]] = [
+    (None, None),    # level signal baseline (no filter)
+    (0,    60),      # fresh only, short window
+    (0,    180),     # fresh + early middle
+    (10,   120),     # skip instant crossing, short-medium
+    (10,   300),     # skip instant crossing, full middle
+    (30,   120),     # confirmed entry, short
+    (30,   180),     # confirmed entry, medium  ← expected sweet spot
+    (30,   300),     # confirmed entry, long
+    (60,   180),     # established, medium
+    (60,   300),     # established, long
+]
 
 MARKET_CONFIGS: dict[str, dict] = {
     "eth": {
@@ -69,24 +85,26 @@ MARKET_CONFIGS: dict[str, dict] = {
 }
 
 _CSV_FIELDS = [
-    "depth", "halflife", "max_age", "threshold", "horizon",
+    "depth", "halflife", "min_age", "max_age", "threshold", "horizon",
     "n_signals", "avg_gross", "avg_net", "hit_rate",
     "ic", "t_stat", "p_value", "total_net_bps", "status",
 ]
 
 _HL_LABEL  = {None: "raw", 10: "10s", 30: "30s", 60: "60s", 120: "120s", 300: "300s"}
-_AGE_LABEL = {None: "any", 1: "1s", 5: "5s", 10: "10s", 30: "30s"}
+
+def _age_label(v: int | None) -> str:
+    return "any" if v is None else f"{v}s"
 
 
 def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
-    total = len(DEPTHS) * len(HALFLIVES) * len(MAX_AGES) * len(THRESHOLDS) * len(HORIZONS)
+    total = len(DEPTHS) * len(HALFLIVES) * len(AGE_WINDOWS) * len(THRESHOLDS) * len(HORIZONS)
     rows: list[dict] = []
     done = 0
 
     for depth in DEPTHS:
         for halflife in HALFLIVES:
             # Load OBI series once per (depth, halflife) — shared across all
-            # threshold / max_age / horizon combos that follow.
+            # age_window / threshold / horizon combos that follow.
             print(f"  Loading OBI series: depth={depth} halflife={_HL_LABEL[halflife]} …", flush=True)
             try:
                 obi_series = load_obi_series(
@@ -99,25 +117,26 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                 )
             except Exception as e:
                 # Mark all combos for this (depth, halflife) as errors
-                for max_age in MAX_AGES:
+                for (min_age, max_age) in AGE_WINDOWS:
                     for threshold in THRESHOLDS:
                         for horizon in HORIZONS:
                             done += 1
                             rows.append({
                                 "depth": depth, "halflife": _HL_LABEL[halflife],
-                                "max_age": _AGE_LABEL[max_age],
+                                "min_age": _age_label(min_age), "max_age": _age_label(max_age),
                                 "threshold": threshold, "horizon": horizon,
                                 "status": f"ERROR: {e}",
                             })
                 continue
 
-            for max_age in MAX_AGES:
+            for (min_age, max_age) in AGE_WINDOWS:
                 for threshold in THRESHOLDS:
                     for horizon in HORIZONS:
                         done += 1
                         label = (
                             f"d{depth} hl={_HL_LABEL[halflife]}"
-                            f" age<{_AGE_LABEL[max_age]} thr={threshold} H={horizon}s"
+                            f" age=[{_age_label(min_age)},{_age_label(max_age)})"
+                            f" thr={threshold} H={horizon}s"
                         )
                         try:
                             r = scan(
@@ -129,6 +148,7 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                                 end_date=end,
                                 depth=depth,
                                 obi_halflife=halflife,
+                                min_age_seconds=min_age,
                                 max_age_seconds=max_age,
                                 threshold=threshold,
                                 horizon_seconds=horizon,
@@ -139,7 +159,8 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                             row = {
                                 "depth":         depth,
                                 "halflife":      _HL_LABEL[halflife],
-                                "max_age":       _AGE_LABEL[max_age],
+                                "min_age":       _age_label(min_age),
+                                "max_age":       _age_label(max_age),
                                 "threshold":     threshold,
                                 "horizon":       horizon,
                                 "n_signals":     round(r["signals_per_day"], 1),
@@ -164,7 +185,7 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                         except Exception as e:
                             rows.append({
                                 "depth": depth, "halflife": _HL_LABEL[halflife],
-                                "max_age": _AGE_LABEL[max_age],
+                                "min_age": _age_label(min_age), "max_age": _age_label(max_age),
                                 "threshold": threshold, "horizon": horizon,
                                 "status": f"ERROR: {e}",
                             })
@@ -189,56 +210,42 @@ def _print_summary(rows: list[dict], top_n: int) -> None:
     ok = [r for r in rows if r.get("status") == "ok"]
 
     hdr = (
-        f"  {'d':>3}  {'hl':>5}  {'age<':>5}  {'thr':>5}  {'H':>4}"
+        f"  {'d':>3}  {'hl':>5}  {'age_min':>7}  {'age_max':>7}  {'thr':>5}  {'H':>4}"
         f"  {'n/day':>6}  {'gross':>7}  {'net':>7}  {'hit%':>6}  {'IC':>7}  {'t':>7}"
     )
     sep = "  " + "-" * (len(hdr) - 2)
 
-    # Group by horizon for readability
-    print(f"\n{'=' * 80}")
-    print(f"  TOP {top_n} BY IC  (all horizon × halflife combinations)")
-    print(f"{'=' * 80}")
-    print(hdr)
-    print(sep)
-    candidates = sorted(ok, key=lambda r: -float(r["ic"]))
-    for r in candidates[:top_n]:
-        print(
-            f"  {r['depth']:>3}  {r['halflife']:>5}  {r['max_age']:>5}  {r['threshold']:>5}  {r['horizon']:>4}"
-            f"  {r['n_signals']:>6.0f}  {float(r['avg_gross']):>+7.3f}  {float(r['avg_net']):>+7.3f}"
+    def _fmt(r: dict) -> str:
+        return (
+            f"  {r['depth']:>3}  {r['halflife']:>5}  {r['min_age']:>7}  {r['max_age']:>7}"
+            f"  {r['threshold']:>5}  {r['horizon']:>4}"
+            f"  {float(r['n_signals']):>6.0f}  {float(r['avg_gross']):>+7.3f}  {float(r['avg_net']):>+7.3f}"
             f"  {float(r['hit_rate']):>5.1%}  {float(r['ic']):>+7.4f}  {float(r['t_stat']):>+7.2f}"
         )
 
-    print(f"\n{'=' * 80}")
+    print(f"\n{'=' * 90}")
+    print(f"  TOP {top_n} BY IC")
+    print(f"{'=' * 90}")
+    print(hdr); print(sep)
+    for r in sorted(ok, key=lambda r: -float(r["ic"]))[:top_n]:
+        print(_fmt(r))
+
+    print(f"\n{'=' * 90}")
     print(f"  TOP {top_n} BY AVG_GROSS  (where avg_gross > 0)")
-    print(f"{'=' * 80}")
-    print(hdr)
-    print(sep)
-    by_gross = sorted(
-        [r for r in ok if float(r["avg_gross"]) > 0],
-        key=lambda r: -float(r["avg_gross"]),
-    )
-    for r in by_gross[:top_n]:
-        print(
-            f"  {r['depth']:>3}  {r['halflife']:>5}  {r['max_age']:>5}  {r['threshold']:>5}  {r['horizon']:>4}"
-            f"  {r['n_signals']:>6.0f}  {float(r['avg_gross']):>+7.3f}  {float(r['avg_net']):>+7.3f}"
-            f"  {float(r['hit_rate']):>5.1%}  {float(r['ic']):>+7.4f}  {float(r['t_stat']):>+7.2f}"
-        )
+    print(f"{'=' * 90}")
+    print(hdr); print(sep)
+    for r in sorted([r for r in ok if float(r["avg_gross"]) > 0], key=lambda r: -float(r["avg_gross"]))[:top_n]:
+        print(_fmt(r))
 
-    # Profitable (avg_net > 0) summary
     profitable = [r for r in ok if float(r["avg_net"]) > 0]
     print(f"\n  Profitable combos (avg_net > 0): {len(profitable)} / {len(ok)}")
     if profitable:
-        print(f"\n{'=' * 80}")
+        print(f"\n{'=' * 90}")
         print(f"  PROFITABLE COMBOS  (avg_net > 0, ranked by t_stat)")
-        print(f"{'=' * 80}")
-        print(hdr)
-        print(sep)
+        print(f"{'=' * 90}")
+        print(hdr); print(sep)
         for r in sorted(profitable, key=lambda r: -float(r["t_stat"]))[:top_n]:
-            print(
-                f"  {r['depth']:>3}  {r['halflife']:>5}  {r['threshold']:>5}  {r['horizon']:>4}"
-                f"  {r['n_signals']:>6.0f}  {float(r['avg_gross']):>+7.3f}  {float(r['avg_net']):>+7.3f}"
-                f"  {float(r['hit_rate']):>5.1%}  {float(r['ic']):>+7.4f}  {float(r['t_stat']):>+7.2f}"
-            )
+            print(_fmt(r))
 
 
 def main() -> None:
@@ -262,8 +269,8 @@ def main() -> None:
     )
     print(
         f"Grid: {len(DEPTHS)} depths × {len(HALFLIVES)} halflives"
-        f" × {len(MAX_AGES)} max_ages × {len(THRESHOLDS)} thresholds × {len(HORIZONS)} horizons"
-        f" = {len(DEPTHS)*len(HALFLIVES)*len(MAX_AGES)*len(THRESHOLDS)*len(HORIZONS)} combos"
+        f" × {len(AGE_WINDOWS)} age_windows × {len(THRESHOLDS)} thresholds × {len(HORIZONS)} horizons"
+        f" = {len(DEPTHS)*len(HALFLIVES)*len(AGE_WINDOWS)*len(THRESHOLDS)*len(HORIZONS)} combos"
     )
 
     rows = _run_grid(cfg, args.start, args.end)
