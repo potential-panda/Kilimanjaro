@@ -66,6 +66,8 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from kilimanjaro.op.age import threshold_age as _threshold_age
+
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 _DEFAULT_COSTS_BPS = 1.0
 
@@ -99,12 +101,6 @@ def _signal_col(depth: int, obi_halflife: int | None) -> str:
         return f"vol_imb_k{depth}"
     return f"ema_k{depth}_{obi_halflife}s"
 
-
-def _age_col(depth: int, obi_halflife: int | None) -> str | None:
-    """Return the age column for the given signal, or None for raw OBI."""
-    if obi_halflife is None:
-        return None
-    return f"age_k{depth}_{obi_halflife}s"
 
 
 def _apply_schedule_filters(
@@ -217,9 +213,12 @@ def scan(
         EMA halflife in seconds (10, 30, 60, 120, 300), or None for raw OBI.
         EMA is preferred — it captures sustained imbalance rather than tick noise.
     max_age_seconds : int | None
-        Maximum seconds the EMA sign may have been unchanged. None = no filter.
-        age=0 = just crossed zero (freshest signal). Smaller values select only
-        fresh crossings, reducing autocorrelated signal bursts.
+        Maximum steps since the EMA last crossed `threshold` from below.
+        age=0 = the crossing instant (EMA just reached threshold).
+        age=1 = one second after crossing, etc.
+        None = no filter (level signal — every second above threshold fires).
+        Computed dynamically against the threshold, not the zero-crossing, so
+        age=0 and abs(obi)>threshold always co-occur and produce real data.
     execution_size : str
         MarketPrice execution_size partition key.
     """
@@ -229,22 +228,34 @@ def scan(
         raise ValueError(f"obi_halflife must be one of {sorted(_VALID_HALFLIVES)} or None, got {obi_halflife}")
 
     col = _signal_col(depth, obi_halflife)
-    acol = _age_col(depth, obi_halflife)
-    age_filter = f"AND {acol} < {max_age_seconds}" if (acol and max_age_seconds is not None) else ""
 
     obi_glob = _obi_glob(signal_exchange, signal_symbol, data_root)
     mp_glob = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
     con = duckdb.connect()
 
+    # Load full 1s OBI series so threshold_age can detect crossings correctly.
+    # (Loading only above-threshold rows would miss the preceding below-threshold
+    # context needed to identify the first row of each episode.)
+    obi_df = con.sql(f"""
+        SELECT ts, {col} AS obi
+        FROM read_parquet('{obi_glob}', hive_partitioning=true)
+        WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        ORDER BY ts
+    """).df()
+
+    # Apply threshold + dynamic age filter in pandas.
+    if max_age_seconds is not None:
+        obi_df["_age"] = _threshold_age(obi_df["obi"], threshold)
+        obi_df = obi_df[
+            (obi_df["obi"].abs() > threshold) & (obi_df["_age"] < max_age_seconds)
+        ][["ts", "obi"]]
+    else:
+        obi_df = obi_df[obi_df["obi"].abs() > threshold][["ts", "obi"]]
+
+    con.register("_signals", obi_df)
+
     signals_df = con.sql(f"""
-        WITH signals AS (
-            SELECT ts, {col} AS obi
-            FROM read_parquet('{obi_glob}', hive_partitioning=true)
-            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-              AND abs({col}) > {threshold}
-              {age_filter}
-        ),
-        mp AS (
+        WITH mp AS (
             SELECT ts, (bid + ask) / 2.0 AS mid
             FROM read_parquet('{mp_glob}', hive_partitioning=true)
             WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
@@ -253,7 +264,7 @@ def scan(
             SELECT s.ts, s.obi,
                    e.ts  AS entry_exec_ts,
                    e.mid AS entry_mid
-            FROM signals s ASOF JOIN mp e ON e.ts >= s.ts
+            FROM _signals s ASOF JOIN mp e ON e.ts >= s.ts
         ),
         with_exit AS (
             SELECT e.ts, e.obi, e.entry_exec_ts, e.entry_mid,

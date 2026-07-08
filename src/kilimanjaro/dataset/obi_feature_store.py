@@ -64,6 +64,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from kilimanjaro.op.age import sign_age as _sign_age
+
 LOG = logging.getLogger(__name__)
 
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
@@ -96,19 +98,6 @@ def _date_range(start_date: str, end_date: str) -> list[str]:
     days = (end - start).days + 1
     return [(start + datetime.timedelta(days=i)).isoformat() for i in range(days)]
 
-
-def _sign_age(series: pd.Series) -> pd.Series:
-    """Seconds the sign of `series` has been continuously unchanged.
-
-    Returns 0 at sign-change moments (the crossing instant) and increments
-    each second the sign holds. Resets to 0 whenever sign is 0 (neutral OBI).
-    """
-    sign = np.sign(series)
-    changed = (sign != sign.shift(1)) | (sign == 0)
-    group = changed.cumsum()
-    age = group.groupby(group).cumcount().astype(np.int32)
-    age[sign == 0] = 0
-    return age
 
 
 def _resample_and_compute_emas(df: pd.DataFrame) -> pd.DataFrame:
