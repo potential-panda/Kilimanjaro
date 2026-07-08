@@ -173,6 +173,37 @@ def _agg_stats(returns: pd.Series, obi: pd.Series, costs_bps: float) -> dict:
     }
 
 
+def load_obi_series(
+    exchange: str,
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    depth: int,
+    obi_halflife: int | None,
+    data_root: Path = _DEFAULT_DATA_ROOT,
+) -> pd.DataFrame:
+    """Load the full 1s-resampled OBI series for one (depth, halflife) combination.
+
+    Returns a DataFrame with columns [ts, obi], covering the full date range
+    without any threshold filtering. Pass the result to scan() via `_obi_series`
+    to avoid re-loading from parquet on every threshold/horizon combo in a grid sweep.
+    """
+    if depth not in _VALID_DEPTHS:
+        raise ValueError(f"depth must be one of {sorted(_VALID_DEPTHS)}, got {depth}")
+    if obi_halflife is not None and obi_halflife not in _VALID_HALFLIVES:
+        raise ValueError(f"obi_halflife must be one of {sorted(_VALID_HALFLIVES)} or None")
+
+    col = _signal_col(depth, obi_halflife)
+    obi_glob = _obi_glob(exchange, symbol, data_root)
+    con = duckdb.connect()
+    return con.sql(f"""
+        SELECT ts, {col} AS obi
+        FROM read_parquet('{obi_glob}', hive_partitioning=true)
+        WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+        ORDER BY ts
+    """).df()
+
+
 def scan(
     signal_exchange: str,
     signal_symbol: str,
@@ -190,6 +221,7 @@ def scan(
     block_weekday_hours: list[int] | None = None,
     block_weekend_hours: list[int] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
+    _obi_series: pd.DataFrame | None = None,
 ) -> dict:
     """Run a fixed-horizon OBI scan using the pre-computed OBIFeature dataset.
 
@@ -229,19 +261,21 @@ def scan(
 
     col = _signal_col(depth, obi_halflife)
 
-    obi_glob = _obi_glob(signal_exchange, signal_symbol, data_root)
     mp_glob = _mp_glob(target_exchange, target_symbol, execution_size, data_root)
     con = duckdb.connect()
 
-    # Load full 1s OBI series so threshold_age can detect crossings correctly.
-    # (Loading only above-threshold rows would miss the preceding below-threshold
-    # context needed to identify the first row of each episode.)
-    obi_df = con.sql(f"""
-        SELECT ts, {col} AS obi
-        FROM read_parquet('{obi_glob}', hive_partitioning=true)
-        WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-        ORDER BY ts
-    """).df()
+    # Use pre-loaded series if provided (grid scans), else load from parquet.
+    # Full series needed so threshold_age can detect crossings from below threshold.
+    if _obi_series is not None:
+        obi_df = _obi_series
+    else:
+        obi_glob = _obi_glob(signal_exchange, signal_symbol, data_root)
+        obi_df = con.sql(f"""
+            SELECT ts, {col} AS obi
+            FROM read_parquet('{obi_glob}', hive_partitioning=true)
+            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+            ORDER BY ts
+        """).df()
 
     # Apply threshold + dynamic age filter in pandas.
     if max_age_seconds is not None:

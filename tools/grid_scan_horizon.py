@@ -35,7 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.scan.horizon_scan import scan
+from kilimanjaro.scan.horizon_scan import load_obi_series, scan
 
 # ── Grid parameters ────────────────────────────────────────────────────────────
 DEPTHS      = [1, 3, 5, 10]
@@ -85,6 +85,32 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
 
     for depth in DEPTHS:
         for halflife in HALFLIVES:
+            # Load OBI series once per (depth, halflife) — shared across all
+            # threshold / max_age / horizon combos that follow.
+            print(f"  Loading OBI series: depth={depth} halflife={_HL_LABEL[halflife]} …", flush=True)
+            try:
+                obi_series = load_obi_series(
+                    exchange=market_cfg["signal_exchange"],
+                    symbol=market_cfg["signal_symbol"],
+                    start_date=start,
+                    end_date=end,
+                    depth=depth,
+                    obi_halflife=halflife,
+                )
+            except Exception as e:
+                # Mark all combos for this (depth, halflife) as errors
+                for max_age in MAX_AGES:
+                    for threshold in THRESHOLDS:
+                        for horizon in HORIZONS:
+                            done += 1
+                            rows.append({
+                                "depth": depth, "halflife": _HL_LABEL[halflife],
+                                "max_age": _AGE_LABEL[max_age],
+                                "threshold": threshold, "horizon": horizon,
+                                "status": f"ERROR: {e}",
+                            })
+                continue
+
             for max_age in MAX_AGES:
                 for threshold in THRESHOLDS:
                     for horizon in HORIZONS:
@@ -107,6 +133,7 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                                 threshold=threshold,
                                 horizon_seconds=horizon,
                                 execution_size=market_cfg["execution_size"],
+                                _obi_series=obi_series,
                             )
                             fh = r["fixed_horizon"]
                             row = {
