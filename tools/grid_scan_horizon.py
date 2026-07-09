@@ -120,6 +120,25 @@ def _age_label(v: int | None) -> str:
     return "any" if v is None else f"{v}s"
 
 
+def _write_age_hist(obi_series, depth: int, halflife: int, out_dir: Path) -> None:
+    """Write one age histogram CSV per threshold for a given (depth, halflife).
+
+    Each file: age_hist/{depth}_{halflife}_{threshold}.csv
+    One column 'age', one row per second where |obi| > threshold.
+    Raw age values — import into Excel/etc. to plot the histogram directly.
+    """
+    hist_dir = out_dir / "age_hist"
+    hist_dir.mkdir(parents=True, exist_ok=True)
+    hl_label = _HL_LABEL[halflife]
+    for thr in THRESHOLDS:
+        ages = threshold_age(obi_series["obi"], thr)
+        active = ages[ages >= 0].reset_index(drop=True)
+        if len(active) == 0:
+            continue
+        fname = hist_dir / f"{depth}_{hl_label}_{thr}.csv"
+        active.to_csv(fname, index=False, header=["age"])
+
+
 def _compute_age_stats(obi_series, n_days: int) -> list[dict]:
     """Compute age distribution stats for all thresholds. Called once per (depth, halflife)."""
     stats = []
@@ -149,7 +168,7 @@ def _compute_age_stats(obi_series, n_days: int) -> list[dict]:
 
 
 def _run_grid(
-    market_cfg: dict, start: str, end: str
+    market_cfg: dict, start: str, end: str, out_dir: Path
 ) -> tuple[list[dict], list[dict]]:
     """Run the full grid sweep. Returns (scan_rows, age_stat_rows)."""
     total = len(DEPTHS) * len(HALFLIVES) * len(AGE_WINDOWS) * len(THRESHOLDS) * len(HORIZONS)
@@ -183,7 +202,8 @@ def _run_grid(
                             })
                 continue
 
-            # Compute age stats for all thresholds while series is loaded
+            # Compute age stats + write raw age histograms while series is loaded
+            _write_age_hist(obi_series, depth, halflife, out_dir)
             for stat in _compute_age_stats(obi_series, n_days):
                 age_stats.append({
                     "depth":    depth,
@@ -372,7 +392,7 @@ def main() -> None:
     )
     print(f"Output: {out_dir}/")
 
-    rows, age_stats = _run_grid(cfg, args.start, args.end)
+    rows, age_stats = _run_grid(cfg, args.start, args.end, out_dir)
 
     # output.csv — sorted by IC descending
     ok_rows = sorted([r for r in rows if r.get("status") == "ok"], key=lambda r: -float(r["ic"]))
