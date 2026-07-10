@@ -9,7 +9,7 @@ Output folder
 results/grid_scan/horizon/{scan_id}/
     params.json          scan configuration
     output.csv           full grid results (all combos)
-    output_filtered.csv  multi-gate filtered candidates
+    output_filtered.csv  filtered candidates (passing all output filters)
     age_stats.csv        age distribution per (depth, halflife, threshold)
 
 age_stats columns
@@ -69,8 +69,8 @@ AGE_WINDOWS: list[tuple[int | None, int | None]] = [
     (60,   300),     # established, long
 ]
 
-# Multi-gate filter applied to produce output_filtered.csv
-FILTER_GATES = {
+# Output filters applied to produce output_filtered.csv
+FILTERS = {
     "n_signals_min":  10,
     "n_signals_max":  1500,
     "ic_min":         0.3,
@@ -279,17 +279,17 @@ def _run_grid(
     return rows, age_stats
 
 
-def _passes_gates(r: dict) -> bool:
-    g = FILTER_GATES
+def _passes_filters(r: dict) -> bool:
+    f = FILTERS
     try:
         return (
-            float(r["n_signals"]) >= g["n_signals_min"]
-            and float(r["n_signals"]) < g["n_signals_max"]
+            float(r["n_signals"]) >= f["n_signals_min"]
+            and float(r["n_signals"]) < f["n_signals_max"]
             and r["ic"] not in ("nan", "")
-            and float(r["ic"]) > g["ic_min"]
-            and float(r["t_stat"]) > g["t_stat_min"]
-            and float(r["p_value"]) < g["p_value_max"]
-            and float(r["avg_gross"]) > g["avg_gross_min"]
+            and float(r["ic"]) > f["ic_min"]
+            and float(r["t_stat"]) > f["t_stat_min"]
+            and float(r["p_value"]) < f["p_value_max"]
+            and float(r["avg_gross"]) > f["avg_gross_min"]
         )
     except (ValueError, KeyError):
         return False
@@ -335,11 +335,11 @@ def _print_summary(rows: list[dict], top_n: int) -> None:
 
     profitable = [r for r in ok if float(r["avg_net"]) > 0]
     print(f"\n  Profitable combos (avg_net > 0): {len(profitable)} / {len(ok)}")
-    filtered = [r for r in ok if _passes_gates(r)]
-    print(f"  Passing all gates:               {len(filtered)} / {len(ok)}")
+    filtered = [r for r in ok if _passes_filters(r)]
+    print(f"  Passing all filters:             {len(filtered)} / {len(ok)}")
     if filtered:
         print(f"\n{'=' * 90}")
-        print(f"  PASSING ALL GATES  (ranked by IC × t_stat)")
+        print(f"  PASSING ALL FILTERS  (ranked by IC × t_stat)")
         print(f"{'=' * 90}")
         print(hdr); print(sep)
         for r in sorted(filtered, key=lambda r: -(float(r["ic"]) * float(r["t_stat"])))[:top_n]:
@@ -380,7 +380,7 @@ def main() -> None:
             "thresholds":  THRESHOLDS,
             "horizons":    HORIZONS,
         },
-        "filter_gates": FILTER_GATES,
+        "filters": FILTERS,
     }
     (out_dir / "params.json").write_text(json.dumps(params, indent=2))
 
@@ -404,9 +404,9 @@ def main() -> None:
     _write_csv(ok_rows + err_rows, out_dir / "output.csv", _CSV_FIELDS)
     print(f"Saved {out_dir}/output.csv  ({len(ok_rows)} ok, {len(err_rows)} errors)")
 
-    # output_filtered.csv — multi-gate filter, ranked by IC × t_stat
+    # output_filtered.csv — output filters applied, ranked by IC × t_stat
     filtered = sorted(
-        [r for r in ok_rows if _passes_gates(r)],
+        [r for r in ok_rows if _passes_filters(r)],
         key=lambda r: -(float(r["ic"]) * float(r["t_stat"])),
     )
     _write_csv(filtered, out_dir / "output_filtered.csv", _CSV_FIELDS)
