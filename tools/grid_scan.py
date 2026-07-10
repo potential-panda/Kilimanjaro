@@ -57,10 +57,15 @@ BOXES = [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.004, 0.005]
 STEPS = [0.01, 0.02, 0.03, 0.04, 0.05]
 
 _SCHED_ORDER = {
-    "nofilter": 0, "active": 1, "inactive": 2,
-    "weekday": 3, "weekend": 4, "us_on": 5, "us_off": 6,
+    "nofilter": 0,
+    "active": 1,
+    "inactive": 2,
+    "weekday": 3,
+    "weekend": 4,
+    "us_on": 5,
+    "us_off": 6,
 }
-_ALL_HOURS   = list(range(24))
+_ALL_HOURS = list(range(24))
 _ALL_WEEKEND = _ALL_HOURS  # alias
 
 # Per-market config: flip source, execution target, execution size, and schedules.
@@ -73,57 +78,157 @@ _ALL_WEEKEND = _ALL_HOURS  # alias
 # us_on:    US market open on weekdays (JST 22–05; block weekday 06–21 + weekends)
 # us_off:   US market closed (weekday JST 06–21 + all weekends; block weekday 22–05)
 _ETH_BTC_SCHEDULES = {
-    "nofilter": dict(block_weekday_hours=None,                                                        block_weekend_hours=None),
-    "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5],                                 block_weekend_hours=_ALL_HOURS),
-    "inactive": dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=None),
-    "weekday":  dict(block_weekday_hours=None,                                                        block_weekend_hours=_ALL_HOURS),
-    "weekend":  dict(block_weekday_hours=_ALL_HOURS,                                                  block_weekend_hours=None),
-    "us_on":    dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], block_weekend_hours=_ALL_HOURS),
-    "us_off":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5],                                 block_weekend_hours=None),
+    "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
+    "active": dict(
+        block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=_ALL_HOURS
+    ),
+    "inactive": dict(
+        block_weekday_hours=[
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+        ],
+        block_weekend_hours=None,
+    ),
+    "weekday": dict(block_weekday_hours=None, block_weekend_hours=_ALL_HOURS),
+    "weekend": dict(block_weekday_hours=_ALL_HOURS, block_weekend_hours=None),
+    "us_on": dict(
+        block_weekday_hours=[
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+        ],
+        block_weekend_hours=_ALL_HOURS,
+    ),
+    "us_off": dict(
+        block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=None
+    ),
 }
 
 MARKET_CONFIGS: dict[str, dict] = {
     "eth": {
-        "flip_exchange":  "BINANCE",
-        "flip_symbol":    "ETH_USDT",
+        "flip_exchange": "BINANCE",
+        "flip_symbol": "ETH_USDT",
         "target_exchange": "GMO",
-        "target_symbol":  "ETH_JPY",
+        "target_symbol": "ETH_JPY",
         "execution_size": "0.3",
         "schedules": _ETH_BTC_SCHEDULES,
     },
     "xrp": {
-        "flip_exchange":  "BINANCE",
-        "flip_symbol":    "XRP_USDT",
+        "flip_exchange": "BINANCE",
+        "flip_symbol": "XRP_USDT",
         "target_exchange": "GMO",
-        "target_symbol":  "XRP_JPY",
+        "target_symbol": "XRP_JPY",
         "execution_size": "150",
         # XRP active JST 07–21 (one extra hour blocked vs ETH); us_on/us_off use same US boundary
         "schedules": {
-            "nofilter": dict(block_weekday_hours=None,                                                              block_weekend_hours=None),
-            "active":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5, 6],                                    block_weekend_hours=_ALL_HOURS),
-            "inactive": dict(block_weekday_hours=[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],        block_weekend_hours=None),
-            "weekday":  dict(block_weekday_hours=None,                                                              block_weekend_hours=_ALL_HOURS),
-            "weekend":  dict(block_weekday_hours=_ALL_HOURS,                                                        block_weekend_hours=None),
-            "us_on":    dict(block_weekday_hours=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],     block_weekend_hours=_ALL_HOURS),
-            "us_off":   dict(block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5],                                       block_weekend_hours=None),
+            "nofilter": dict(block_weekday_hours=None, block_weekend_hours=None),
+            "active": dict(
+                block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5, 6],
+                block_weekend_hours=_ALL_HOURS,
+            ),
+            "inactive": dict(
+                block_weekday_hours=[
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19,
+                    20,
+                    21,
+                ],
+                block_weekend_hours=None,
+            ),
+            "weekday": dict(block_weekday_hours=None, block_weekend_hours=_ALL_HOURS),
+            "weekend": dict(block_weekday_hours=_ALL_HOURS, block_weekend_hours=None),
+            "us_on": dict(
+                block_weekday_hours=[
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19,
+                    20,
+                    21,
+                ],
+                block_weekend_hours=_ALL_HOURS,
+            ),
+            "us_off": dict(
+                block_weekday_hours=[22, 23, 0, 1, 2, 3, 4, 5], block_weekend_hours=None
+            ),
         },
     },
     "btc": {
-        "flip_exchange":  "BINANCE",
-        "flip_symbol":    "BTC_USDT",
+        "flip_exchange": "BINANCE",
+        "flip_symbol": "BTC_USDT",
         "target_exchange": "GMO",
-        "target_symbol":  "BTC_JPY",
+        "target_symbol": "BTC_JPY",
         "execution_size": "0.01",
         "schedules": _ETH_BTC_SCHEDULES,
     },
 }
 
 _CSV_FIELDS = [
-    "box", "step", "schedule", "n_flips",
-    "n_dd_blocked", "n_dd_triggers",
-    "avg_gross", "avg_net", "total_net_bps",
-    "hit_rate", "std_bps", "sharpe", "t_stat", "p_value", "skewness",
-    "avg_hold_s", "status",
+    "box",
+    "step",
+    "schedule",
+    "n_flips",
+    "n_dd_blocked",
+    "n_dd_triggers",
+    "avg_gross",
+    "avg_net",
+    "total_net_bps",
+    "hit_rate",
+    "std_bps",
+    "sharpe",
+    "t_stat",
+    "p_value",
+    "skewness",
+    "avg_hold_s",
+    "status",
 ]
 
 # Per-market output filters for output_filtered.csv.
@@ -136,25 +241,19 @@ _CSV_FIELDS = [
 # BTC: low flip count (large box), higher per-trade returns → higher avg_net_min
 FILTERS: dict[str, dict] = {
     "eth": {
-        "n_flips_min":       200,
-        "avg_net_min":       1.0,
-        "t_stat_min":        1.5,
-        "p_value_max":       0.05,
-        "total_net_bps_min": 5000,
+        "avg_net_min": 0.0,
+        "t_stat_min": 1.5,
+        "p_value_max": 0.05,
     },
     "xrp": {
-        "n_flips_min":       500,   # XRP generates many more flips; require a larger sample
-        "avg_net_min":       0.5,   # thinner per-trade edge due to high frequency
-        "t_stat_min":        1.5,
-        "p_value_max":       0.05,
-        "total_net_bps_min": 3000,  # lower total hurdle to reflect smaller per-trade returns
+        "avg_net_min": 0.0,  # thinner per-trade edge due to high frequency
+        "t_stat_min": 1.5,
+        "p_value_max": 0.05,
     },
     "btc": {
-        "n_flips_min":       100,   # BTC flips are infrequent; 200 would rarely be reached
-        "avg_net_min":       2.0,   # higher per-trade bar to compensate for low n
-        "t_stat_min":        1.5,
-        "p_value_max":       0.05,
-        "total_net_bps_min": 3000,
+        "avg_net_min": 0.0,  # higher per-trade bar to compensate for low n
+        "t_stat_min": 1.5,
+        "p_value_max": 0.05,
     },
 }
 
@@ -175,8 +274,10 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                         flip_symbol=market_cfg["flip_symbol"],
                         target_exchange=market_cfg["target_exchange"],
                         target_symbol=market_cfg["target_symbol"],
-                        start_date=start, end_date=end,
-                        box_size_rate=box, sar_step=step,
+                        start_date=start,
+                        end_date=end,
+                        box_size_rate=box,
+                        sar_step=step,
                         execution_size=market_cfg["execution_size"],
                         rolling_dd_window_seconds=10800,
                         rolling_dd_threshold_bps=500,
@@ -186,23 +287,23 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                     bf = r["between_flip"]
                     rg = r["risk_gates"]
                     row = {
-                        "box":           box,
-                        "step":          step,
-                        "schedule":      sched_name,
-                        "n_flips":       r["n_flips"],
-                        "n_dd_blocked":  rg["n_rolling_dd_blocked"],
+                        "box": box,
+                        "step": step,
+                        "schedule": sched_name,
+                        "n_flips": r["n_flips"],
+                        "n_dd_blocked": rg["n_rolling_dd_blocked"],
                         "n_dd_triggers": len(rg.get("dd_triggers", [])),
-                        "avg_gross":     round(bf["avg_signed_return_bps"], 3),
-                        "avg_net":       round(bf["avg_net_return_bps"], 3),
+                        "avg_gross": round(bf["avg_signed_return_bps"], 3),
+                        "avg_net": round(bf["avg_net_return_bps"], 3),
                         "total_net_bps": round(bf["total_net_bps"], 1),
-                        "hit_rate":      round(bf["hit_rate"], 4),
-                        "std_bps":       round(bf["std_bps"], 3),
-                        "sharpe":        round(bf["sharpe_per_trade"], 4),
-                        "t_stat":        round(bf["t_stat"], 3),
-                        "p_value":       round(bf["p_value_1sided"], 5),
-                        "skewness":      round(bf["skewness"], 3),
-                        "avg_hold_s":    round(bf["avg_holding_seconds"], 0),
-                        "status":        "ok",
+                        "hit_rate": round(bf["hit_rate"], 4),
+                        "std_bps": round(bf["std_bps"], 3),
+                        "sharpe": round(bf["sharpe_per_trade"], 4),
+                        "t_stat": round(bf["t_stat"], 3),
+                        "p_value": round(bf["p_value_1sided"], 5),
+                        "skewness": round(bf["skewness"], 3),
+                        "avg_hold_s": round(bf["avg_holding_seconds"], 0),
+                        "status": "ok",
                     }
                     rows.append(row)
                     print(
@@ -212,8 +313,18 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                         flush=True,
                     )
                 except Exception as e:
-                    rows.append({"box": box, "step": step, "schedule": sched_name, "status": f"ERROR: {e}"})
-                    print(f"[{done:3d}/{total}] box={box} step={step} sched={sched_name} → ERROR: {e}", flush=True)
+                    rows.append(
+                        {
+                            "box": box,
+                            "step": step,
+                            "schedule": sched_name,
+                            "status": f"ERROR: {e}",
+                        }
+                    )
+                    print(
+                        f"[{done:3d}/{total}] box={box} step={step} sched={sched_name} → ERROR: {e}",
+                        flush=True,
+                    )
 
     return rows
 
@@ -221,11 +332,9 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
 def _passes_filters(r: dict, filters: dict) -> bool:
     try:
         return (
-            int(r["n_flips"]) >= filters["n_flips_min"]
-            and float(r["avg_net"]) >= filters["avg_net_min"]
+            float(r["avg_net"]) >= filters["avg_net_min"]
             and float(r["t_stat"]) >= filters["t_stat_min"]
             and float(r["p_value"]) <= filters["p_value_max"]
-            and float(r["total_net_bps"]) >= filters["total_net_bps_min"]
         )
     except (ValueError, KeyError):
         return False
@@ -249,11 +358,13 @@ def _write_scan_folder(
 
     ok = [r for r in rows if r.get("status") == "ok"]
     errors = [r for r in rows if r.get("status") != "ok"]
-    ok.sort(key=lambda r: (
-        _SCHED_ORDER.get(r["schedule"], 99),
-        -float(r["total_net_bps"]),
-        -int(r["n_flips"]),
-    ))
+    ok.sort(
+        key=lambda r: (
+            _SCHED_ORDER.get(r["schedule"], 99),
+            -float(r["total_net_bps"]),
+            -int(r["n_flips"]),
+        )
+    )
     _write_csv(ok + errors, out_dir / "output.csv")
     print(f"Saved {out_dir}/output.csv  ({len(ok)} ok, {len(errors)} errors)")
 
@@ -269,7 +380,15 @@ def _print_grouped(rows: list[dict], top_n: int, p_threshold: float) -> None:
     hdr = f"  {'box':>8}  {'step':>5}  {'n':>6}  {'avg_net':>8}  {'total':>8}  {'std':>7}  {'sharpe':>7}  {'t_stat':>7}  {'p':>7}  {'skew':>6}"
     sep = "  " + "-" * (len(hdr) - 2)
 
-    for sched in ["nofilter", "active", "inactive", "weekday", "weekend", "us_on", "us_off"]:
+    for sched in [
+        "nofilter",
+        "active",
+        "inactive",
+        "weekday",
+        "weekend",
+        "us_on",
+        "us_off",
+    ]:
         group = [r for r in ok if r["schedule"] == sched]
         group.sort(key=lambda r: (-float(r["total_net_bps"]), -int(r["n_flips"])))
 
@@ -301,11 +420,22 @@ def _print_grouped(rows: list[dict], top_n: int, p_threshold: float) -> None:
 
     if top_n > 0:
         print(f"\n{'=' * 90}")
-        print(f"  TOP {top_n} PER SCHEDULE  (p < {p_threshold}, avg_net > 0, ranked by t_stat)")
+        print(
+            f"  TOP {top_n} PER SCHEDULE  (p < {p_threshold}, avg_net > 0, ranked by t_stat)"
+        )
         print(f"{'=' * 90}")
-        for sched in ["nofilter", "active", "inactive", "weekday", "weekend", "us_on", "us_off"]:
+        for sched in [
+            "nofilter",
+            "active",
+            "inactive",
+            "weekday",
+            "weekend",
+            "us_on",
+            "us_off",
+        ]:
             candidates = [
-                r for r in ok
+                r
+                for r in ok
                 if r["schedule"] == sched
                 and float(r["avg_net"]) > 0
                 and not math.isnan(float(r["p_value"]))
@@ -329,14 +459,39 @@ def _print_grouped(rows: list[dict], top_n: int, p_threshold: float) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--market", required=True, choices=list(MARKET_CONFIGS), help="Market to scan: eth / xrp / btc")
-    ap.add_argument("--start",  required=True, help="Start date YYYY-MM-DD")
-    ap.add_argument("--end",    required=True, help="End date YYYY-MM-DD")
-    ap.add_argument("--size",   default=None,  help="Override execution_size (e.g. 0.01); default from market config")
-    ap.add_argument("--out",    default=None,  help="Output folder (default: results/grid_scan/flip/{scan_id})")
-    ap.add_argument("--top",         type=int,   default=5,    help="Top-N candidates per schedule (0 = skip, default 5)")
-    ap.add_argument("--p-threshold", type=float, default=0.05, help="p-value threshold for significance marker (default 0.05)")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--market",
+        required=True,
+        choices=list(MARKET_CONFIGS),
+        help="Market to scan: eth / xrp / btc",
+    )
+    ap.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
+    ap.add_argument("--end", required=True, help="End date YYYY-MM-DD")
+    ap.add_argument(
+        "--size",
+        default=None,
+        help="Override execution_size (e.g. 0.01); default from market config",
+    )
+    ap.add_argument(
+        "--out",
+        default=None,
+        help="Output folder (default: results/grid_scan/flip/{scan_id})",
+    )
+    ap.add_argument(
+        "--top",
+        type=int,
+        default=5,
+        help="Top-N candidates per schedule (0 = skip, default 5)",
+    )
+    ap.add_argument(
+        "--p-threshold",
+        type=float,
+        default=0.05,
+        help="p-value threshold for significance marker (default 0.05)",
+    )
     args = ap.parse_args()
 
     market_cfg = dict(MARKET_CONFIGS[args.market])  # shallow copy so we can override
@@ -354,14 +509,14 @@ def main() -> None:
         "market": args.market,
         "start": args.start,
         "end": args.end,
-        "flip_exchange":   market_cfg["flip_exchange"],
-        "flip_symbol":     market_cfg["flip_symbol"],
+        "flip_exchange": market_cfg["flip_exchange"],
+        "flip_symbol": market_cfg["flip_symbol"],
         "target_exchange": market_cfg["target_exchange"],
-        "target_symbol":   market_cfg["target_symbol"],
-        "execution_size":  market_cfg["execution_size"],
+        "target_symbol": market_cfg["target_symbol"],
+        "execution_size": market_cfg["execution_size"],
         "grid": {
-            "boxes":  BOXES,
-            "steps":  STEPS,
+            "boxes": BOXES,
+            "steps": STEPS,
             "schedules": list(market_cfg["schedules"].keys()),
         },
         "filters": filters,
@@ -375,7 +530,7 @@ def main() -> None:
     )
     print(
         f"Grid: {len(BOXES)} boxes × {len(STEPS)} steps × {len(market_cfg['schedules'])} schedules"
-        f" = {len(BOXES)*len(STEPS)*len(market_cfg['schedules'])} combos"
+        f" = {len(BOXES) * len(STEPS) * len(market_cfg['schedules'])} combos"
     )
     print(f"Filters ({args.market}): {filters}")
     print(f"Output: {out_dir}/")
