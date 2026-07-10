@@ -2,14 +2,21 @@
 """Run a parameter grid scan for a given market (ETH / XRP / BTC).
 
 Iterates all (box, step, schedule) combinations, collects per-trade statistics,
-writes results to CSV, and prints a grouped summary sorted by total_net_bps.
+and writes results to a folder under results/grid_scan/flip/{scan_id}/.
+
+Output folder
+-------------
+results/grid_scan/flip/{scan_id}/
+    params.json          scan configuration
+    output.csv           full grid results (all combos, sorted by total_net_bps)
+    output_filtered.csv  multi-gate filtered candidates
 
 Usage
 -----
     python tools/grid_scan.py --market eth --start 2025-07-01 --end 2026-06-30
     python tools/grid_scan.py --market xrp --start 2025-07-01 --end 2026-06-30
     python tools/grid_scan.py --market btc --start 2025-07-01 --end 2026-06-30
-    python tools/grid_scan.py --market eth --start 2026-01-01 --end 2026-06-30 --out results/my_grid.csv
+    python tools/grid_scan.py --market eth --start 2026-01-01 --end 2026-06-30 --out results/grid_scan/flip/my_run
 
 Columns in CSV and table
 ------------------------
@@ -35,6 +42,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime
+import json
 import math
 import sys
 from pathlib import Path
@@ -117,6 +126,14 @@ _CSV_FIELDS = [
     "avg_hold_s", "status",
 ]
 
+# Multi-gate filter for output_filtered.csv
+FILTER_GATES = {
+    "n_flips_min":  30,
+    "avg_net_min":  0.0,
+    "t_stat_min":   2.0,
+    "p_value_max":  0.05,
+}
+
 
 def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
     schedules = market_cfg["schedules"]
@@ -160,7 +177,7 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
                         "t_stat":        round(bf["t_stat"], 3),
                         "p_value":       round(bf["p_value_1sided"], 5),
                         "skewness":      round(bf["skewness"], 3),
-                        "avg_hold_s":    round(bf["avg_holding_seconds"]),
+                        "avg_hold_s":    round(bf["avg_holding_seconds"], 0),
                         "status":        "ok",
                     }
                     rows.append(row)
@@ -177,22 +194,48 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
     return rows
 
 
-def _save_csv(rows: list[dict], path: str) -> None:
+def _passes_gates(r: dict) -> bool:
+    g = FILTER_GATES
+    try:
+        return (
+            int(r["n_flips"]) >= g["n_flips_min"]
+            and float(r["avg_net"]) > g["avg_net_min"]
+            and float(r["t_stat"]) >= g["t_stat_min"]
+            and float(r["p_value"]) <= g["p_value_max"]
+        )
+    except (ValueError, KeyError):
+        return False
+
+
+def _write_csv(rows: list[dict], path: Path) -> None:
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=_CSV_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+
+
+def _write_scan_folder(
+    out_dir: Path,
+    params: dict,
+    rows: list[dict],
+) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "params.json").write_text(json.dumps(params, indent=2))
+
     ok = [r for r in rows if r.get("status") == "ok"]
     errors = [r for r in rows if r.get("status") != "ok"]
-
     ok.sort(key=lambda r: (
         _SCHED_ORDER.get(r["schedule"], 99),
         -float(r["total_net_bps"]),
         -int(r["n_flips"]),
     ))
+    _write_csv(ok + errors, out_dir / "output.csv")
+    print(f"Saved {out_dir}/output.csv  ({len(ok)} ok, {len(errors)} errors)")
 
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
-        w.writeheader()
-        w.writerows(ok + errors)
-    print(f"\nSaved {path}")
+    filtered = [r for r in ok if _passes_gates(r)]
+    filtered.sort(key=lambda r: -float(r["t_stat"]))
+    _write_csv(filtered, out_dir / "output_filtered.csv")
+    print(f"Saved {out_dir}/output_filtered.csv  ({len(filtered)} rows)")
 
 
 def _print_grouped(rows: list[dict], top_n: int, p_threshold: float) -> None:
@@ -266,7 +309,7 @@ def main() -> None:
     ap.add_argument("--start",  required=True, help="Start date YYYY-MM-DD")
     ap.add_argument("--end",    required=True, help="End date YYYY-MM-DD")
     ap.add_argument("--size",   default=None,  help="Override execution_size (e.g. 0.01); default from market config")
-    ap.add_argument("--out",    default=None,  help="CSV output path (default: results/grid_scan_<MARKET>_<size>_<start>_<end>.csv)")
+    ap.add_argument("--out",    default=None,  help="Output folder (default: results/grid_scan/flip/{scan_id})")
     ap.add_argument("--top",         type=int,   default=5,    help="Top-N candidates per schedule (0 = skip, default 5)")
     ap.add_argument("--p-threshold", type=float, default=0.05, help="p-value threshold for significance marker (default 0.05)")
     args = ap.parse_args()
@@ -274,19 +317,46 @@ def main() -> None:
     market_cfg = dict(MARKET_CONFIGS[args.market])  # shallow copy so we can override
     if args.size is not None:
         market_cfg["execution_size"] = args.size
-    size_tag = market_cfg["execution_size"]
-    out = args.out or f"results/grid_scan_{args.market.upper()}_{size_tag}_{args.start}_{args.end}.csv"
+
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    scan_id = f"{args.market.upper()}_{args.start}_{args.end}_{ts}"
+    out_dir = Path(args.out) if args.out else Path(f"results/grid_scan/flip/{scan_id}")
+
+    params = {
+        "scan_id": scan_id,
+        "market": args.market,
+        "start": args.start,
+        "end": args.end,
+        "flip_exchange":   market_cfg["flip_exchange"],
+        "flip_symbol":     market_cfg["flip_symbol"],
+        "target_exchange": market_cfg["target_exchange"],
+        "target_symbol":   market_cfg["target_symbol"],
+        "execution_size":  market_cfg["execution_size"],
+        "grid": {
+            "boxes":  BOXES,
+            "steps":  STEPS,
+            "schedules": list(market_cfg["schedules"].keys()),
+        },
+        "filter_gates": FILTER_GATES,
+    }
 
     print(
-        f"Grid scan: {market_cfg['flip_exchange']}/{market_cfg['flip_symbol']}"
+        f"Flip grid scan: {market_cfg['flip_exchange']}/{market_cfg['flip_symbol']}"
         f" → {market_cfg['target_exchange']}/{market_cfg['target_symbol']}"
         f"  size={market_cfg['execution_size']}"
         f"  {args.start} .. {args.end}"
     )
+    print(
+        f"Grid: {len(BOXES)} boxes × {len(STEPS)} steps × {len(market_cfg['schedules'])} schedules"
+        f" = {len(BOXES)*len(STEPS)*len(market_cfg['schedules'])} combos"
+    )
+    print(f"Output: {out_dir}/")
 
     rows = _run_grid(market_cfg, args.start, args.end)
-    _save_csv(rows, out)
+    _write_scan_folder(out_dir, params, rows)
     _print_grouped(rows, args.top, args.p_threshold)
+    print(f"\nScan ID: {scan_id}")
+    print(f"Results: {out_dir}/")
 
 
 if __name__ == "__main__":
