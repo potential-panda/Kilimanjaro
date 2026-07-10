@@ -85,6 +85,13 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_symbol":    "ETH_JPY",
         "execution_size":   "0.3",
     },
+    "eth_bitbank": {
+        "signal_exchange":  "BITBANK",
+        "signal_symbol":    "ETH_SPOT",
+        "target_exchange":  "GMO",
+        "target_symbol":    "ETH_JPY",
+        "execution_size":   "0.3",
+    },
     "xrp": {
         "signal_exchange":  "BINANCE",
         "signal_symbol":    "XRP_USDT",
