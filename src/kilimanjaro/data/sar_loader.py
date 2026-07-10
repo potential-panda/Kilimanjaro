@@ -48,7 +48,8 @@ def load_sar_flips(
     if features_root is None:
         features_root = _features_root()
     glob = _flip_glob(exchange, symbol, box_size_rate, sar_step, features_root)
-    return duckdb.connect().sql(f"""
+    con = duckdb.connect()
+    return con.sql(f"""
         SELECT ts, sar_up,
                LEAD(ts) OVER (ORDER BY ts) AS exit_ts
         FROM read_parquet('{glob}', hive_partitioning=true)
