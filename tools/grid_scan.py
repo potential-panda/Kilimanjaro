@@ -126,15 +126,36 @@ _CSV_FIELDS = [
     "avg_hold_s", "status",
 ]
 
-# Multi-gate filter for output_filtered.csv
-# Flip scan has structurally lower t_stats than horizon scan (max ~2.6 in practice),
-# so thresholds are tuned to the between-signal return style. IC is not used here.
-FILTER_GATES = {
-    "n_flips_min":       200,    # meaningful sample size
-    "avg_net_min":       1.0,    # at least 1 bps net edge per trade
-    "t_stat_min":        1.5,    # flip scan ceiling is ~2.6; this is a reasonable bar
-    "p_value_max":       0.05,
-    "total_net_bps_min": 5000,   # cumulative edge ≥ 5000 bps over the scan period
+# Per-market filter gates for output_filtered.csv.
+#
+# Flip scan t_stats are structurally lower than horizon scan (max ~2–3 in practice),
+# so t_stat_min is much lower than the horizon gate's 10.0.
+#
+# ETH: moderate flip frequency, mid-range std (~60–80 bps)
+# XRP: high flip frequency (small box), thin per-trade edge → lower avg_net_min
+# BTC: low flip count (large box), higher per-trade returns → higher avg_net_min
+FILTER_GATES: dict[str, dict] = {
+    "eth": {
+        "n_flips_min":       200,
+        "avg_net_min":       1.0,
+        "t_stat_min":        1.5,
+        "p_value_max":       0.05,
+        "total_net_bps_min": 5000,
+    },
+    "xrp": {
+        "n_flips_min":       500,   # XRP generates many more flips; require a larger sample
+        "avg_net_min":       0.5,   # thinner per-trade edge due to high frequency
+        "t_stat_min":        1.5,
+        "p_value_max":       0.05,
+        "total_net_bps_min": 3000,  # lower total hurdle to reflect smaller per-trade returns
+    },
+    "btc": {
+        "n_flips_min":       100,   # BTC flips are infrequent; 200 would rarely be reached
+        "avg_net_min":       2.0,   # higher per-trade bar to compensate for low n
+        "t_stat_min":        1.5,
+        "p_value_max":       0.05,
+        "total_net_bps_min": 3000,
+    },
 }
 
 
@@ -197,15 +218,14 @@ def _run_grid(market_cfg: dict, start: str, end: str) -> list[dict]:
     return rows
 
 
-def _passes_gates(r: dict) -> bool:
-    g = FILTER_GATES
+def _passes_gates(r: dict, gates: dict) -> bool:
     try:
         return (
-            int(r["n_flips"]) >= g["n_flips_min"]
-            and float(r["avg_net"]) >= g["avg_net_min"]
-            and float(r["t_stat"]) >= g["t_stat_min"]
-            and float(r["p_value"]) <= g["p_value_max"]
-            and float(r["total_net_bps"]) >= g["total_net_bps_min"]
+            int(r["n_flips"]) >= gates["n_flips_min"]
+            and float(r["avg_net"]) >= gates["avg_net_min"]
+            and float(r["t_stat"]) >= gates["t_stat_min"]
+            and float(r["p_value"]) <= gates["p_value_max"]
+            and float(r["total_net_bps"]) >= gates["total_net_bps_min"]
         )
     except (ValueError, KeyError):
         return False
@@ -222,6 +242,7 @@ def _write_scan_folder(
     out_dir: Path,
     params: dict,
     rows: list[dict],
+    gates: dict,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "params.json").write_text(json.dumps(params, indent=2))
@@ -236,7 +257,7 @@ def _write_scan_folder(
     _write_csv(ok + errors, out_dir / "output.csv")
     print(f"Saved {out_dir}/output.csv  ({len(ok)} ok, {len(errors)} errors)")
 
-    filtered = [r for r in ok if _passes_gates(r)]
+    filtered = [r for r in ok if _passes_gates(r, gates)]
     filtered.sort(key=lambda r: -float(r["t_stat"]))
     _write_csv(filtered, out_dir / "output_filtered.csv")
     print(f"Saved {out_dir}/output_filtered.csv  ({len(filtered)} rows)")
@@ -326,6 +347,8 @@ def main() -> None:
     scan_id = f"{args.market.upper()}_{args.start}_{args.end}_{ts}"
     out_dir = Path(args.out) if args.out else Path(f"results/grid_scan/flip/{scan_id}")
 
+    gates = FILTER_GATES[args.market]
+
     params = {
         "scan_id": scan_id,
         "market": args.market,
@@ -341,7 +364,7 @@ def main() -> None:
             "steps":  STEPS,
             "schedules": list(market_cfg["schedules"].keys()),
         },
-        "filter_gates": FILTER_GATES,
+        "filter_gates": gates,
     }
 
     print(
@@ -354,10 +377,11 @@ def main() -> None:
         f"Grid: {len(BOXES)} boxes × {len(STEPS)} steps × {len(market_cfg['schedules'])} schedules"
         f" = {len(BOXES)*len(STEPS)*len(market_cfg['schedules'])} combos"
     )
+    print(f"Filter gates ({args.market}): {gates}")
     print(f"Output: {out_dir}/")
 
     rows = _run_grid(market_cfg, args.start, args.end)
-    _write_scan_folder(out_dir, params, rows)
+    _write_scan_folder(out_dir, params, rows, gates)
     _print_grouped(rows, args.top, args.p_threshold)
     print(f"\nScan ID: {scan_id}")
     print(f"Results: {out_dir}/")
