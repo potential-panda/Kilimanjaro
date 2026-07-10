@@ -42,10 +42,18 @@ def add_jst_columns(
         Column to derive jst_date from (defaults to ts_col).
         Pass the entry ts when using exit_ts for hour/weekday (SAR style).
     """
+    import numpy as np
     df = df.copy()
-    jst = (df[ts_col] + _JST_OFFSET).astype("int64")
-    df["jst_hour"] = (jst % 86400 // 3600).astype(int)
-    df["jst_weekday"] = pd.to_datetime(jst, unit="s", utc=True).dt.dayofweek
+
+    # ts_col may contain NaN (e.g. exit_exec_ts for the last flip which has no
+    # next flip). Only convert valid rows to int64; leave NaN rows as NaN.
+    valid = df[ts_col].notna()
+    df["jst_hour"] = np.nan
+    df["jst_weekday"] = np.nan
+    if valid.any():
+        jst = (df.loc[valid, ts_col] + _JST_OFFSET).astype("int64")
+        df.loc[valid, "jst_hour"] = (jst % 86400 // 3600).values
+        df.loc[valid, "jst_weekday"] = pd.to_datetime(jst, unit="s", utc=True).dt.dayofweek.values
 
     date_jst = (df[date_ts_col or ts_col] + _JST_OFFSET).astype("int64")
     df["jst_date"] = pd.to_datetime(date_jst, unit="s", utc=True).dt.date.astype(str)

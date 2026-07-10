@@ -127,11 +127,14 @@ _CSV_FIELDS = [
 ]
 
 # Multi-gate filter for output_filtered.csv
+# Flip scan has structurally lower t_stats than horizon scan (max ~2.6 in practice),
+# so thresholds are tuned to the between-signal return style. IC is not used here.
 FILTER_GATES = {
-    "n_flips_min":  30,
-    "avg_net_min":  0.0,
-    "t_stat_min":   2.0,
-    "p_value_max":  0.05,
+    "n_flips_min":       200,    # meaningful sample size
+    "avg_net_min":       1.0,    # at least 1 bps net edge per trade
+    "t_stat_min":        1.5,    # flip scan ceiling is ~2.6; this is a reasonable bar
+    "p_value_max":       0.05,
+    "total_net_bps_min": 5000,   # cumulative edge ≥ 5000 bps over the scan period
 }
 
 
@@ -199,9 +202,10 @@ def _passes_gates(r: dict) -> bool:
     try:
         return (
             int(r["n_flips"]) >= g["n_flips_min"]
-            and float(r["avg_net"]) > g["avg_net_min"]
+            and float(r["avg_net"]) >= g["avg_net_min"]
             and float(r["t_stat"]) >= g["t_stat_min"]
             and float(r["p_value"]) <= g["p_value_max"]
+            and float(r["total_net_bps"]) >= g["total_net_bps_min"]
         )
     except (ValueError, KeyError):
         return False
