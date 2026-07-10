@@ -41,8 +41,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from kilimanjaro.framework import MarketConfig, ScheduleFilter, run_grid
 from kilimanjaro.op.age import threshold_age
-from kilimanjaro.scan.horizon_scan import load_obi_series, scan
+from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
+from kilimanjaro.signal.obi_age import OBIAgeSignal
 
 # ── Grid parameters ────────────────────────────────────────────────────────────
 DEPTHS      = [1, 3, 5, 10]
@@ -178,106 +180,101 @@ def _run_grid(
     market_cfg: dict, start: str, end: str, out_dir: Path
 ) -> tuple[list[dict], list[dict]]:
     """Run the full grid sweep. Returns (scan_rows, age_stat_rows)."""
-    total = len(DEPTHS) * len(HALFLIVES) * len(AGE_WINDOWS) * len(THRESHOLDS) * len(HORIZONS)
     n_days = max((datetime.date.fromisoformat(end) - datetime.date.fromisoformat(start)).days, 1)
-    rows: list[dict] = []
+    total = len(DEPTHS) * len(HALFLIVES) * len(AGE_WINDOWS) * len(THRESHOLDS) * len(HORIZONS)
     age_stats: list[dict] = []
     done = 0
 
-    for depth in DEPTHS:
-        for halflife in HALFLIVES:
-            print(f"  Loading OBI series: depth={depth} halflife={_HL_LABEL[halflife]} …", flush=True)
-            try:
-                obi_series = load_obi_series(
-                    exchange=market_cfg["signal_exchange"],
-                    symbol=market_cfg["signal_symbol"],
-                    start_date=start,
-                    end_date=end,
-                    depth=depth,
-                    obi_halflife=halflife,
-                )
-            except Exception as e:
-                for (min_age, max_age) in AGE_WINDOWS:
-                    for threshold in THRESHOLDS:
-                        for horizon in HORIZONS:
-                            done += 1
-                            rows.append({
-                                "depth": depth, "halflife": _HL_LABEL[halflife],
-                                "min_age": _age_label(min_age), "max_age": _age_label(max_age),
-                                "threshold": threshold, "horizon": horizon,
-                                "status": f"ERROR: {e}",
-                            })
-                continue
+    target = MarketConfig(
+        market_cfg["target_exchange"],
+        market_cfg["target_symbol"],
+        market_cfg["execution_size"],
+    )
+    schedule = ScheduleFilter(
+        block_gmo_maintenance=(market_cfg["target_exchange"].upper() == "GMO"),
+    )
 
-            # Compute age stats + write raw age histograms while series is loaded
-            _write_age_hist(obi_series, depth, halflife, out_dir)
-            for stat in _compute_age_stats(obi_series, n_days):
-                age_stats.append({
-                    "depth":    depth,
-                    "halflife": _HL_LABEL[halflife],
-                    **stat,
-                })
+    combos = [
+        (
+            OBIAgeSignal(
+                signal_exchange=market_cfg["signal_exchange"],
+                signal_symbol=market_cfg["signal_symbol"],
+                depth=depth,
+                halflife=halflife,
+                threshold=threshold,
+                min_age=min_age,
+                max_age=max_age,
+            ),
+            FixedHorizonReturn(horizon_seconds=horizon),
+        )
+        for depth in DEPTHS
+        for halflife in HALFLIVES
+        for (min_age, max_age) in AGE_WINDOWS
+        for threshold in THRESHOLDS
+        for horizon in HORIZONS
+    ]
 
-            for (min_age, max_age) in AGE_WINDOWS:
-                for threshold in THRESHOLDS:
-                    for horizon in HORIZONS:
-                        done += 1
-                        label = (
-                            f"d{depth} hl={_HL_LABEL[halflife]}"
-                            f" age=[{_age_label(min_age)},{_age_label(max_age)})"
-                            f" thr={threshold} H={horizon}s"
-                        )
-                        try:
-                            r = scan(
-                                signal_exchange=market_cfg["signal_exchange"],
-                                signal_symbol=market_cfg["signal_symbol"],
-                                target_exchange=market_cfg["target_exchange"],
-                                target_symbol=market_cfg["target_symbol"],
-                                start_date=start,
-                                end_date=end,
-                                depth=depth,
-                                obi_halflife=halflife,
-                                min_age_seconds=min_age,
-                                max_age_seconds=max_age,
-                                threshold=threshold,
-                                horizon_seconds=horizon,
-                                execution_size=market_cfg["execution_size"],
-                                _obi_series=obi_series,
-                            )
-                            fh = r["fixed_horizon"]
-                            rows.append({
-                                "depth":         depth,
-                                "halflife":      _HL_LABEL[halflife],
-                                "min_age":       _age_label(min_age),
-                                "max_age":       _age_label(max_age),
-                                "threshold":     threshold,
-                                "horizon":       horizon,
-                                "n_signals":     round(r["signals_per_day"], 1),
-                                "avg_gross":     round(fh["avg_signed_return_bps"], 4),
-                                "avg_net":       round(fh["avg_net_return_bps"], 4),
-                                "hit_rate":      round(fh["hit_rate"], 4),
-                                "ic":            round(fh["ic"], 5),
-                                "t_stat":        round(fh["t_stat"], 3),
-                                "p_value":       round(fh["p_value_1sided"], 5),
-                                "total_net_bps": round(fh["total_net_bps"], 1),
-                                "status":        "ok",
-                            })
-                            print(
-                                f"[{done:5d}/{total}] {label}"
-                                f" → n/day={r['signals_per_day']:.0f}"
-                                f" gross={fh['avg_signed_return_bps']:+.3f}bps"
-                                f" IC={fh['ic']:+.4f}"
-                                f" t={fh['t_stat']:+.2f}",
-                                flush=True,
-                            )
-                        except Exception as e:
-                            rows.append({
-                                "depth": depth, "halflife": _HL_LABEL[halflife],
-                                "min_age": _age_label(min_age), "max_age": _age_label(max_age),
-                                "threshold": threshold, "horizon": horizon,
-                                "status": f"ERROR: {e}",
-                            })
-                            print(f"[{done:5d}/{total}] {label} → ERROR: {e}", flush=True)
+    def on_data_loaded(cache_key: tuple, data) -> None:
+        _, _, depth, halflife = cache_key
+        print(f"  Loaded OBI series: depth={depth} halflife={_HL_LABEL[halflife]}", flush=True)
+        _write_age_hist(data, depth, halflife, out_dir)
+        for stat in _compute_age_stats(data, n_days):
+            age_stats.append({"depth": depth, "halflife": _HL_LABEL[halflife], **stat})
+
+    def on_result(row: dict) -> None:
+        nonlocal done
+        done += 1
+        hl = _HL_LABEL.get(row.get("halflife"), str(row.get("halflife", "?")))
+        label = (
+            f"d{row.get('depth')} hl={hl}"
+            f" age=[{_age_label(row.get('min_age'))},{_age_label(row.get('max_age'))})"
+            f" thr={row.get('threshold')} H={row.get('horizon')}s"
+        )
+        status = row.get("status", "")
+        if status == "ok":
+            n_day = row.get("n", 0) / n_days
+            print(
+                f"[{done:5d}/{total}] {label}"
+                f" → n/day={n_day:.0f}"
+                f" gross={row.get('avg_gross', 0):+.3f}bps"
+                f" IC={row.get('ic', float('nan')):+.4f}"
+                f" t={row.get('t_stat', 0):+.2f}",
+                flush=True,
+            )
+        else:
+            print(f"[{done:5d}/{total}] {label} → {status}", flush=True)
+
+    raw_rows = run_grid(
+        combos, target, start, end,
+        costs_bps=1.0, schedule=schedule,
+        on_data_loaded=on_data_loaded, on_result=on_result,
+    )
+
+    # Transform to CSV format
+    rows: list[dict] = []
+    for r in raw_rows:
+        hl_label = _HL_LABEL.get(r.get("halflife"), str(r.get("halflife", "?")))
+        base = {
+            "depth":     r.get("depth"),
+            "halflife":  hl_label,
+            "min_age":   _age_label(r.get("min_age")),
+            "max_age":   _age_label(r.get("max_age")),
+            "threshold": r.get("threshold"),
+            "horizon":   r.get("horizon"),
+            "status":    r.get("status", "ERROR"),
+        }
+        if r.get("status") == "ok":
+            base.update({
+                "n_signals":     round(r["n"] / n_days, 1),
+                "avg_gross":     round(r["avg_gross"], 4),
+                "avg_net":       round(r["avg_net"], 4),
+                "hit_rate":      round(r["hit_rate"], 4),
+                "ic":            round(r.get("ic", float("nan")), 5),
+                "t_stat":        round(r["t_stat"], 3),
+                "p_value":       round(r["p_value_1sided"], 5),
+                "total_net_bps": round(r["total_net_bps"], 1),
+            })
+        rows.append(base)
 
     return rows, age_stats
 
