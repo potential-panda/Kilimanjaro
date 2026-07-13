@@ -1,5 +1,26 @@
 # Flip Scan Baseline
 
+> **Naming caveat (2026-07):** the schedule names in this document and in the
+> current grid scanner (`tools/grid_scan.py`) are **inverted**. Here,
+> "active" means the US-night window (JST 22:00–06:00, from VolSpread
+> stability analysis). In `grid_scan.py`'s schedule registry, `active` means
+> the GMO **daytime** peak (trades weekday JST 06–21). Mapping:
+>
+> | this doc / old scan-reports | `tools/grid_scan.py` schedule |
+> |---|---|
+> | active (JST 22:00–06:00 weekdays) | `us_on` |
+> | inactive (JST 06:00–22:00 + weekends) | `us_off` (weekday day-hours + weekends) |
+> | — | `active` = weekday JST 06–21 only |
+> | — | `inactive` = weekday JST 22–05 + weekends |
+>
+> When comparing old scan-reports against grid-scan folders, map the names —
+> do not compare "active" to "active".
+>
+> **Gate caveat:** `tools/grid_scan.py` defaults to a retuned rolling-DD gate
+> (window=10800 s, threshold=500 bps, cooldown=21600 s), not this document's
+> baseline (21600 s / 1000 bps). Each grid-scan run records the gate it used
+> in its folder's `params.json`; the gate is overridable via `--dd-*` flags.
+
 ## What This Is
 
 The flip scan (`tools/flip_scan.py`) measures the profitability of holding a
