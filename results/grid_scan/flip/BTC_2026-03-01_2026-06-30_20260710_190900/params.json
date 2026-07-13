@@ -1,0 +1,45 @@
+{
+  "scan_id": "BTC_2026-03-01_2026-06-30_20260710_190900",
+  "market": "btc",
+  "start": "2026-03-01",
+  "end": "2026-06-30",
+  "flip_exchange": "BINANCE",
+  "flip_symbol": "BTC_USDT",
+  "target_exchange": "GMO",
+  "target_symbol": "BTC_JPY",
+  "execution_size": "0.01",
+  "grid": {
+    "boxes": [
+      0.001,
+      0.0015,
+      0.002,
+      0.0025,
+      0.003,
+      0.004,
+      0.005
+    ],
+    "steps": [
+      0.01,
+      0.02,
+      0.03,
+      0.04,
+      0.05
+    ],
+    "schedules": [
+      "nofilter",
+      "active",
+      "inactive",
+      "weekday",
+      "weekend",
+      "us_on",
+      "us_off"
+    ]
+  },
+  "filters": {
+    "n_flips_min": 100,
+    "avg_net_min": 2.0,
+    "t_stat_min": 1.5,
+    "p_value_max": 0.05,
+    "total_net_bps_min": 3000
+  }
+}
