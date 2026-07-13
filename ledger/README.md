@@ -16,21 +16,20 @@ Rules:
 - Under version-control conflict, preserve both valid event lines and order
   by `created_at`; duplicate `event_id`s are invalid.
 
-Don't append manually — run a spec through the full pipeline with
-`tools/scan_workflow.py`, which validates, scans, evaluates thresholds,
-and records exactly one event per run, with `from_status` always read from
-the ledger's own latest state (not the spec file's static `status` field):
+Events are written automatically by the grid scan tools
+(`tools/grid_scan.py`, `tools/grid_scan_horizon.py`): every run appends one
+`scan_attached` event to its hypothesis — default per tool / market config,
+override with `--hypothesis-id`, escape hatch `--no-ledger` for throwaway
+exploration — carrying the scan folder, train/holdout windows, number of
+combos tested, and the rank-stable survivors. Grid runs never write status
+transitions: promotion (`backtest-approved`) stays a human `human_approval`
+event, and demotion/retirement stays a deliberate `status_transition`,
+never a side effect of running a scan.
 
-```bash
-python tools/scan_workflow.py --spec specs/hyp-20260618-001.yaml --start 2026-05-01 --end 2026-05-15
-```
-
-This refuses outright (writes nothing) if the spec doesn't pass
-`tools/validate_spec.py` first. `to_status` is whichever of
-`scan-passed`/`scan-failed`/`needs-more-data`/`needs-tooling` the
-threshold evaluator (`tools/threshold_evaluator.py`) decided — there is no
-path from this workflow to `backtest-approved`; that's a separate, human
-`human_approval` event (see below), never written automatically.
+(The earlier `tools/scan_workflow.py` spec pipeline referenced here was
+removed in the tools cleanup along with `validate_spec.py` /
+`threshold_evaluator.py`; validate specs directly against
+`schemas/hypothesis_spec.schema.json` for now.)
 
 Lower-level operations remain available directly via `tools/ledger.py`:
 

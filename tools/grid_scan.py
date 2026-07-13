@@ -185,6 +185,18 @@ def main() -> None:
     ap.add_argument("--top-quantile", type=float, default=0.10)
     ap.add_argument("--min-n", type=int, default=30)
     ap.add_argument("--out", default=None, help="Output folder")
+    ap.add_argument(
+        "--hypothesis-id",
+        default="hyp-20260703-002",
+        help="Hypothesis this grid belongs to; the run is recorded against it"
+        " in ledger/events.jsonl (default: the schedule-adaptive flip-scan"
+        " spec, which covers the (box, step, schedule) grid on XRP/ETH/BTC)",
+    )
+    ap.add_argument(
+        "--no-ledger",
+        action="store_true",
+        help="Skip the ledger event (exploratory runs only)",
+    )
     args = ap.parse_args()
 
     market_cfg = dict(MARKET_CONFIGS[args.market])
@@ -289,6 +301,21 @@ def main() -> None:
             )
     else:
         print("\nNo rank-stable candidates — nothing survived both windows.")
+
+    if args.no_ledger:
+        print("\n(--no-ledger: run NOT recorded in ledger/events.jsonl)")
+    else:
+        from grid_ledger import record_grid_scan
+        event = record_grid_scan(
+            hypothesis_id=args.hypothesis_id,
+            actor_id="grid-scan-flip",
+            scan_id=scan_id,
+            out_dir=out_dir,
+            market=args.market,
+            res=res,
+        )
+        print(f"\nLedger: {event['event_id']} scan_attached → {args.hypothesis_id}")
+        print(f"  {event['details']['headline']}")
 
     print(f"\nScan ID: {scan_id}")
 

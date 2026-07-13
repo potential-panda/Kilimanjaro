@@ -77,6 +77,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange":  "GMO",
         "target_symbol":    "ETH_JPY",
         "execution_size":   "0.3",
+        "hypothesis_id":    "hyp-20260713-001",  # OBI-age ETH spec
     },
     "eth_bitbank": {
         "signal_exchange":  "BITBANK",
@@ -84,6 +85,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange":  "GMO",
         "target_symbol":    "ETH_JPY",
         "execution_size":   "0.3",
+        "hypothesis_id":    None,  # no spec yet — pass --hypothesis-id
     },
     "xrp": {
         "signal_exchange":  "BINANCE",
@@ -91,6 +93,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange":  "GMO",
         "target_symbol":    "XRP_JPY",
         "execution_size":   "150",
+        "hypothesis_id":    None,  # no spec yet — pass --hypothesis-id
     },
     "btc": {
         "signal_exchange":  "BINANCE",
@@ -98,6 +101,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange":  "GMO",
         "target_symbol":    "BTC_JPY",
         "execution_size":   "0.01",
+        "hypothesis_id":    "hyp-20260618-001",  # raw-OBI BTC spec (this grid is its variant sweep)
     },
 }
 
@@ -196,9 +200,26 @@ def main() -> None:
     ap.add_argument("--top-quantile", type=float, default=0.10)
     ap.add_argument("--min-n", type=int, default=30)
     ap.add_argument("--out", default=None, help="Output folder")
+    ap.add_argument(
+        "--hypothesis-id",
+        default=None,
+        help="Hypothesis this grid belongs to (default: per-market from"
+        " MARKET_CONFIGS; markets without a spec require this or --no-ledger)",
+    )
+    ap.add_argument(
+        "--no-ledger",
+        action="store_true",
+        help="Skip the ledger event (exploratory runs only)",
+    )
     args = ap.parse_args()
 
     cfg = MARKET_CONFIGS[args.market]
+    hypothesis_id = args.hypothesis_id or cfg["hypothesis_id"]
+    if hypothesis_id is None and not args.no_ledger:
+        ap.error(
+            f"market '{args.market}' has no default hypothesis spec —"
+            " pass --hypothesis-id (create a spec first) or --no-ledger"
+        )
     split = args.split or default_split(args.start, args.end)
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     scan_id = f"{args.market.upper()}_{args.start}_{args.end}_{ts}"
@@ -317,6 +338,21 @@ def main() -> None:
             )
     else:
         print("\nNo rank-stable candidates — nothing survived both windows.")
+
+    if args.no_ledger:
+        print("\n(--no-ledger: run NOT recorded in ledger/events.jsonl)")
+    else:
+        from grid_ledger import record_grid_scan
+        event = record_grid_scan(
+            hypothesis_id=hypothesis_id,
+            actor_id="grid-scan-horizon",
+            scan_id=scan_id,
+            out_dir=out_dir,
+            market=args.market,
+            res=res,
+        )
+        print(f"\nLedger: {event['event_id']} scan_attached → {hypothesis_id}")
+        print(f"  {event['details']['headline']}")
 
     print(f"\nScan ID: {scan_id}")
     print(f"Results: {out_dir}/")
