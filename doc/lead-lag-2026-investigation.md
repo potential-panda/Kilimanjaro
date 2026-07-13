@@ -108,6 +108,28 @@ post-rebuild MarketPrice (including the XRP sampled-day populate started
 2026-07-13) inherit the contamination in the affected months. After a
 MarketPrice fix + rebuild, LeadLag for those months should be re-populated.
 
+### Fixes landed (2026-07-13)
+
+- **Collector root cause fixed** — potential-panda-core `cdc172a`. The
+  actual bug: `OrderBookTracker.on_snapshot` cleared the book, then its
+  `apply_update` call was silently rejected by the seq guard, so **every
+  snapshot was discarded** and books were rebuilt from diff updates alone
+  (Binance: every ~25s periodic resync + first ~25s after every reconnect;
+  Bitbank: after every `depth_whole`). Fixed to apply snapshots properly,
+  publish nothing until the first snapshot is applied, and resync
+  per-symbol every ~7 min instead of ~25s. Regression tests in
+  `test/test_order_book_tracker.py`. BITBANK bronze is also affected by
+  the historical bug (8–17% of rows are partial books).
+- **MarketPrice guard added** — Makalu `e116efe`. Drops snapshots whose
+  *walked* spread exceeds 100 bps (partial books often keep a tight
+  top-of-book with nothing behind it, so the walk lands deep). Verified on
+  2026-03-03: spikes 224 → 0, 1s vol 13.2 → 1.5 bps (GMO: 1.28), 0.034%
+  of rows dropped; Oct-10 chaos day drops only 0.009%.
+- **Remaining action**: rebuild all MarketPrice partitions (post-24ecb0d
+  ones contain glitches; pre-24ecb0d ones are missing the ~7% flip-moment
+  rows the old 10 bps filter dropped), then re-populate LeadLag and any
+  other MarketPrice-derived datasets.
+
 **Downstream impact:**
 
 - `ChartRangeSAR` (the flip signal) is built from bronze **Trade** ticks,
