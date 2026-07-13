@@ -1,47 +1,48 @@
 #!/usr/bin/env python3
 """Grid scan for the fixed-horizon OBI precision scanner.
 
-Sweeps (depth × obi_halflife × age_window × threshold × horizon) and reports
-IC, hit rate, avg_gross, t_stat per combination.
+Sweeps (depth × obi_halflife × age_window × threshold × horizon) through
+kilimanjaro.framework.run_grid_split.
+
+Train/holdout split — always on
+-------------------------------
+Same discipline as tools/grid_scan.py: every combo runs on a train window
+AND a holdout window (default split: last third of the range; override with
+--split), and selection is by rank stability (top decile of both windows by
+the rank metric, positive avg_net in both), not by in-sample p-value.
 
 Output folder
 -------------
 results/grid_scan/horizon/{scan_id}/
-    params.json          scan configuration
-    output.csv           full grid results (all combos)
-    output_filtered.csv  filtered candidates (passing all output filters)
-    age_stats.csv        age distribution per (depth, halflife, threshold)
-
-age_stats columns
------------------
-depth, halflife, threshold, n_episodes, ep_per_day,
-age_mean, age_p25, age_p50, age_p75, age_p90, age_max
-
-output.csv columns
-------------------
-depth, halflife, min_age, max_age, threshold, horizon,
-n_signals, avg_gross, avg_net, hit_rate, ic, t_stat, p_value, total_net_bps, status
+    params.json        scan configuration (grid, windows, ranking)
+    output.csv         all combos: params + train_* + holdout_* + rank pcts
+    output_stable.csv  rank-stable combos only (the candidates)
+    age_stats.csv      age distribution per (depth, halflife, threshold), train window
+    age_hist/          raw age histogram CSVs, train window
 
 Usage
 -----
-    python tools/grid_scan_horizon.py --market eth --start 2026-05-01 --end 2026-06-30
-    python tools/grid_scan_horizon.py --market eth --start 2026-05-01 --end 2026-06-30 --out results/grid_scan/horizon/my_run
+    python tools/grid_scan_horizon.py --market eth --start 2026-01-01 --end 2026-06-30
+    python tools/grid_scan_horizon.py --market eth --start 2026-01-01 --end 2026-06-30 --split 2026-05-01
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import datetime
 import json
 import sys
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.framework import MarketConfig, ScheduleFilter, run_grid
+from kilimanjaro.framework import (
+    MarketConfig,
+    ScheduleFilter,
+    default_split,
+    run_grid_split,
+    write_csv,
+)
 from kilimanjaro.op.age import threshold_age
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 from kilimanjaro.signal.obi_age import OBIAgeSignal
@@ -68,16 +69,6 @@ AGE_WINDOWS: list[tuple[int | None, int | None]] = [
     (60,   180),     # established, medium
     (60,   300),     # established, long
 ]
-
-# Output filters applied to produce output_filtered.csv
-FILTERS = {
-    "n_signals_min":  10,
-    "n_signals_max":  1500,
-    "ic_min":         0.3,
-    "t_stat_min":     10.0,
-    "p_value_max":    0.01,
-    "avg_gross_min":  1.0,
-}
 
 MARKET_CONFIGS: dict[str, dict] = {
     "eth": {
@@ -112,8 +103,11 @@ MARKET_CONFIGS: dict[str, dict] = {
 
 _CSV_FIELDS = [
     "depth", "halflife", "min_age", "max_age", "threshold", "horizon",
-    "n_signals", "avg_gross", "avg_net", "hit_rate",
-    "ic", "t_stat", "p_value", "total_net_bps", "status",
+    "train_n", "train_avg_gross", "train_avg_net", "train_hit_rate", "train_ic",
+    "train_t_stat", "train_p_value_bootstrap", "train_total_net_bps", "train_rank_pct",
+    "holdout_n", "holdout_avg_gross", "holdout_avg_net", "holdout_hit_rate", "holdout_ic",
+    "holdout_t_stat", "holdout_p_value_bootstrap", "holdout_total_net_bps", "holdout_rank_pct",
+    "stable", "n_combos_tested", "train_status", "holdout_status",
 ]
 
 _AGE_STAT_FIELDS = [
@@ -134,7 +128,6 @@ def _write_age_hist(obi_series, depth: int, halflife: int, out_dir: Path) -> Non
 
     Each file: age_hist/{depth}_{halflife}_{threshold}.csv
     One column 'age', one row per second where |obi| > threshold.
-    Raw age values — import into Excel/etc. to plot the histogram directly.
     """
     hist_dir = out_dir / "age_hist"
     hist_dir.mkdir(parents=True, exist_ok=True)
@@ -176,29 +169,52 @@ def _compute_age_stats(obi_series, n_days: int) -> list[dict]:
     return stats
 
 
-def _run_grid(
-    market_cfg: dict, start: str, end: str, out_dir: Path
-) -> tuple[list[dict], list[dict]]:
-    """Run the full grid sweep. Returns (scan_rows, age_stat_rows)."""
-    n_days = max((datetime.date.fromisoformat(end) - datetime.date.fromisoformat(start)).days, 1)
-    total = len(DEPTHS) * len(HALFLIVES) * len(AGE_WINDOWS) * len(THRESHOLDS) * len(HORIZONS)
-    age_stats: list[dict] = []
-    done = 0
+def _label_row(r: dict) -> dict:
+    r = dict(r)
+    r["halflife"] = _HL_LABEL.get(r.get("halflife"), str(r.get("halflife")))
+    r["min_age"] = _age_label(r.get("min_age"))
+    r["max_age"] = _age_label(r.get("max_age"))
+    for k, v in r.items():
+        if isinstance(v, float):
+            r[k] = round(v, 5)
+    return r
 
-    target = MarketConfig(
-        market_cfg["target_exchange"],
-        market_cfg["target_symbol"],
-        market_cfg["execution_size"],
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    ap.add_argument("--market", required=True, choices=list(MARKET_CONFIGS))
+    ap.add_argument("--start",  required=True, help="Start date YYYY-MM-DD")
+    ap.add_argument("--end",    required=True, help="End date YYYY-MM-DD")
+    ap.add_argument(
+        "--split",
+        default=None,
+        help="Holdout split date YYYY-MM-DD (default: last third of the range)",
+    )
+    ap.add_argument("--rank-metric", default="t_stat")
+    ap.add_argument("--top-quantile", type=float, default=0.10)
+    ap.add_argument("--min-n", type=int, default=30)
+    ap.add_argument("--out", default=None, help="Output folder")
+    args = ap.parse_args()
+
+    cfg = MARKET_CONFIGS[args.market]
+    split = args.split or default_split(args.start, args.end)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    scan_id = f"{args.market.upper()}_{args.start}_{args.end}_{ts}"
+    out_dir = Path(args.out) if args.out else Path(f"results/grid_scan/horizon/{scan_id}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    target = MarketConfig(cfg["target_exchange"], cfg["target_symbol"], cfg["execution_size"])
     schedule = ScheduleFilter(
-        block_gmo_maintenance=(market_cfg["target_exchange"].upper() == "GMO"),
+        block_gmo_maintenance=(cfg["target_exchange"].upper() == "GMO"),
     )
 
     combos = [
         (
             OBIAgeSignal(
-                signal_exchange=market_cfg["signal_exchange"],
-                signal_symbol=market_cfg["signal_symbol"],
+                signal_exchange=cfg["signal_exchange"],
+                signal_symbol=cfg["signal_symbol"],
                 depth=depth,
                 halflife=halflife,
                 threshold=threshold,
@@ -214,160 +230,50 @@ def _run_grid(
         for horizon in HORIZONS
     ]
 
+    train_days = max(
+        (datetime.date.fromisoformat(split) - datetime.date.fromisoformat(args.start)).days, 1
+    )
+    age_stats: list[dict] = []
+
     def on_data_loaded(cache_key: tuple, data) -> None:
         _, _, depth, halflife = cache_key
         print(f"  Loaded OBI series: depth={depth} halflife={_HL_LABEL[halflife]}", flush=True)
         _write_age_hist(data, depth, halflife, out_dir)
-        for stat in _compute_age_stats(data, n_days):
+        for stat in _compute_age_stats(data, train_days):
             age_stats.append({"depth": depth, "halflife": _HL_LABEL[halflife], **stat})
 
+    done = {"train": 0, "holdout": 0}
+
     def on_result(row: dict) -> None:
-        nonlocal done
-        done += 1
-        hl = _HL_LABEL.get(row.get("halflife"), str(row.get("halflife", "?")))
-        label = (
-            f"d{row.get('depth')} hl={hl}"
-            f" age=[{_age_label(row.get('min_age'))},{_age_label(row.get('max_age'))})"
-            f" thr={row.get('threshold')} H={row.get('horizon')}s"
-        )
-        status = row.get("status", "")
-        if status == "ok":
-            n_day = row.get("n", 0) / n_days
-            print(
-                f"[{done:5d}/{total}] {label}"
-                f" → n/day={n_day:.0f}"
-                f" gross={row.get('avg_gross', 0):+.3f}bps"
-                f" IC={row.get('ic', float('nan')):+.4f}"
-                f" t={row.get('t_stat', 0):+.2f}",
-                flush=True,
-            )
-        else:
-            print(f"[{done:5d}/{total}] {label} → {status}", flush=True)
+        w = row["window"]
+        done[w] += 1
+        if done[w] % 100 == 0 or row.get("status") not in ("ok", "no_signals"):
+            print(f"[{w:7s} {done[w]:5d}/{len(combos)}] status={row.get('status')}", flush=True)
 
-    raw_rows = run_grid(
-        combos, target, start, end,
-        costs_bps=1.0, schedule=schedule,
-        on_data_loaded=on_data_loaded, on_result=on_result,
+    print(
+        f"Horizon grid scan: {cfg['signal_exchange']}/{cfg['signal_symbol']}"
+        f" → {cfg['target_exchange']}/{cfg['target_symbol']}"
     )
+    print(f"Split: train {args.start} .. <{split}  |  holdout {split} .. {args.end}")
+    print(f"Grid: {len(combos)} combos")
+    print(f"Output: {out_dir}/")
 
-    # Transform to CSV format
-    rows: list[dict] = []
-    for r in raw_rows:
-        hl_label = _HL_LABEL.get(r.get("halflife"), str(r.get("halflife", "?")))
-        base = {
-            "depth":     r.get("depth"),
-            "halflife":  hl_label,
-            "min_age":   _age_label(r.get("min_age")),
-            "max_age":   _age_label(r.get("max_age")),
-            "threshold": r.get("threshold"),
-            "horizon":   r.get("horizon"),
-            "status":    r.get("status", "ERROR"),
-        }
-        if r.get("status") == "ok":
-            base.update({
-                "n_signals":     round(r["n"] / n_days, 1),
-                "avg_gross":     round(r["avg_gross"], 4),
-                "avg_net":       round(r["avg_net"], 4),
-                "hit_rate":      round(r["hit_rate"], 4),
-                "ic":            round(r.get("ic", float("nan")), 5),
-                "t_stat":        round(r["t_stat"], 3),
-                "p_value":       round(r["p_value_1sided"], 5),
-                "total_net_bps": round(r["total_net_bps"], 1),
-            })
-        rows.append(base)
-
-    return rows, age_stats
-
-
-def _passes_filters(r: dict) -> bool:
-    f = FILTERS
-    try:
-        return (
-            float(r["n_signals"]) >= f["n_signals_min"]
-            and float(r["n_signals"]) < f["n_signals_max"]
-            and r["ic"] not in ("nan", "")
-            and float(r["ic"]) > f["ic_min"]
-            and float(r["t_stat"]) > f["t_stat_min"]
-            and float(r["p_value"]) < f["p_value_max"]
-            and float(r["avg_gross"]) > f["avg_gross_min"]
-        )
-    except (ValueError, KeyError):
-        return False
-
-
-def _write_csv(rows: list[dict], path: Path, fields: list[str]) -> None:
-    with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
-
-
-def _print_summary(rows: list[dict], top_n: int) -> None:
-    ok = [r for r in rows if r.get("status") == "ok"]
-
-    hdr = (
-        f"  {'d':>3}  {'hl':>5}  {'age_min':>7}  {'age_max':>7}  {'thr':>5}  {'H':>4}"
-        f"  {'n/day':>6}  {'gross':>7}  {'net':>7}  {'hit%':>6}  {'IC':>7}  {'t':>7}"
+    res = run_grid_split(
+        combos, target, args.start, split, args.end,
+        schedule=schedule,
+        rank_metric=args.rank_metric,
+        top_quantile=args.top_quantile,
+        min_n=args.min_n,
+        on_data_loaded=on_data_loaded,
+        on_result=on_result,
     )
-    sep = "  " + "-" * (len(hdr) - 2)
-
-    def _fmt(r: dict) -> str:
-        return (
-            f"  {r['depth']:>3}  {r['halflife']:>5}  {r['min_age']:>7}  {r['max_age']:>7}"
-            f"  {r['threshold']:>5}  {r['horizon']:>4}"
-            f"  {float(r['n_signals']):>6.0f}  {float(r['avg_gross']):>+7.3f}  {float(r['avg_net']):>+7.3f}"
-            f"  {float(r['hit_rate']):>5.1%}  {float(r['ic']):>+7.4f}  {float(r['t_stat']):>+7.2f}"
-        )
-
-    print(f"\n{'=' * 90}")
-    print(f"  TOP {top_n} BY IC")
-    print(f"{'=' * 90}")
-    print(hdr); print(sep)
-    for r in sorted(ok, key=lambda r: -float(r["ic"]))[:top_n]:
-        print(_fmt(r))
-
-    print(f"\n{'=' * 90}")
-    print(f"  TOP {top_n} BY AVG_GROSS  (where avg_gross > 0)")
-    print(f"{'=' * 90}")
-    print(hdr); print(sep)
-    for r in sorted([r for r in ok if float(r["avg_gross"]) > 0], key=lambda r: -float(r["avg_gross"]))[:top_n]:
-        print(_fmt(r))
-
-    profitable = [r for r in ok if float(r["avg_net"]) > 0]
-    print(f"\n  Profitable combos (avg_net > 0): {len(profitable)} / {len(ok)}")
-    filtered = [r for r in ok if _passes_filters(r)]
-    print(f"  Passing all filters:             {len(filtered)} / {len(ok)}")
-    if filtered:
-        print(f"\n{'=' * 90}")
-        print(f"  PASSING ALL FILTERS  (ranked by IC × t_stat)")
-        print(f"{'=' * 90}")
-        print(hdr); print(sep)
-        for r in sorted(filtered, key=lambda r: -(float(r["ic"]) * float(r["t_stat"])))[:top_n]:
-            print(_fmt(r))
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    ap.add_argument("--market", required=True, choices=list(MARKET_CONFIGS))
-    ap.add_argument("--start",  required=True, help="Start date YYYY-MM-DD")
-    ap.add_argument("--end",    required=True, help="End date YYYY-MM-DD")
-    ap.add_argument("--out",    default=None,  help="Output folder (default: results/grid_scan/horizon/{scan_id})")
-    ap.add_argument("--top",    type=int, default=20, help="Top-N rows to print (default 20)")
-    args = ap.parse_args()
-
-    cfg = MARKET_CONFIGS[args.market]
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    scan_id = f"{args.market.upper()}_{args.start}_{args.end}_{ts}"
-    out_dir = Path(args.out) if args.out else Path(f"results/grid_scan/horizon/{scan_id}")
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     params = {
         "scan_id": scan_id,
         "market": args.market,
         "start": args.start,
         "end": args.end,
+        "windows": res["windows"],
         "signal_exchange":  cfg["signal_exchange"],
         "signal_symbol":    cfg["signal_symbol"],
         "target_exchange":  cfg["target_exchange"],
@@ -380,43 +286,38 @@ def main() -> None:
             "thresholds":  THRESHOLDS,
             "horizons":    HORIZONS,
         },
-        "filters": FILTERS,
+        **res["params"],
     }
     (out_dir / "params.json").write_text(json.dumps(params, indent=2))
 
-    print(
-        f"Horizon grid scan: {cfg['signal_exchange']}/{cfg['signal_symbol']}"
-        f" → {cfg['target_exchange']}/{cfg['target_symbol']}"
-        f"  {args.start} .. {args.end}"
-    )
-    print(
-        f"Grid: {len(DEPTHS)} depths × {len(HALFLIVES)} halflives"
-        f" × {len(AGE_WINDOWS)} age_windows × {len(THRESHOLDS)} thresholds × {len(HORIZONS)} horizons"
-        f" = {len(DEPTHS)*len(HALFLIVES)*len(AGE_WINDOWS)*len(THRESHOLDS)*len(HORIZONS)} combos"
-    )
-    print(f"Output: {out_dir}/")
+    rows = [_label_row(r) for r in res["rows"]]
+    rows.sort(key=lambda r: -(r.get("holdout_rank_pct") or 0))
+    stable = [r for r in rows if r["stable"]]
 
-    rows, age_stats = _run_grid(cfg, args.start, args.end, out_dir)
-
-    # output.csv — sorted by IC descending
-    ok_rows = sorted([r for r in rows if r.get("status") == "ok"], key=lambda r: -float(r["ic"]))
-    err_rows = [r for r in rows if r.get("status") != "ok"]
-    _write_csv(ok_rows + err_rows, out_dir / "output.csv", _CSV_FIELDS)
-    print(f"Saved {out_dir}/output.csv  ({len(ok_rows)} ok, {len(err_rows)} errors)")
-
-    # output_filtered.csv — output filters applied, ranked by IC × t_stat
-    filtered = sorted(
-        [r for r in ok_rows if _passes_filters(r)],
-        key=lambda r: -(float(r["ic"]) * float(r["t_stat"])),
-    )
-    _write_csv(filtered, out_dir / "output_filtered.csv", _CSV_FIELDS)
-    print(f"Saved {out_dir}/output_filtered.csv  ({len(filtered)} rows)")
-
-    # age_stats.csv
-    _write_csv(age_stats, out_dir / "age_stats.csv", _AGE_STAT_FIELDS)
+    write_csv(rows, out_dir / "output.csv", _CSV_FIELDS)
+    write_csv(stable, out_dir / "output_stable.csv", _CSV_FIELDS)
+    write_csv(age_stats, out_dir / "age_stats.csv", _AGE_STAT_FIELDS)
+    print(f"\nSaved {out_dir}/output.csv  ({len(rows)} combos)")
+    print(f"Saved {out_dir}/output_stable.csv  ({len(stable)} rank-stable candidates)")
     print(f"Saved {out_dir}/age_stats.csv  ({len(age_stats)} rows)")
 
-    _print_summary(rows, args.top)
+    if stable:
+        print(f"\nRank-stable candidates (top {args.top_quantile:.0%} of both windows):")
+        hdr = (f"  {'d':>3} {'hl':>5} {'age':>12} {'thr':>5} {'H':>4}"
+               f" {'tr_net':>8} {'tr_t':>6} {'ho_net':>8} {'ho_t':>6} {'ho_n':>6}")
+        print(hdr)
+        print("  " + "-" * (len(hdr) - 2))
+        for r in stable[:30]:
+            age = f"[{r['min_age']},{r['max_age']})"
+            print(
+                f"  {r['depth']:>3} {r['halflife']:>5} {age:>12} {r['threshold']:>5} {r['horizon']:>4}"
+                f" {r['train_avg_net']:>+8.3f} {r['train_t_stat']:>+6.2f}"
+                f" {r['holdout_avg_net']:>+8.3f} {r['holdout_t_stat']:>+6.2f}"
+                f" {r['holdout_n']:>6}"
+            )
+    else:
+        print("\nNo rank-stable candidates — nothing survived both windows.")
+
     print(f"\nScan ID: {scan_id}")
     print(f"Results: {out_dir}/")
 

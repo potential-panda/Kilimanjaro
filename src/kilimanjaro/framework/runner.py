@@ -1,7 +1,8 @@
 """Generic parameter-grid runner.
 
-Sweeps a list of (SignalDef, ReturnCalc) combos, groups by SignalDef.cache_key
-to reuse expensive data loads, and returns one result row per combo.
+Sweeps a list of (SignalDef, ReturnCalc[, ScheduleFilter]) combos, groups by
+SignalDef.cache_key to reuse expensive data loads, and returns one result row
+per combo.
 
 Usage
 -----
@@ -18,6 +19,9 @@ Usage
     ]
     target = MarketConfig("GMO", "ETH_JPY", "0.3")
     rows = run_grid(combos, target, "2026-05-01", "2026-06-30", costs_bps=1.0)
+
+Pipeline per combo (same order flip_sar.scan has always used):
+    signals → ReturnCalc.compute → ScheduleFilter → Gates → dropna → stats
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from itertools import groupby
 from pathlib import Path
 from typing import Any, Callable
 
+from kilimanjaro.framework.gate import Gate
 from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
 from kilimanjaro.framework.schedule import ScheduleFilter
 from kilimanjaro.framework.stats import compute_stats
@@ -33,13 +38,24 @@ from kilimanjaro.framework.stats import compute_stats
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 
 
+def _base_row(sig: SignalDef, rc: ReturnCalc, sched: ScheduleFilter | None,
+              combo_id: int, n_combos: int) -> dict:
+    row = {**sig.params, **rc.params}
+    if sched is not None and sched.name:
+        row["schedule"] = sched.name
+    row["_combo_id"] = combo_id
+    row["n_combos_tested"] = n_combos
+    return row
+
+
 def run_grid(
-    combos: list[tuple[SignalDef, ReturnCalc]],
+    combos: list[tuple],
     target: MarketConfig,
     start_date: str,
     end_date: str,
     costs_bps: float = 1.0,
     schedule: ScheduleFilter | None = None,
+    gates: list[Gate] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
     on_data_loaded: Callable[[tuple, Any], None] | None = None,
     on_result: Callable[[dict], None] | None = None,
@@ -48,9 +64,10 @@ def run_grid(
 
     Parameters
     ----------
-    combos : list of (SignalDef, ReturnCalc) pairs
-        Each pair is one grid cell. Combos sharing the same SignalDef.cache_key
-        reuse a single load_data() call.
+    combos : list of (SignalDef, ReturnCalc) or (SignalDef, ReturnCalc, ScheduleFilter)
+        Each tuple is one grid cell. Combos sharing the same SignalDef.cache_key
+        reuse a single load_data() call. A 3-tuple's ScheduleFilter overrides
+        the grid-wide `schedule` for that combo (schedules-as-grid-dimension).
     target : MarketConfig
         Execution market for return calculation (e.g. GMO/ETH_JPY).
     start_date, end_date : str
@@ -58,7 +75,11 @@ def run_grid(
     costs_bps : float
         Round-trip cost subtracted from gross returns.
     schedule : ScheduleFilter, optional
-        Filters applied to trades after return calculation.
+        Default schedule for 2-tuple combos.
+    gates : list of Gate, optional
+        Sequential risk gates applied after the schedule filter, in order.
+        Scalar values from each gate's info dict (e.g. n_dd_blocked) are
+        merged into the result row.
     data_root : Path
         Root of the parquet data store.
     on_data_loaded : callable(cache_key, data), optional
@@ -70,46 +91,63 @@ def run_grid(
     Returns
     -------
     list[dict]
-        One dict per combo. Always has "status": "ok" | "ERROR: ..." | "no_signals".
-        "ok" rows also have all sig.params, rc.params, and compute_stats() fields.
+        One dict per combo. Always has "status": "ok" | "ERROR: ..." | "no_signals",
+        "_combo_id" (index into the input combos list) and "n_combos_tested".
+        "ok" rows also have all sig.params, rc.params, schedule name (when the
+        combo's ScheduleFilter has one), "n_trades" (post-gate, pre-dropna),
+        gate scalar counts, and compute_stats() fields.
     """
-    rows: list[dict] = []
+    n_combos = len(combos)
 
-    # Sort combos by cache_key so groupby works
-    indexed = [(sig.cache_key, sig, rc) for sig, rc in combos]
+    # Normalize to (cache_key, combo_id, sig, rc, sched); sort so groupby works
+    indexed = []
+    for combo_id, combo in enumerate(combos):
+        sig, rc = combo[0], combo[1]
+        sched = combo[2] if len(combo) > 2 else schedule
+        indexed.append((sig.cache_key, combo_id, sig, rc, sched))
     indexed.sort(key=lambda x: x[0])
+
+    rows_by_id: dict[int, dict] = {}
+
+    def _emit(row: dict) -> None:
+        rows_by_id[row["_combo_id"]] = row
+        if on_result:
+            on_result(row)
 
     for cache_key, group_iter in groupby(indexed, key=lambda x: x[0]):
         group = list(group_iter)
-        sig0 = group[0][1]
+        sig0 = group[0][2]
 
         try:
             data = sig0.load_data(start_date, end_date, data_root)
         except Exception as e:
-            for _, sig, rc in group:
-                row = {**sig.params, **rc.params, "status": f"ERROR loading: {e}"}
-                rows.append(row)
-                if on_result:
-                    on_result(row)
+            for _, combo_id, sig, rc, sched in group:
+                _emit({**_base_row(sig, rc, sched, combo_id, n_combos),
+                       "status": f"ERROR loading: {e}"})
             continue
 
         if on_data_loaded:
             on_data_loaded(cache_key, data)
 
-        for _, sig, rc in group:
+        for _, combo_id, sig, rc, sched in group:
+            base = _base_row(sig, rc, sched, combo_id, n_combos)
             try:
                 signals = sig.generate(data)
                 if signals.empty:
-                    row = {**sig.params, **rc.params, "status": "no_signals"}
-                    rows.append(row)
-                    if on_result:
-                        on_result(row)
+                    _emit({**base, "status": "no_signals"})
                     continue
 
                 trades = rc.compute(signals, target, start_date, end_date, data_root)
 
-                if schedule:
-                    trades, _ = schedule.apply(trades)
+                if sched:
+                    trades, _ = sched.apply(trades)
+
+                for gate in gates or []:
+                    trades, info = gate.apply(trades)
+                    base.update({
+                        k: v for k, v in info.items()
+                        if isinstance(v, (int, float, str))
+                    })
 
                 valid = trades.dropna(subset=["return_bps"])
 
@@ -120,13 +158,12 @@ def run_grid(
                     stat_kwargs["holding_seconds"] = valid["holding_seconds"]
 
                 stats = compute_stats(valid["return_bps"], costs_bps, **stat_kwargs)
-                row = {**sig.params, **rc.params, **stats, "status": "ok"}
+                row = {**base, "n_trades": len(trades), **stats, "status": "ok"}
 
             except Exception as e:
-                row = {**sig.params, **rc.params, "status": f"ERROR: {e}"}
+                row = {**base, "status": f"ERROR: {e}"}
 
-            rows.append(row)
-            if on_result:
-                on_result(row)
+            _emit(row)
 
-    return rows
+    # Return rows in input-combos order
+    return [rows_by_id[i] for i in sorted(rows_by_id)]

@@ -10,6 +10,9 @@ Output key names (used across all scan styles):
     sharpe_per_trade avg_net / std_net
     t_stat           avg_net / (std_net / sqrt(n))
     p_value_1sided   one-sided P(mean <= 0 | data) via t-distribution
+    p_value_bootstrap one-sided p via circular moving-block bootstrap —
+                     robust to autocorrelated / overlapping trade returns,
+                     which make the i.i.d. t-test overconfident
     skewness         skewness of net returns
     total_net_bps    n * avg_net
     ic               Pearson corr(signal_strength, return_bps)  [optional]
@@ -24,6 +27,49 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+
+_BOOT_N = 500
+_BOOT_SEED = 12345
+_BOOT_MIN_N = 20
+_BOOT_CHUNK = 100
+
+
+def block_bootstrap_pvalue(
+    net: np.ndarray,
+    n_boot: int = _BOOT_N,
+    seed: int = _BOOT_SEED,
+) -> float:
+    """One-sided p-value for H0: mean <= 0, via circular moving-block bootstrap.
+
+    Trade returns are autocorrelated (overlapping horizons, regime clustering),
+    so the i.i.d. t-test understates the variance of the mean. Blocks of length
+    ~n^(1/3) preserve the local dependence structure under resampling. The
+    series is centered (null: zero mean), resampled n_boot times, and the
+    p-value is the fraction of bootstrap means >= the observed mean, with the
+    +1 correction so p is never exactly 0.
+
+    Deterministic for a given (series, n_boot, seed).
+    """
+    n = len(net)
+    if n < _BOOT_MIN_N:
+        return float("nan")
+
+    obs = float(net.mean())
+    centered = net - obs
+    block = max(1, int(round(n ** (1.0 / 3.0))))
+    n_blocks = int(np.ceil(n / block))
+    rng = np.random.default_rng(seed)
+
+    offsets = np.arange(block)
+    n_ge = 0
+    for chunk_start in range(0, n_boot, _BOOT_CHUNK):
+        chunk = min(_BOOT_CHUNK, n_boot - chunk_start)
+        starts = rng.integers(0, n, size=(chunk, n_blocks))
+        idx = (starts[:, :, None] + offsets[None, None, :]).reshape(chunk, -1)[:, :n] % n
+        means = centered[idx].mean(axis=1)
+        n_ge += int((means >= obs).sum())
+
+    return float((1 + n_ge) / (n_boot + 1))
 
 
 def compute_stats(
@@ -55,6 +101,7 @@ def compute_stats(
             "hit_rate": nan, "hit_rate_net": nan,
             "std_bps": nan, "sharpe_per_trade": nan,
             "t_stat": nan, "p_value_1sided": nan,
+            "p_value_bootstrap": nan,
             "skewness": nan, "total_net_bps": nan,
         }
         if signal_strength is not None:
@@ -87,6 +134,7 @@ def compute_stats(
         "sharpe_per_trade": sharpe,
         "t_stat": t_stat,
         "p_value_1sided": p_value,
+        "p_value_bootstrap": block_bootstrap_pvalue(net.to_numpy()),
         "skewness": float(net.skew()) if n > 2 else nan,
         "total_net_bps": float(n * avg_net),
     }

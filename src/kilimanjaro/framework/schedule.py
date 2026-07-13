@@ -87,6 +87,8 @@ class ScheduleFilter:
     block_jst_dates: list[str] = field(default_factory=list)
     block_gmo_maintenance: bool = False
     has_exit_col: str | None = None
+    # Optional label; when set, run_grid writes it as the "schedule" column.
+    name: str | None = None
 
     def apply(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         """Apply all filters. Returns (filtered_df, counts).

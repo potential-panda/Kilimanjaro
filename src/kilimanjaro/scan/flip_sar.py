@@ -19,13 +19,13 @@ use the framework — it is reproduced below unchanged.
 from __future__ import annotations
 
 import datetime
-from collections import deque
 from pathlib import Path
 
 import duckdb
 import numpy as np
 import pandas as pd
 
+from kilimanjaro.framework.gate import RollingDrawdownGate
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import ScheduleFilter, add_jst_columns
 from kilimanjaro.framework.stats import compute_stats
@@ -44,10 +44,12 @@ _INFLUX_ORG = "panda-org"
 
 _ALL_SAT = list(range(24))
 
-_DEFAULT_BLOCK_JST_DATES: list[str] = [
+# BINANCE ETH raw-data outage (missing days) — blocked in every flip scan.
+DEFAULT_BLOCK_JST_DATES: list[str] = [
     "2026-04-02", "2026-04-03", "2026-04-04", "2026-04-05",
     "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09",
 ]
+_DEFAULT_BLOCK_JST_DATES = DEFAULT_BLOCK_JST_DATES  # backward-compat alias
 
 _GMO_MAINTENANCE_SAT_HOURS: list[int] = [9, 10, 11]
 
@@ -58,82 +60,6 @@ SCHEDULES: dict[str, dict] = {
     "default_active":   {"block_weekday_hours": [22, 23, 0, 1, 2, 3, 4, 5], "block_weekend_hours": _ALL_SAT},
     "default_inactive": {"block_weekday_hours": [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], "block_weekend_hours": []},
 }
-
-
-# ── Rolling drawdown gate ──────────────────────────────────────────────────────
-
-def _apply_risk_filters(
-    trades_df: pd.DataFrame,
-    rolling_dd_window_seconds: float,
-    rolling_dd_threshold_bps: float,
-    rolling_dd_cooldown_seconds: float = _DEFAULT_ROLLING_DD_COOLDOWN_SECONDS,
-) -> tuple[pd.DataFrame, int, list[dict]]:
-    """Rolling drawdown gate applied to between-signal trades.
-
-    Closes the gate when cumulative return_bps in the rolling window falls
-    below -rolling_dd_threshold_bps. Gate stays closed for
-    rolling_dd_cooldown_seconds, then reopens with the window reset.
-
-    Expects columns: ts, exit_ts (NaN for last flip), return_bps (NaN for last).
-    Returns (filtered_df, n_blocked, triggers).
-    """
-    if trades_df.empty:
-        return trades_df, 0, []
-    if rolling_dd_threshold_bps <= 0 or rolling_dd_window_seconds <= 0:
-        return trades_df, 0, []
-
-    ts_arr = trades_df["ts"].values
-    exit_ts_arr = trades_df["exit_ts"].values
-    pnl_arr = trades_df["return_bps"].values
-
-    window: deque[tuple[float, float]] = deque()
-    kept = np.ones(len(ts_arr), dtype=bool)
-    gate_open = True
-    gate_reopen_ts = -np.inf
-    triggers: list[dict] = []
-    current_blocked = 0
-
-    for i in range(len(ts_arr)):
-        t_entry = ts_arr[i]
-        t_exit = exit_ts_arr[i] if not np.isnan(exit_ts_arr[i]) else ts_arr[i]
-
-        if not gate_open:
-            if t_entry >= gate_reopen_ts:
-                triggers[-1]["n_blocked"] = current_blocked
-                gate_open = True
-                window.clear()
-                current_blocked = 0
-            else:
-                kept[i] = False
-                current_blocked += 1
-                continue
-
-        while window and window[0][0] < t_exit - rolling_dd_window_seconds:
-            window.popleft()
-
-        window_sum = sum(r for _, r in window)
-        if window_sum < -rolling_dd_threshold_bps:
-            kept[i] = False
-            gate_open = False
-            gate_reopen_ts = t_entry + rolling_dd_cooldown_seconds
-            current_blocked = 1
-            triggers.append({
-                "close_ts": t_entry,
-                "reopen_ts": gate_reopen_ts,
-                "window_sum_bps": window_sum,
-                "n_blocked": 0,
-            })
-            continue
-
-        r = pnl_arr[i]
-        if not np.isnan(r):
-            window.append((t_exit, r))
-
-    if not gate_open and triggers:
-        triggers[-1]["n_blocked"] = current_blocked
-
-    n_blocked = int((~kept).sum())
-    return trades_df[kept].copy(), n_blocked, triggers
 
 
 # ── scan() ────────────────────────────────────────────────────────────────────
@@ -215,12 +141,14 @@ def scan(
     n_weekday_blocked = schedule_counts["n_weekday_blocked"]
     n_sat_blocked = schedule_counts["n_sat_blocked"]
 
-    trades, n_rolling_dd_blocked, dd_triggers = _apply_risk_filters(
-        trades,
-        rolling_dd_window_seconds if rolling_dd_window_seconds is not None else _DEFAULT_ROLLING_DD_WINDOW_SECONDS,
-        rolling_dd_threshold_bps if rolling_dd_threshold_bps is not None else _DEFAULT_ROLLING_DD_THRESHOLD_BPS,
-        rolling_dd_cooldown_seconds if rolling_dd_cooldown_seconds is not None else _DEFAULT_ROLLING_DD_COOLDOWN_SECONDS,
+    gate = RollingDrawdownGate(
+        window_seconds=rolling_dd_window_seconds if rolling_dd_window_seconds is not None else _DEFAULT_ROLLING_DD_WINDOW_SECONDS,
+        threshold_bps=rolling_dd_threshold_bps if rolling_dd_threshold_bps is not None else _DEFAULT_ROLLING_DD_THRESHOLD_BPS,
+        cooldown_seconds=rolling_dd_cooldown_seconds if rolling_dd_cooldown_seconds is not None else _DEFAULT_ROLLING_DD_COOLDOWN_SECONDS,
     )
+    trades, dd_info = gate.apply(trades)
+    n_rolling_dd_blocked = dd_info["n_dd_blocked"]
+    dd_triggers = dd_info["dd_triggers"]
 
     n_flips = len(trades)
     n_days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days

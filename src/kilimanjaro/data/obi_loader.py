@@ -48,9 +48,16 @@ def load_obi_series(
         )
     col = _signal_col(depth, obi_halflife)
     glob = _obi_glob(exchange, symbol, data_root)
-    return duckdb.connect().sql(f"""
-        SELECT ts, {col} AS obi
-        FROM read_parquet('{glob}', hive_partitioning=true)
-        WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-        ORDER BY ts
-    """).df()
+    # Hold the connection in a local until .df() materializes — an inline
+    # duckdb.connect().sql(...).df() lets the connection be GC'd mid-query
+    # ("Connection has already been closed"), same bug fixed in sar_loader.
+    con = duckdb.connect()
+    try:
+        return con.sql(f"""
+            SELECT ts, {col} AS obi
+            FROM read_parquet('{glob}', hive_partitioning=true)
+            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+            ORDER BY ts
+        """).df()
+    finally:
+        con.close()
