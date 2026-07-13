@@ -81,6 +81,33 @@ GMO ETH_JPY: 0/day all year. The spikes inflate BINANCE's return σ up to
 explains the "low-corr months", including why high-vol March measured *low*
 correlation.
 
+### Why the month pattern (traced 2026-07-13, after the initial write-up)
+
+The per-month pattern above is **not** collector quality varying over time.
+Bronze contains degenerate snapshots at a broadly similar rate in every
+month and every symbol (~200–700 insane top-of-book ticks/day on ETH, XRP,
+BTC alike). What differs is which **silver MarketPrice partitions were built
+before vs after Makalu commit `24ecb0d` (2026-06-30, "Remove spread filter
+from PopulateMarketPriceStep")**:
+
+- Built before 2026-06-30 (Jan/Feb built in Feb; Apr and part of May built
+  2026-06-19): the old `max_spread_bps=10.0` filter incidentally dropped the
+  degenerate snapshots → clean.
+- Rebuilt 2026-07-03 (Jul–Dec 2025, Mar, most of May, Jun): no filter →
+  glitches pass through into MarketPrice.
+
+The filter was removed for a good reason — it silently dropped ~7% of
+snapshots, disproportionately at SAR flip moments, causing a systematic
+~0.40 bps scan-vs-backtest gap. The blanket spread filter should not come
+back; what's needed is a **targeted degenerate-snapshot filter** (e.g. drop
+books with fewer than N populated levels, or with a top-of-book mid that
+deviates hundreds of bps from adjacent snapshots and immediately reverts).
+
+Consequence for LeadLag: gold LeadLag partitions computed from
+post-rebuild MarketPrice (including the XRP sampled-day populate started
+2026-07-13) inherit the contamination in the affected months. After a
+MarketPrice fix + rebuild, LeadLag for those months should be re-populated.
+
 **Downstream impact:**
 
 - `ChartRangeSAR` (the flip signal) is built from bronze **Trade** ticks,
