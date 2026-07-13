@@ -30,6 +30,16 @@ Subcommand modules live in `src/command/` (populate.py, verify.py, scan.py).
 |--------|---------|
 | `src/kilimanjaro/dataset/range_sar_store.py` | populate + verify ChartRangeSAR parquet store |
 | `src/kilimanjaro/scan/flip_sar.py` | `scan()` and `verify()` for flip-anchored SAR signals |
+| `src/kilimanjaro/framework/` | scan framework: `run_grid_split` (train/holdout + rank stability — the default way to run any grid), Gate protocol + RollingDrawdownGate, block-bootstrap p-value |
+| `src/kilimanjaro/signal/expression.py` | `ExpressionSignal`: signals as AST-validated formulas over the feature frame |
+| `src/kilimanjaro/data/feature_frame.py` | multi-market 1s feature frame (mid/spread, OBI, TradeAggression) |
+| `src/kilimanjaro/op/series.py` | causal op library (`ema`, `zscore`, `lag`, `ret`, …) — causality is test-enforced |
+
+Grid tools (`tools/grid_scan.py` flip, `tools/grid_scan_horizon.py` OBI-age,
+`tools/grid_scan_expr.py` expression specs) all run through `run_grid_split`
+and record one `scan_attached` ledger event per run (`--no-ledger` to skip,
+`--hypothesis-id` to re-attribute). Selection criterion is rank stability
+across the train/holdout split, never in-sample p-values.
 
 ## Data paths
 
