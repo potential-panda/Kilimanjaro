@@ -27,7 +27,15 @@ def _headline(res: dict) -> str:
     stable = res["stable"]
     n = res["params"]["n_combos"]
     if not stable:
-        return f"0/{n} combos rank-stable across train/holdout — no candidates"
+        counts = res.get("verdict_counts", {})
+        extra = ", ".join(
+            f"{counts[v]} {v}" for v in ("decayed", "regime_dependent")
+            if counts.get(v)
+        )
+        return (
+            f"0/{n} combos rank-stable across train/holdout — no candidates"
+            + (f" ({extra})" if extra else "")
+        )
     top = stable[0]
     param_keys = [
         k for k in top
@@ -70,6 +78,7 @@ def record_grid_scan(
         },
         "n_combos_tested": res["params"]["n_combos"],
         "n_stable": len(stable),
+        "verdicts": res.get("verdict_counts", {}),
         "gates": res["params"]["gates"],
         "headline": _headline(res),
     }

@@ -259,3 +259,91 @@ class TestBlockBootstrap(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestVerdictClassification(unittest.TestCase):
+    """_classify / _pos_month_share / _add_plateau — the decay taxonomy."""
+
+    def _row(self, **kw):
+        base = {
+            "train_status": "ok", "holdout_status": "ok",
+            "stable": False,
+            "train_rank_pct": 0.95, "holdout_rank_pct": 0.2,
+            "train_avg_net": 2.0, "holdout_avg_net": -0.1,
+            "train_pos_month_share": 1.0, "holdout_pos_month_share": 0.0,
+            "train_plateau": 1.0,
+        }
+        base.update(kw)
+        return base
+
+    def test_decayed(self):
+        from kilimanjaro.framework.evaluate import _classify
+        # top-ranked, every train month positive, on a plateau, all holdout months bad
+        self.assertEqual(_classify(self._row(), 0.9), "decayed")
+
+    def test_isolated_winner_is_noise_not_decayed(self):
+        from kilimanjaro.framework.evaluate import _classify
+        # identical profile but parameter neighbors disagree → selection luck
+        self.assertEqual(_classify(self._row(train_plateau=0.0), 0.9), "noise")
+
+    def test_alternating_train_months_is_regime_dependent(self):
+        from kilimanjaro.framework.evaluate import _classify
+        self.assertEqual(
+            _classify(self._row(train_pos_month_share=0.5), 0.9),
+            "regime_dependent",
+        )
+
+    def test_mixed_holdout_is_regime_dependent_not_decayed(self):
+        from kilimanjaro.framework.evaluate import _classify
+        self.assertEqual(
+            _classify(self._row(holdout_pos_month_share=0.5), 0.9),
+            "regime_dependent",
+        )
+
+    def test_stable_wins(self):
+        from kilimanjaro.framework.evaluate import _classify
+        self.assertEqual(_classify(self._row(stable=True), 0.9), "stable")
+
+    def test_error_rows_are_no_data(self):
+        from kilimanjaro.framework.evaluate import _classify
+        self.assertEqual(
+            _classify(self._row(holdout_status="no_signals"), 0.9), "no_data"
+        )
+
+    def test_pos_month_share_respects_min_n(self):
+        from kilimanjaro.framework.evaluate import _pos_month_share
+        monthly = {"2026-01": (100, 1.0), "2026-02": (3, -5.0), "2026-03": (50, -1.0)}
+        # the 3-trade month is ignored → 1 of 2 qualified months positive
+        self.assertEqual(_pos_month_share(monthly, 10), 0.5)
+        self.assertNotEqual(_pos_month_share({}, 10), _pos_month_share({}, 10))  # NaN
+
+    def test_plateau_neighbors(self):
+        from kilimanjaro.framework.evaluate import _add_plateau
+        # grid over box×step; the (2, 20) cell is an isolated winner
+        rows = []
+        for box in (1, 2, 3):
+            for step in (10, 20, 30):
+                win = (box, step) == (2, 20)
+                rows.append({
+                    "box": box, "step": step, "schedule": "x",
+                    "train_avg_net": 1.0 if win else -1.0,
+                    "n_combos_tested": 9,
+                })
+        _add_plateau(rows)
+        center = next(r for r in rows if (r["box"], r["step"]) == (2, 20))
+        self.assertEqual(center["train_plateau"], 0.0)  # isolated winner: all 4 neighbors negative
+        edge = next(r for r in rows if (r["box"], r["step"]) == (2, 10))
+        self.assertEqual(edge["train_plateau"], 1 / 3)  # neighbors (1,10)−, (3,10)−, (2,20)+
+
+    def test_monthly_rows_and_verdict_in_split(self):
+        combos = [(GainAwareSignal("a", float(g)), StubReturn(60)) for g in (1, 5, 10)]
+        res = run_grid_split(
+            combos, TARGET, "2026-01-01", "2026-03-01", "2026-04-01",
+            top_quantile=0.34, min_n=10, min_month_n=1,
+        )
+        self.assertTrue(res["monthly_rows"])
+        m = res["monthly_rows"][0]
+        for key in ("window", "month", "n", "avg_net", "gain"):
+            self.assertIn(key, m)
+        self.assertTrue(all("verdict" in r for r in res["rows"]))
+        self.assertEqual(sum(res["verdict_counts"].values()), 3)

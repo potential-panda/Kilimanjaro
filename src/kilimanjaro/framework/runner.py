@@ -30,6 +30,8 @@ from itertools import groupby
 from pathlib import Path
 from typing import Any, Callable
 
+import pandas as pd
+
 from kilimanjaro.framework.gate import Gate
 from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
 from kilimanjaro.framework.schedule import ScheduleFilter
@@ -159,6 +161,19 @@ def run_grid(
 
                 stats = compute_stats(valid["return_bps"], costs_bps, **stat_kwargs)
                 row = {**base, "n_trades": len(trades), **stats, "status": "ok"}
+
+                # Per-month sub-stats from the trades already in memory —
+                # this is what makes decay/regime classification ~free
+                # (no extra IO or joins; see evaluate.classify_verdicts).
+                if len(valid):
+                    # JST months, consistent with jst_date/jst_hour everywhere else
+                    months = pd.to_datetime(
+                        valid["ts"] + 9 * 3600, unit="s", utc=True
+                    ).dt.strftime("%Y-%m")
+                    row["_monthly"] = {
+                        m: (int(len(g)), float(g.mean() - costs_bps))
+                        for m, g in valid["return_bps"].groupby(months)
+                    }
 
             except Exception as e:
                 row = {**base, "status": f"ERROR: {e}"}

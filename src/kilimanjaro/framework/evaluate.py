@@ -109,10 +109,12 @@ def run_grid_split(
     rank_metric: str = "t_stat",
     top_quantile: float = 0.10,
     min_n: int = 30,
+    min_month_n: int = 10,
     on_data_loaded: Callable[[tuple, Any], None] | None = None,
     on_result: Callable[[dict], None] | None = None,
 ) -> dict:
-    """Run all combos on train and holdout windows; return merged, ranked rows.
+    """Run all combos on train and holdout windows; return merged, ranked,
+    classified rows.
 
     Parameters beyond run_grid's:
     rank_metric : str
@@ -123,6 +125,9 @@ def run_grid_split(
     min_n : int
         Rows with fewer valid trades are excluded from ranking (can never
         be stable) — kills the tiny-n significance mirage.
+    min_month_n : int
+        Months with fewer trades are ignored in the monthly consistency
+        profile (pos_month_share).
     on_data_loaded : optional
         Forwarded to the TRAIN pass only (side outputs like age histograms
         should be computed once).
@@ -130,12 +135,16 @@ def run_grid_split(
     Returns
     -------
     dict with:
-        rows       merged rows, one per combo: params + train_* + holdout_*
-                   + train_rank_pct + holdout_rank_pct + stable
-        stable     the stable subset, best holdout rank first
-        windows    {"train": [start, end], "holdout": [start, end]}
-        params     reproducibility block (rank_metric, top_quantile, min_n,
-                   n_combos, costs_bps, gate params)
+        rows           merged rows, one per combo: params + train_* +
+                       holdout_* + rank pcts + pos_month_shares +
+                       train_plateau + stable + verdict
+                       (stable/decayed/regime_dependent/noise/no_data)
+        stable         the stable subset, best holdout rank first
+        monthly_rows   long-format per-combo per-month profile
+                       (identity params + window + month + n + avg_net)
+        verdict_counts verdict → count
+        windows        {"train": [start, end], "holdout": [start, end]}
+        params         reproducibility block
     """
     train_start, train_end, holdout_start, holdout_end = split_windows(
         start_date, split_date, end_date
@@ -156,21 +165,40 @@ def run_grid_split(
     holdout_rows = _pass("holdout", holdout_start, holdout_end, None)
 
     merged: list[dict] = []
+    monthly_rows: list[dict] = []
     for tr, ho in zip(train_rows, holdout_rows):
         assert tr["_combo_id"] == ho["_combo_id"]
         row = {
             k: v for k, v in tr.items()
-            if k not in _STAT_FIELDS and k not in ("_combo_id",)
+            if k not in _STAT_FIELDS and not k.startswith("_")
         }
         for f in _STAT_FIELDS:
             if f in tr:
                 row[f"train_{f}"] = tr[f]
             if f in ho:
                 row[f"holdout_{f}"] = ho[f]
+
+        identity = {
+            k: v for k, v in row.items()
+            if not k.startswith(("train_", "holdout_")) and k != "n_combos_tested"
+        }
+        for window, src in (("train", tr), ("holdout", ho)):
+            for month, (n, avg_net) in sorted(src.get("_monthly", {}).items()):
+                monthly_rows.append({
+                    **identity, "window": window, "month": month,
+                    "n": n, "avg_net": round(avg_net, 4),
+                })
+        row["train_pos_month_share"] = _pos_month_share(
+            tr.get("_monthly"), min_month_n
+        )
+        row["holdout_pos_month_share"] = _pos_month_share(
+            ho.get("_monthly"), min_month_n
+        )
         merged.append(row)
 
     _rank_pcts(merged, "train_", rank_metric, min_n)
     _rank_pcts(merged, "holdout_", rank_metric, min_n)
+    _add_plateau(merged)
 
     cutoff = 1.0 - top_quantile
     for r in merged:
@@ -180,15 +208,21 @@ def run_grid_split(
             and (r.get("train_avg_net") or 0) > 0
             and (r.get("holdout_avg_net") or 0) > 0
         )
+        r["verdict"] = _classify(r, cutoff)
 
     stable = sorted(
         (r for r in merged if r["stable"]),
         key=lambda r: -r["holdout_rank_pct"],
     )
+    verdict_counts: dict[str, int] = {}
+    for r in merged:
+        verdict_counts[r["verdict"]] = verdict_counts.get(r["verdict"], 0) + 1
 
     return {
         "rows": merged,
         "stable": stable,
+        "monthly_rows": monthly_rows,
+        "verdict_counts": verdict_counts,
         "windows": {
             "train": [train_start, train_end],
             "holdout": [holdout_start, holdout_end],
@@ -197,8 +231,100 @@ def run_grid_split(
             "rank_metric": rank_metric,
             "top_quantile": top_quantile,
             "min_n": min_n,
+            "min_month_n": min_month_n,
             "n_combos": len(combos),
             "costs_bps": costs_bps,
             "gates": [g.params for g in gates or []],
         },
     }
+
+
+def _pos_month_share(monthly: dict | None, min_month_n: int) -> float:
+    """Fraction of months (with at least min_month_n trades) that are net
+    positive. NaN when no month qualifies."""
+    if not monthly:
+        return float("nan")
+    qualified = [(n, avg) for n, avg in monthly.values() if n >= min_month_n]
+    if not qualified:
+        return float("nan")
+    return sum(1 for _, avg in qualified if avg > 0) / len(qualified)
+
+
+def _add_plateau(rows: list[dict]) -> None:
+    """Add train_plateau in-place: the share of a combo's grid NEIGHBORS
+    (rows identical in every identity param except one numeric one, adjacent
+    in that param's sorted unique values) with train_avg_net > 0.
+
+    Real edges live on parameter plateaus; an isolated winner whose
+    neighbors disagree is selection noise. NaN when a combo has no
+    neighbors (single-valued grid).
+    """
+    id_keys = [
+        k for k in rows[0]
+        if not k.startswith(("train_", "holdout_"))
+        and k not in ("n_combos_tested", "stable", "verdict")
+    ]
+    numeric_keys = [
+        k for k in id_keys
+        if len({r[k] for r in rows if isinstance(r[k], (int, float))
+                and not isinstance(r[k], bool)}) > 1
+    ]
+
+    neighbors: dict[int, list[int]] = {i: [] for i in range(len(rows))}
+    for key in numeric_keys:
+        groups: dict[tuple, list[int]] = {}
+        for i, r in enumerate(rows):
+            if not isinstance(r[key], (int, float)) or isinstance(r[key], bool):
+                continue
+            others = tuple((k, repr(r[k])) for k in id_keys if k != key)
+            groups.setdefault(others, []).append(i)
+        for idxs in groups.values():
+            idxs.sort(key=lambda i: rows[i][key])
+            for a, b in zip(idxs, idxs[1:]):
+                if rows[a][key] != rows[b][key]:
+                    neighbors[a].append(b)
+                    neighbors[b].append(a)
+
+    for i, r in enumerate(rows):
+        nb = [rows[j] for j in neighbors[i]
+              if isinstance(rows[j].get("train_avg_net"), (int, float))]
+        if not nb:
+            r["train_plateau"] = float("nan")
+        else:
+            r["train_plateau"] = sum(
+                1 for x in nb if x["train_avg_net"] > 0
+            ) / len(nb)
+
+
+def _classify(r: dict, cutoff: float) -> str:
+    """Verdict taxonomy — a rejection is not one thing:
+
+    stable            top of both windows (the promotion candidates)
+    decayed           genuinely worked in train (top rank + consistent
+                      months + parameter plateau) then uniformly stopped
+                      in the holdout — regime change, worth monitoring
+                      for recovery, and "what turned it off" is itself a
+                      hypothesis
+    regime_dependent  strong overall but the monthly profile alternates —
+                      look for the conditioning variable
+    noise             everything else, including isolated winners whose
+                      parameter neighbors disagree (selection luck)
+    """
+    if r.get("train_status") != "ok" or r.get("holdout_status") != "ok":
+        return "no_data"
+    if r["stable"]:
+        return "stable"
+
+    train_top = r["train_rank_pct"] > cutoff
+    pos_train = r["train_pos_month_share"]
+    pos_holdout = r["holdout_pos_month_share"]
+    plateau = r["train_plateau"]
+    on_plateau = not (plateau == plateau) or plateau >= 0.5  # NaN → benefit of doubt
+
+    if train_top and pos_train == pos_train and pos_train >= 0.7 and on_plateau:
+        if pos_holdout == pos_holdout and pos_holdout <= 1 / 3:
+            return "decayed"
+        return "regime_dependent"
+    if train_top and pos_train == pos_train and 0.4 <= pos_train < 0.7:
+        return "regime_dependent"
+    return "noise"

@@ -126,7 +126,8 @@ _CSV_FIELDS = [
     "train_p_value_bootstrap", "train_n_dd_blocked", "train_rank_pct",
     "holdout_n_trades", "holdout_avg_net", "holdout_total_net_bps", "holdout_t_stat",
     "holdout_p_value_bootstrap", "holdout_n_dd_blocked", "holdout_rank_pct",
-    "stable", "n_combos_tested", "train_status", "holdout_status",
+    "train_pos_month_share", "holdout_pos_month_share", "train_plateau",
+    "verdict", "stable", "n_combos_tested", "train_status", "holdout_status",
 ]
 
 
@@ -283,8 +284,13 @@ def main() -> None:
     stable = [r for r in rows if r["stable"]]
     write_csv(rows, out_dir / "output.csv", _CSV_FIELDS)
     write_csv(stable, out_dir / "output_stable.csv", _CSV_FIELDS)
+    monthly = res["monthly_rows"]
+    if monthly:
+        write_csv(monthly, out_dir / "output_monthly.csv", list(monthly[0].keys()))
     print(f"\nSaved {out_dir}/output.csv  ({len(rows)} combos)")
     print(f"Saved {out_dir}/output_stable.csv  ({len(stable)} rank-stable candidates)")
+    print(f"Saved {out_dir}/output_monthly.csv  ({len(monthly)} combo-months)")
+    print(f"Verdicts: {res['verdict_counts']}")
 
     if stable:
         print(f"\nRank-stable candidates (top {args.top_quantile:.0%} of both windows):")
