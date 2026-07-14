@@ -1,0 +1,5 @@
+box,step,schedule,train_n_trades,train_avg_net,train_total_net_bps,train_t_stat,train_p_value_bootstrap,train_n_dd_blocked,train_rank_pct,holdout_n_trades,holdout_avg_net,holdout_total_net_bps,holdout_t_stat,holdout_p_value_bootstrap,holdout_n_dd_blocked,holdout_rank_pct,train_pos_month_share,holdout_pos_month_share,train_plateau,verdict,stable,n_combos_tested,train_status,holdout_status
+0.0025,0.03,weekday,8881,2.04101,18124.16339,3.46766,0.002,128,0.92245,2317,1.10556,2560.48633,0.98971,0.17166,0,0.96735,0.875,0.5,1.0,stable,True,245,ok,ok
+0.002,0.05,weekday,15749,1.32671,20893.06008,3.97518,0.002,173,0.99184,4103,0.57399,2354.49411,0.89983,0.16766,0,0.95102,0.625,0.5,1.0,stable,True,245,ok,ok
+0.002,0.05,nofilter,20394,1.14261,23301.21743,3.92409,0.002,16196,0.98776,5097,0.41115,2095.20019,0.71783,0.22355,0,0.91429,0.75,0.75,1.0,stable,True,245,ok,ok
+0.002,0.04,weekday,14661,1.29533,18989.60138,3.60942,0.002,183,0.94694,3812,0.48209,1837.25753,0.70356,0.24551,0,0.90204,0.875,0.75,1.0,stable,True,245,ok,ok

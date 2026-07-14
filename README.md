@@ -253,6 +253,10 @@ profitable regardless of what the signal predicts.
 
 Reference documents for established baselines and design decisions:
 
+- [`doc/scan-evaluation.md`](doc/scan-evaluation.md) — how every grid scan
+  is judged: forced train/holdout split, rank-stability selection, and the
+  verdict taxonomy (stable / decayed / regime_dependent / noise) with the
+  monthly-profile and parameter-plateau evidence behind it.
 - [`doc/flip-scan-baseline.md`](doc/flip-scan-baseline.md) — canonical SAR
   flip scan parameters (box=0.0025, step=0.02, rolling_dd gate only) with
   gate calibration rationale, validated results for XRP and ETH A–D variants,

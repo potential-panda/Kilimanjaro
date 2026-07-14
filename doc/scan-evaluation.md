@@ -1,0 +1,122 @@
+# Scan Evaluation: Split, Rank Stability, and Verdicts
+
+How every grid scan in this repo is judged. Implemented in
+`src/kilimanjaro/framework/evaluate.py` (`run_grid_split`); used by all
+three grid tools (`tools/grid_scan.py`, `tools/grid_scan_horizon.py`,
+`tools/grid_scan_expr.py`). Every run records its outcome as a
+`scan_attached` ledger event.
+
+## Why this exists
+
+On 2026-07-13, the flip-scan parameter grid (245 combos/market) was
+re-evaluated with a chronological split for the first time. Of the combos
+that passed the in-sample filters (avg_net ≥ 0, t ≥ 1.5, p ≤ 0.05) on
+2025-07..2026-02, **0/110 ETH and 0/105 XRP survived the held-out
+2026-03..06 window** (ledger evt-20260713-001/002/003). With hundreds of
+correlated combos, a p ≤ 0.05 filter passes ~5% by luck every time; the
+data that selects a winner cannot also certify it. Since then, the
+discipline lives in the framework, not in the operator's memory.
+
+## The forced train/holdout split
+
+Every grid runs on TWO windows: a train window and a holdout window
+(default: last third of the range; override with `--split`). All combos run
+on both. There is no code path that scans a single window and reports
+candidates.
+
+- The split date belongs to the holdout; the train window ends the day
+  before (`split_windows`).
+- The holdout is the *most recent* slice on purpose: deployment happens in
+  next month's market, which resembles the recent window most.
+- A holdout only protects the first pass — repeatedly tweaking until the
+  holdout looks good quietly turns it into training data. Final tests for
+  promotion candidates use *forward* data that did not exist at selection
+  time (see hyp-20260713-002's `forward-window-decay` test).
+
+## Selection: rank stability, not p-values
+
+A combo is `stable` when it is in the top `top_quantile` (default 10%) of
+**both** windows ranked by `rank_metric` (default t_stat), with positive
+avg_net in both, and at least `min_n` trades (default 30 — kills the
+tiny-n significance mirage). Rationale: a real edge should be near the top
+on data it never saw; a lucky one has no reason to be.
+
+p-values remain in the output as evidence, never as the gate:
+
+- `p_value_1sided` — classic t-test (i.i.d. assumption, overconfident for
+  overlapping/autocorrelated trade returns).
+- `p_value_bootstrap` — circular moving-block bootstrap (block ≈ n^(1/3)),
+  robust to that autocorrelation. Deterministic seed.
+
+`n_combos_tested` is written into every row so a result can never hide how
+many tickets were bought.
+
+## The verdict layer
+
+A rejection is not one thing. Each combo gets a `verdict` computed from
+three pieces of evidence the scan already produces:
+
+1. **Rank** in each window (`train_rank_pct`, `holdout_rank_pct`).
+2. **Monthly profile** — per-month n and avg_net across both windows
+   (written to `output_monthly.csv`; months with < `min_month_n` trades,
+   default 10, are ignored). Computed from trades already in memory, so it
+   is ~free, and it provides the "fails only recently vs fails everywhere"
+   evidence a k-fold walk-forward would give at 3–5x the scan cost.
+3. **Parameter plateau** (`train_plateau`) — the share of the combo's grid
+   neighbors (rows identical in every param except one numeric one,
+   adjacent in that param's sorted values) with positive train avg_net.
+   Real edges live on plateaus; an isolated winner whose neighbors
+   disagree is selection noise.
+
+Rules (`_classify`, cutoff = 1 − top_quantile):
+
+| verdict | condition | follow-up |
+|---|---|---|
+| `stable` | rank stability criterion above | promotion candidate; run forward-window test before backtest handoff |
+| `decayed` | train rank > cutoff AND ≥ 70% of train months positive AND plateau ≥ 0.5 AND ≤ 1/3 of holdout months positive | genuinely worked, then stopped. Don't deploy; record; "what turned it off" is a new hypothesis; monitor for recovery |
+| `regime_dependent` | train rank > cutoff with alternating train months (40–70% positive), or a decayed-shaped train with mixed (not uniformly bad) holdout months | hunt for the on/off conditioning variable |
+| `noise` | everything else, including isolated winners | forget it; the ledger remembers so it isn't re-tested |
+| `no_data` | either window errored or produced no signals | fix data or spec |
+
+Verdict counts go into each run's ledger event (`details.verdicts`), so
+"0/245 stable (10 decayed)" is distinguishable from "0/245 stable" forever.
+
+## What the verdicts said about the flip grids (2026-07-14)
+
+Full-year grids, train 2025-07..2026-02, holdout 2026-03..06:
+
+| market | stable | decayed | regime_dependent | noise | reading |
+|---|---|---|---|---|---|
+| ETH | 1* | 10 | 14 | 220 | the box≈0.0025 region genuinely worked (plateau 1.0, 87–100% positive train months, train t up to 4.6) and stopped in March — a real decay |
+| XRP | 4* | 0 | 21 | 220 | no clean decay: its strong combos alternated months all along (us_off box=0.002 train t 4.1 but 50–75% positive holdout months) |
+| BTC | 1 | 0 | 23 | 221 | the one stable combo is box=0.0015/step=0.05/active — every month positive in BOTH windows; independently re-derives hyp-20260713-002 |
+
+\* rank-stable but weak absolute holdout t (≈0.7–1.0): "best of a bad
+regime". The verdict is relative by design; read the absolute columns
+before acting.
+
+So "what changed in March 2026" is mostly an **ETH** story (decay), not a
+board-wide regime shift: XRP was never cleanly persistent, and BTC held.
+Lead-lag is ruled out as the cause (doc/lead-lag-2026-investigation.md).
+
+## Output files per run
+
+```
+results/grid_scan/{flip,horizon,expr}/{scan_id}/
+    params.json          full config: windows, grid, gates, ranking params
+    output.csv           all combos: params + train_* + holdout_* + rank
+                         pcts + pos_month_shares + train_plateau + verdict
+    output_stable.csv    the stable subset
+    output_monthly.csv   long format: params + window + month + n + avg_net
+```
+
+## Speed and determinism
+
+The full-year 245-combo train/holdout flip grid runs in ~40 s (was ~35 min
+before `data/price_cache.py`; target prices load once per window, joins are
+in-memory searchsorted). Two consecutive runs produce byte-identical
+outputs — tied-timestamp flip ordering is pinned in `sar_loader`
+(`ORDER BY ts, sar_up`), which removed a pre-existing ±0.036 bps
+run-to-run jitter. Cheap + deterministic is deliberate: the psychological
+cost of testing an idea should be near zero, and regression checks should
+be a `diff`.
