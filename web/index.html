@@ -3,89 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Kilimanjaro — Research Loop</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <title>Kilimanjaro — Scans</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app">
-    <header id="topbar">
-      <div id="logo">
-        <span id="logo-dot"></span>
-        KILIMANJARO
-        <span id="logo-sub">Research Loop</span>
-      </div>
-    </header>
-
-    <div id="stats-bar">
-      <div class="stat-item">
-        <span class="stat-label">HYPOTHESES</span>
-        <span class="stat-value" id="stat-total">—</span>
-      </div>
-      <div class="stat-sep"></div>
-      <div class="stat-item">
-        <span class="stat-dot pass-dot"></span>
-        <span class="stat-label">PASS</span>
-        <span class="stat-value" id="stat-pass">—</span>
-      </div>
-      <div class="stat-sep"></div>
-      <div class="stat-item">
-        <span class="stat-dot fail-dot"></span>
-        <span class="stat-label">FAIL</span>
-        <span class="stat-value" id="stat-fail">—</span>
-      </div>
-      <div class="stat-sep"></div>
-      <div class="stat-item">
-        <span class="stat-dot other-dot"></span>
-        <span class="stat-label">OTHER</span>
-        <span class="stat-value" id="stat-other">—</span>
-      </div>
-    </div>
-
-    <main id="main">
-      <section id="list-page" class="view-page active">
-        <table id="hyp-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Family</th>
-              <th>Title</th>
-              <th>Status</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody id="hyp-table-body"></tbody>
-        </table>
-      </section>
-
-      <section id="detail-page" class="view-page">
-        <button id="back-to-list" type="button" aria-label="Back to hypothesis list">&larr; Hypotheses</button>
-        <div id="detail-content">
-          <h2 id="detail-title"></h2>
-          <div id="detail-meta"></div>
-
-          <div class="detail-tabs">
-            <button class="tab-btn active" data-tab="spec">Spec</button>
-            <button class="tab-btn" data-tab="scan">Scan Report</button>
-            <button class="tab-btn" data-tab="ledger">Ledger</button>
-          </div>
-
-          <div id="tab-spec" class="tab-panel active">
-            <pre id="spec-json"></pre>
-          </div>
-          <div id="tab-scan" class="tab-panel">
-            <div id="scan-summary"></div>
-            <pre id="scan-json"></pre>
-          </div>
-          <div id="tab-ledger" class="tab-panel">
-            <div id="ledger-events"></div>
-          </div>
-        </div>
-      </section>
-    </main>
-  </div>
+  <header id="topbar">
+    <div id="logo"><span id="logo-dot"></span>KILIMANJARO</div>
+    <nav id="nav">
+      <a href="#/scans" data-view="scans">Scans</a>
+      <a href="#/hyps" data-view="hyps">Hypotheses</a>
+    </nav>
+  </header>
+  <main id="main"></main>
   <script src="app.js"></script>
 </body>
 </html>

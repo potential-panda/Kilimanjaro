@@ -353,11 +353,20 @@ that's a routing decision, not a blocker.
 
 `src/api.py` (Flask, port 9777) + `web/` (vanilla HTML/CSS/JS, no build
 step) -- the same file layout convention as Makalu's own `src/api.py`/`web/`.
-Read-only: lists every hypothesis (joining `specs/`, `ledger/`, and the
-latest `scan-reports/` entry), and a detail view per hypothesis with its
-full spec, ledger event history, and scan report metrics. Nothing here
-writes to any of those directories -- mutating the research loop stays in
-`tools/*.py`/the CLI, on purpose.
+Read-only, two views:
+
+- **Scans** (`#/scans`) -- every grid-scan run under `results/grid_scan/`
+  (flip / horizon / expr), newest first, with verdict counts. A run's
+  detail view renders each CSV (`output.csv`, `output_stable.csv`,
+  `output_monthly.csv`, ...) as a table sortable by any column (click a
+  header to sort, click again to flip direction), with a text filter,
+  verdict badges, and the run's `params.json`.
+- **Hypotheses** (`#/hyps`) -- the spec+ledger join: one row per
+  hypothesis with its current status, and a detail view with the full
+  spec and event history (event headlines shown inline).
+
+Nothing here writes to any of those directories -- mutating the research
+loop stays in `tools/*.py`/the CLI, on purpose.
 
 ```bash
 python src/api.py   # serves http://localhost:9777
