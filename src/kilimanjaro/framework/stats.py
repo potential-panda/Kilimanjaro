@@ -32,6 +32,12 @@ _BOOT_N = 500
 _BOOT_SEED = 12345
 _BOOT_MIN_N = 20
 _BOOT_CHUNK = 100
+# Above this, bootstrap on an order-preserving decimation: expression-style
+# level signals can produce millions of overlapping trades per combo, and a
+# full bootstrap there costs GBs of index math for a p-value that is pinned
+# near 0/1 anyway. Decimation keeps the block structure and is conservative
+# (smaller effective n) — fine for screening.
+_BOOT_MAX_N = 100_000
 
 
 def block_bootstrap_pvalue(
@@ -53,6 +59,9 @@ def block_bootstrap_pvalue(
     n = len(net)
     if n < _BOOT_MIN_N:
         return float("nan")
+    if n > _BOOT_MAX_N:
+        net = net[:: n // _BOOT_MAX_N + 1]
+        n = len(net)
 
     obs = float(net.mean())
     centered = net - obs

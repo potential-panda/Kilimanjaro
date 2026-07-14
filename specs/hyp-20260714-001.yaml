@@ -1,0 +1,114 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260714-001
+  parent_id: hyp-20260618-003
+  title: BINANCE short-horizon return z-score predicts GMO follow-through (momentum) or fade (reversion)
+  status: draft
+  family: lead_lag
+  family_label: Lead-lag
+  custom_family_justification: null
+  created_at: '2026-07-14T00:00:00Z'
+  owner: agent
+  summary: Z-scored BINANCE mid return over 30-600s as a continuous directional signal for GMO at fixed
+    horizons; both follow (momentum) and fade (invert) variants swept. The continuous-signal counterpart
+    of the SAR flip family.
+  expected_edge_mechanism: A large recent leader move that the follower has not fully priced predicts
+    follower drift in the same direction over the next seconds-to-minutes.
+  economic_rationale: Liquidity providers reprice GMO with a lag after BINANCE moves; verified 600-1000ms
+    optimal lag, ~100% daily lead share (doc/lead-lag-2026-investigation.md).
+  duplicate_search:
+    searched_at: '2026-07-14T00:00:00Z'
+    query_terms:
+    - lead_lag
+    - momentum
+    - basis
+    - zscore
+    possible_duplicates:
+    - 'hyp-20260618-003: 1-tick momentum BTC (tick-scale; this is seconds-scale, cross-market, z-scored)'
+    - 'hyp-20260703-001/002: SAR flip family (event-based trend; this is continuous)'
+    conclusion: variant
+  data_requirements:
+    markets:
+    - exchange: BINANCE
+      symbol: BTC_USDT
+    - exchange: GMO
+      symbol: BTC_JPY
+    - exchange: BINANCE
+      symbol: ETH_USDT
+    - exchange: GMO
+      symbol: ETH_JPY
+    - exchange: BINANCE
+      symbol: XRP_USDT
+    - exchange: GMO
+      symbol: XRP_JPY
+    datasets:
+    - layer: silver
+      dataset: MarketPrice
+    minimum_distinct_days: 200
+    required_columns:
+    - ts
+    - bid
+    - ask
+    unavailable_data_policy: needs-more-data
+    research_metadata:
+      note: zscore(ret(a_mid, {30,120,600}), 3600) on BINANCE mid
+  feature:
+    sql_expression: zscore(ret(a_mid, {30,120,600}), 3600) on BINANCE mid
+    source_datasets:
+    - layer: silver
+      dataset: MarketPrice
+      exchange: BINANCE
+      symbol: '{BTC,ETH,XRP}_USDT'
+    primary_timestamp_column: ts
+    point_in_time_rule: All ops causal (test-enforced, kilimanjaro/op/series.py); frame values ffilled
+      at-or-before ts with 300s staleness bound.
+  cross_market_rationale: Signal computed on BINANCE (leader), return measured on GMO (follower) — the
+    verified lead-lag mechanism.
+  target:
+    type: next_return
+    primary_horizon_seconds: 120
+    comparison_horizons_seconds:
+    - 30
+    - 120
+    - 300
+    source_dataset:
+      layer: silver
+      dataset: MarketPrice
+      exchange: GMO
+      symbol: '{BTC,ETH,XRP}_JPY'
+    timestamp_cutoff_rule: target window starts strictly after signal timestamp
+  execution_assumptions:
+    order_type: market
+    fees_bps: 0
+    slippage_bps: 0.5
+    latency_ms: 100
+    liquidity_capacity_assumption: single-unit notional (0.01 BTC / 0.3 ETH / 150 XRP)
+  falsification_tests:
+  - name: rank-instability-across-split
+    expected_failure_meaning: top-decile train combos fall out of the holdout top decile — selection noise
+  - name: regime-sign-flip
+    expected_failure_meaning: signal direction inverts between months (seen in the May/June 2026 basis
+      demo) — regime whipsaw, not an edge
+  - name: flip-family-redundancy
+    expected_failure_meaning: adds nothing over the SAR flip family — stable combos correlate with existing
+      flip signals rather than new edge
+  scan_plan:
+    primary_horizon_seconds: 120
+    threshold_grid:
+    - 30
+    - 120
+    - 300
+    regime_buckets:
+    - low_vol
+    - mid_vol
+    - high_vol
+    significance_method: block_bootstrap_by_day
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: qate.trading.strategy variant, threshold entry, fixed-horizon
+      exit
+    himalaya_config_notes: only if a rank-stable combo survives with meaningful absolute holdout strength
+  decisions:
+  - at: '2026-07-14T00:00:00Z'
+    actor: agent
+    decision: draft
+    reason: 'first expression-funnel batch: mid-price-only formulas, full-year windows'

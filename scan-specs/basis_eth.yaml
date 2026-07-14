@@ -1,0 +1,37 @@
+hypothesis_id: hyp-20260714-002
+markets:
+  a:
+    exchange: BINANCE
+    symbol: ETH_USDT
+    execution_size: '0.1'
+  b:
+    exchange: GMO
+    symbol: ETH_JPY
+    execution_size: '0.1'
+target:
+  exchange: GMO
+  symbol: ETH_JPY
+  execution_size: '0.3'
+expressions:
+- label: basis_z_15m
+  expr: zscore(a_mid / b_mid, 900)
+  invert:
+  - false
+  - true
+- label: basis_z_1h
+  expr: zscore(a_mid / b_mid, 3600)
+  invert:
+  - false
+  - true
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300
