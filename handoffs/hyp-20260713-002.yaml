@@ -1,0 +1,97 @@
+handoff:
+  hypothesis_id: hyp-20260713-002
+  # DRAFT prepared ahead of approval at lulurun's request (2026-07-14).
+  # Per handoffs/README.md this becomes active only once a human_approval
+  # event moves hyp-20260713-002 to backtest-approved; set the event id here.
+  ledger_approval_event_id: null
+  intended_strategy_family: Range-bar SAR between-flip execution, fixed params
+  description: >
+    Single frozen parameter set — the sole rank-stable survivor of the
+    hyp-20260703-002 grid (245 combos/market, train 2025-07..2026-02,
+    holdout 2026-03..06). BTC only. No parameter freedom left; the backtest
+    question is purely whether the edge persists under the real simulator.
+  entry_exit_sketch: >
+    Enter on every BINANCE BTC_USDT range-bar SAR flip (box_size_rate=0.0015,
+    sar_step=0.05, accel=0.02, max=0.2), direction = flip direction, execute
+    on GMO BTC_JPY at first tick after flip. Exit at the next SAR flip
+    (between-flip hold; exits fire even when the schedule would block the
+    entry — NO_ENTRY close). Trade only weekday JST 06-21; block all
+    Saturday and Sunday. Rolling-DD gate blocks entries after 500 bps
+    cumulative loss within a 3h window, 6h cooldown.
+
+  potential_panda_core_mapping:
+    base_contract: qate.trading.strategy
+    example_variant_reference: orion/template.py flip strategy (same as hyp-20260703-001)
+    schedule_mode: default_active   # JST 06-21 weekdays; weekend fully blocked
+    schedule_note: >
+      flip_sar.SCHEDULES default_active applies block_weekend_hours to
+      jst_weekday >= 5, i.e. Saturday AND Sunday — identical to the grid's
+      "active" schedule this combo was selected under. Confirm orion's
+      schedule implementation blocks both weekend days, not Saturday only.
+    open_questions:
+      - >
+        Confirm rolling_dd threshold mapping: scan uses 500 bps / 10800 s /
+        21600 s cooldown; orion param convention expresses threshold as pct
+        (500 bps -> threshold 5), window 10800.
+
+  himalaya_run_config:
+    combo:
+      market: BTC_JPY
+      flip_symbol: BTC_USDT
+      target_symbol: BTC_JPY
+      execution_size: "0.01"
+      schedule: default_active
+      box_size_rate: 0.0015
+      sar_step: 0.05
+    param_set_id: "GMO_BTC_JPY_0.01__default_active_150_50_20_200_10800_5"
+    markets:
+      - {exchange: BINANCE, symbol: BTC_USDT}
+      - {exchange: GMO,     symbol: BTC_JPY}
+    # Windows mirror the scan's selection discipline: params were chosen on
+    # train, survived holdout; the backtest must NOT be used to re-tune.
+    train_window:   {start_date: "2025-07-01", end_date: "2026-02-28"}
+    holdout_window: {start_date: "2026-03-01", end_date: "2026-06-30"}
+    forward_window: {start_date: "2026-07-01", end_date: "open — pending GMO data recovery"}
+    execution_model:
+      fees_bps: 0
+      slippage_bps: 0.5
+      latency_ms: 100
+      execution_sizes: {BTC_JPY: "0.01"}
+    gate:
+      rolling_dd_window_seconds: 10800
+      rolling_dd_threshold_bps: 500
+      rolling_dd_cooldown_seconds: 21600
+
+  scan_summary:
+    scan_folder: results/grid_scan/flip/BTC_2025-07-01_2026-06-30_20260714_153241
+    selection: rank stability (top decile of both windows by t_stat, min_n=30)
+    evidence:
+      train:   "n=4942  avg_net=+0.95 bps  t=+1.95  every month positive"
+      holdout: "n=2535  avg_net=+1.53 bps  t=+2.38  every month positive"
+      monthly_consistency: "pass — Mar +1.78 / Apr +0.72 / May +0.21 / Jun +2.13 (evt-20260713-007)"
+      forward_proxy: >
+        Jul 1-10 vs BINANCE prices (GMO bronze stalled since Jul 1):
+        n=224 avg_net=+1.46 bps — in line with holdout proxy +1.75
+        (evt-20260714-004); re-check against real GMO fills when data resumes.
+      context: "sole survivor of 25 BTC train-filtered combos; 88% of BTC combos stayed positive OOS"
+    ledger_events:
+      - evt-20260713-006   # founding evidence
+      - evt-20260713-007   # monthly consistency pass
+      - evt-20260714-003   # verdict-layer rerun (1 stable = this combo)
+      - evt-20260714-004   # forward proxy check
+
+  post_backtest_plan: >
+    After the Himalaya run, execute `cli.py verify-scan` for BTC against the
+    backtest bucket/param_set_id — scan fidelity was only ever verified on
+    ETH (CLAUDE.md); this run supplies the BTC comparison data. Promotion
+    decision uses the verified backtest numbers, not the scan's.
+
+  expected_outputs:
+    - net_pnl_after_costs
+    - trade_count
+    - turnover
+    - win_rate
+    - sharpe_or_equivalent
+    - max_drawdown
+    - capacity_sensitivity
+    - regime_breakdown
