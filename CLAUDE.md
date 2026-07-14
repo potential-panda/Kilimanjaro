@@ -33,6 +33,7 @@ Subcommand modules live in `src/command/` (populate.py, verify.py, scan.py).
 | `src/kilimanjaro/framework/` | scan framework: `run_grid_split` (train/holdout + rank stability — the default way to run any grid), Gate protocol + RollingDrawdownGate, block-bootstrap p-value |
 | `src/kilimanjaro/signal/expression.py` | `ExpressionSignal`: signals as AST-validated formulas over the feature frame |
 | `src/kilimanjaro/data/feature_frame.py` | multi-market 1s feature frame (mid/spread, OBI, TradeAggression) |
+| `src/kilimanjaro/data/price_cache.py` | per-window target-price cache — full-year flip grid runs in ~40s (was ~35min); keep return calcs on this, never per-combo parquet scans |
 | `src/kilimanjaro/op/series.py` | causal op library (`ema`, `zscore`, `lag`, `ret`, …) — causality is test-enforced |
 
 Grid tools (`tools/grid_scan.py` flip, `tools/grid_scan_horizon.py` OBI-age,

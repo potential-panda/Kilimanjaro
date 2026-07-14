@@ -7,6 +7,12 @@ matches the backtest's NO_ENTRY close behaviour.
 
 BUY (direction=+1): enter at ask, exit at bid.
 SELL (direction=-1): enter at bid, exit at ask.
+
+Prices come from the shared per-window target-price cache
+(kilimanjaro.data.price_cache) and entries/exits are resolved with
+searchsorted — same "first MarketPrice tick at or after ts" semantics as the
+DuckDB ASOF join this replaced (verified identical against the recorded
+grid numbers), but ~free per combo instead of a parquet scan per combo.
 """
 
 from __future__ import annotations
@@ -14,10 +20,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import duckdb
+import numpy as np
 import pandas as pd
 
-from kilimanjaro.data.price_loader import mp_glob
+from kilimanjaro.data.price_cache import load_target_prices
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
 
@@ -50,49 +56,52 @@ class BetweenSignalReturn:
         end_date: str,
         data_root: Path = _DEFAULT_DATA_ROOT,
     ) -> pd.DataFrame:
-        """Join signals with target MarketPrice and compute between-signal returns.
+        """Join signals with cached target prices and compute between-signal returns.
 
         Input signals must have [ts, direction, strength, exit_ts].
-        Returns [ts, direction, strength, exit_ts, return_bps, holding_seconds,
-                 entry_price, exit_price, jst_hour, jst_weekday, jst_date].
+        Returns [ts, direction, strength, exit_ts, entry_exec_ts, entry_price,
+                 exit_exec_ts, exit_price, return_bps, holding_seconds,
+                 jst_hour, jst_weekday, jst_date].
         """
-        price_glob = mp_glob(target.exchange, target.symbol, target.execution_size, data_root)
-        con = duckdb.connect()
-        con.register("_signals", signals)
+        mp = load_target_prices(
+            target.exchange, target.symbol, target.execution_size,
+            start_date, end_date, data_root,
+        )
+        sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
+        direction = sig["direction"].values
+        n_mp = len(mp.ts)
 
-        trades = con.sql(f"""
-            WITH mp AS (
-                SELECT ts, bid, ask
-                FROM read_parquet('{price_glob}', hive_partitioning=true)
-                WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-            ),
-            with_entry AS (
-                SELECT s.ts, s.direction, s.strength, s.exit_ts,
-                       o.ts  AS entry_exec_ts,
-                       CASE WHEN s.direction > 0 THEN o.ask ELSE o.bid END AS entry_price
-                FROM _signals s ASOF JOIN mp o ON o.ts >= s.ts
-            ),
-            with_exit AS (
-                SELECT e.ts, e.direction, e.strength, e.exit_ts,
-                       e.entry_exec_ts, e.entry_price,
-                       x.ts  AS exit_exec_ts,
-                       CASE WHEN e.direction > 0 THEN x.bid ELSE x.ask END AS exit_price
-                FROM with_entry e ASOF LEFT JOIN mp x ON x.ts >= e.exit_ts
-            )
-            SELECT ts, direction, strength, exit_ts,
-                   entry_exec_ts, entry_price, exit_exec_ts, exit_price,
-                   direction * (exit_price - entry_price) / entry_price * 10000.0 AS return_bps,
-                   exit_exec_ts - entry_exec_ts AS holding_seconds
-            FROM with_exit
-            WHERE entry_price IS NOT NULL
-            ORDER BY ts
-        """).df()
+        entry_idx = mp.first_at_or_after(sig["ts"].values)
+        has_entry = entry_idx < n_mp
+        e = np.clip(entry_idx, 0, max(n_mp - 1, 0))
+        entry_exec_ts = np.where(has_entry, mp.ts[e], np.nan)
+        entry_price = np.where(
+            has_entry, np.where(direction > 0, mp.ask[e], mp.bid[e]), np.nan
+        )
+
+        exit_idx = mp.first_at_or_after(sig["exit_ts"].values)
+        has_exit = exit_idx < n_mp
+        x = np.clip(exit_idx, 0, max(n_mp - 1, 0))
+        exit_exec_ts = np.where(has_exit, mp.ts[x], np.nan)
+        exit_price = np.where(
+            has_exit, np.where(direction > 0, mp.bid[x], mp.ask[x]), np.nan
+        )
+
+        trades = pd.DataFrame({
+            "ts": sig["ts"].values,
+            "direction": direction,
+            "strength": sig["strength"].values,
+            "exit_ts": sig["exit_ts"].values,
+            "entry_exec_ts": entry_exec_ts,
+            "entry_price": entry_price,
+            "exit_exec_ts": exit_exec_ts,
+            "exit_price": exit_price,
+            "return_bps": direction * (exit_price - entry_price) / entry_price * 10000.0,
+            "holding_seconds": exit_exec_ts - entry_exec_ts,
+        })
+        # ASOF entry join was INNER: signals with no tick at/after ts drop out
+        trades = trades[has_entry].reset_index(drop=True)
 
         # jst_hour/weekday from exit_ts (schedule decision point);
         # jst_date from entry ts (date blocking).
-        trades = add_jst_columns(
-            trades,
-            ts_col="exit_exec_ts",
-            date_ts_col="ts",
-        )
-        return trades
+        return add_jst_columns(trades, ts_col="exit_exec_ts", date_ts_col="ts")

@@ -49,10 +49,13 @@ def load_sar_flips(
         features_root = _features_root()
     glob = _flip_glob(exchange, symbol, box_size_rate, sar_step, features_root)
     con = duckdb.connect()
+    # sar_up as a tiebreaker: rapid flip bursts can put two flips on the same
+    # ts, and LEAD over a tied ORDER BY is nondeterministic across runs
+    # (measured: up to 0.036 bps avg_net jitter between identical grid runs).
     return con.sql(f"""
         SELECT ts, sar_up,
-               LEAD(ts) OVER (ORDER BY ts) AS exit_ts
+               LEAD(ts) OVER (ORDER BY ts, sar_up) AS exit_ts
         FROM read_parquet('{glob}', hive_partitioning=true)
         WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-        ORDER BY ts
+        ORDER BY ts, sar_up
     """).df()
