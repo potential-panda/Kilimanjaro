@@ -186,6 +186,7 @@ holdout split and washed out entirely once a survivor is re-measured per episode
 | Block bootstrap p-value | **built** (`stats.py::block_bootstrap_pvalue`) |
 | Episode identification | **built** (`op/age.py::threshold_age`, `group` id) |
 | Event sampling (`age == 0`) | **available** via `ExpressionSignal` age gate |
-| `n_episodes` column in scan output | **to build** — distinct `group` count |
-| `EpisodeReturn` calc + bid/ask execution | **to build** — candidate tier |
+| Episode id on signal rows | **built** (`op/age.py::threshold_episode`; emitted by ExpressionSignal / OBIAgeSignal) |
+| `EpisodeReturn` calc + bid/ask execution | **built** (`return_calc/episode.py`; `grid_scan_expr` spec `return_calc: episode`) |
+| `n_episodes` column in per-second output | **to build** — distinct `group` count next to `n` (with `EpisodeReturn`, `n` already is the episode count) |
 | Newey–West / HAC closed-form SE | optional; bootstrap covers it for now |

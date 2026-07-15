@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.feature_frame import load_feature_frame
-from kilimanjaro.op.age import threshold_age
+from kilimanjaro.op.age import threshold_age, threshold_episode
 from kilimanjaro.op.series import OPS
 
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
@@ -183,7 +183,13 @@ class ExpressionSignal:
             if self.max_age is not None:
                 mask &= age < self.max_age
 
-        active = frame.loc[mask.fillna(False), ["ts"]].copy()
-        active["direction"] = np.sign(s[mask.fillna(False)])
-        active["strength"] = s[mask.fillna(False)]
+        m = mask.fillna(False)
+        active = frame.loc[m, ["ts"]].copy()
+        active["direction"] = np.sign(s[m])
+        active["strength"] = s[m]
+        # Episode id ties every active second to its maximal run; EpisodeReturn
+        # groups on it to sample one non-overlapping trade per episode. Computed
+        # on the full |s|>threshold runs (before any age gating masks rows), so
+        # the id is the true episode identity regardless of min_age/max_age.
+        active["episode"] = threshold_episode(s, self.threshold)[m]
         return active.reset_index(drop=True)

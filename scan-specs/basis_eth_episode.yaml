@@ -1,0 +1,47 @@
+# Basis-follow, re-measured per EPISODE with real bid/ask execution.
+#
+# Batch-1 found basis-follow has genuine cross-market mid drift on ETH
+# (+2.34 bps gross, every month positive) but dead as a taker vs the ~6.5 bps
+# GMO spread — a mid-to-mid, per-second screen can't see that cost. This spec
+# re-runs the survivor as one non-overlapping trade per episode, entering at
+# the aggressive side and exiting at the passive side, so the reported net is
+# the spread-aware truth. See doc/overlapping-returns.md.
+#
+# age_windows null: episode mode samples the whole run, so entry is the
+# crossing second; max_holds caps the hold instead.
+hypothesis_id: hyp-20260714-002
+return_calc: episode
+markets:
+  a:
+    exchange: BINANCE
+    symbol: ETH_USDT
+    execution_size: '0.1'
+  b:
+    exchange: GMO
+    symbol: ETH_JPY
+    execution_size: '0.1'
+target:
+  exchange: GMO
+  symbol: ETH_JPY
+  execution_size: '0.3'
+expressions:
+- label: basis_z_15m
+  expr: zscore(a_mid / b_mid, 900)
+  invert:
+  - false
+  - true
+- label: basis_z_1h
+  expr: zscore(a_mid / b_mid, 3600)
+  invert:
+  - false
+  - true
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - null
+  - null
+max_holds:
+- 300
+- 900
+- null

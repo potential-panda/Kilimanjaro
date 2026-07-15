@@ -134,6 +134,22 @@ class TestExpressionSignal(unittest.TestCase):
         out = sig.generate(self._frame([0.1, 0.9, 0.9, 0.9, 0.9, 0.1]))
         self.assertEqual(len(out), 2)  # ages 2 and 3
 
+    def test_episode_id_labels_maximal_runs(self):
+        # Two separate runs above threshold → two distinct episode ids,
+        # constant within each run; gap seconds are filtered out entirely.
+        sig = _make_signal(expr="a_mid", threshold=0.5)
+        out = sig.generate(self._frame([0.9, 0.9, 0.1, 0.8, 0.8, 0.8]))
+        self.assertEqual(list(out["episode"]), [1, 1, 2, 2, 2])
+        self.assertEqual(out["episode"].nunique(), 2)
+
+    def test_episode_id_survives_age_gating(self):
+        # min_age drops the crossing second but the surviving rows still carry
+        # the true episode id (so EpisodeReturn groups them correctly).
+        sig = _make_signal(expr="a_mid", threshold=0.5, min_age=1)
+        out = sig.generate(self._frame([0.1, 0.9, 0.9, 0.1, 0.9, 0.9]))
+        # episode 1 = ts1,2 (age 0 dropped → ts2); episode 2 = ts4,5 (age0 dropped → ts5)
+        self.assertEqual(list(out["episode"]), [1, 2])
+
     def test_nan_expression_values_never_fire(self):
         sig = _make_signal(expr="zscore(a_mid, 10)", threshold=0.1)
         out = sig.generate(self._frame([1.0, 1.0, 1.0]))  # too short: all NaN
@@ -173,6 +189,22 @@ class TestBuildCombos(unittest.TestCase):
         sig, rc = combos[0]
         self.assertEqual(sig.params["expr"], "e1")
         self.assertEqual(rc.params["horizon"], 30)
+
+    def test_episode_return_calc_mode(self):
+        sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
+        from grid_scan_expr import build_combos
+        spec = {
+            "return_calc": "episode",
+            "markets": {"a": {"exchange": "X", "symbol": "Y", "execution_size": "1"}},
+            "expressions": [{"label": "e1", "expr": "zscore(a_mid, 60)"}],
+            "thresholds": [1.0, 2.0],
+            "max_holds": [60, None],
+        }
+        combos = build_combos(spec)
+        self.assertEqual(len(combos), 4)  # 1 expr × 2 thr × 1 age × 2 holds
+        _, rc = combos[0]
+        self.assertEqual(rc.params["max_hold_s"], 60)
+        self.assertEqual(combos[1][1].params["max_hold_s"], -1)  # None → -1
 
 
 if __name__ == "__main__":

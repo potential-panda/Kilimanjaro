@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.obi_loader import load_obi_series
-from kilimanjaro.op.age import threshold_age
+from kilimanjaro.op.age import threshold_age, threshold_episode
 
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 
@@ -69,13 +69,17 @@ class OBIAgeSignal:
     def generate(self, data: pd.DataFrame) -> pd.DataFrame:
         """Filter OBI series to active signal rows.
 
-        Returns DataFrame with [ts, direction, strength]:
+        Returns DataFrame with [ts, direction, strength, episode]:
             ts        signal timestamp (seconds)
             direction +1 (bid pressure) or -1 (ask pressure)
             strength  raw OBI value (used for IC calculation)
+            episode   maximal-run id (for EpisodeReturn; -1 filtered out here)
         """
         df = data.copy()
         needs_age = self.min_age is not None or self.max_age is not None
+        # Episode id from the full |obi|>threshold runs (before age gating),
+        # so it labels the true episode even when min_age/max_age drop rows.
+        df["episode"] = threshold_episode(df["obi"], self.threshold)
 
         if needs_age:
             df["_age"] = threshold_age(df["obi"], self.threshold)
@@ -90,4 +94,4 @@ class OBIAgeSignal:
         active = df[mask].copy()
         active["direction"] = np.sign(active["obi"])
         active["strength"] = active["obi"]
-        return active[["ts", "direction", "strength"]].reset_index(drop=True)
+        return active[["ts", "direction", "strength", "episode"]].reset_index(drop=True)

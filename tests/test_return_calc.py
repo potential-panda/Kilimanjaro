@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from kilimanjaro.data.price_cache import TargetPrices  # noqa: E402
 from kilimanjaro.framework.protocol import MarketConfig  # noqa: E402
 from kilimanjaro.return_calc.between_signal import BetweenSignalReturn  # noqa: E402
+from kilimanjaro.return_calc.episode import EpisodeReturn  # noqa: E402
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn  # noqa: E402
 
 TARGET = MarketConfig("GMO", "ETH_JPY", "0.3")
@@ -116,6 +117,53 @@ class TestFixedHorizonReturn(unittest.TestCase):
         out = self._compute([{"ts": 35.0, "direction": 1.0, "strength": 1.0}], 100)
         self.assertEqual(len(out), 1)
         self.assertTrue(np.isnan(out.iloc[0]["return_bps"]))
+
+
+class TestEpisodeReturn(unittest.TestCase):
+    def _compute(self, rows, max_hold=None):
+        with patch("kilimanjaro.return_calc.episode.load_target_prices",
+                   return_value=MP):
+            return EpisodeReturn(max_hold_seconds=max_hold).compute(
+                _signals(rows), TARGET, "2026-01-01", "2026-01-02")
+
+    def test_one_trade_per_episode_natural_exit(self):
+        # Episode 1 spans ts 12,13 → enter @12 (ask), exit @ last+1 = 14 (bid).
+        # Episode 2 is a single second at ts 22 → enter @22, exit @23.
+        out = self._compute([
+            {"ts": 12.0, "direction": 1.0, "strength": 2.0, "episode": 1},
+            {"ts": 13.0, "direction": 1.0, "strength": 2.5, "episode": 1},
+            {"ts": 22.0, "direction": -1.0, "strength": -2.0, "episode": 2},
+        ])
+        self.assertEqual(len(out), 2)                       # one row per episode
+        r1 = out.iloc[0]
+        self.assertEqual(r1["ts"], 12.0)                    # entry = crossing second
+        self.assertEqual(r1["strength"], 2.0)               # strength taken at entry
+        self.assertEqual(r1["entry_exec_ts"], 20.0)         # first tick >= 12
+        self.assertEqual(r1["entry_price"], 111.0)          # BUY → ask
+        self.assertEqual(r1["exit_ts"], 14.0)               # last active (13) + 1
+        self.assertEqual(r1["exit_exec_ts"], 20.0)          # first tick >= 14 → ts=20
+        self.assertEqual(r1["exit_price"], 109.0)           # BUY → bid
+        r2 = out.iloc[1]
+        self.assertEqual(r2["exit_ts"], 23.0)               # single-second episode → +1
+        self.assertEqual(r2["entry_price"], 119.0)          # SELL @ ts30 tick → bid
+        self.assertEqual(r2["exit_price"], 121.0)           # SELL exit → ask
+
+    def test_max_hold_caps_exit(self):
+        # Long episode ts 10..40; hold cap 12 → exit at 10+12 = 22, not 41.
+        rows = [{"ts": float(t), "direction": 1.0, "strength": 1.0, "episode": 1}
+                for t in range(10, 41)]
+        out = self._compute(rows, max_hold=12)
+        self.assertEqual(out.iloc[0]["exit_ts"], 22.0)
+
+    def test_requires_episode_column(self):
+        with self.assertRaises(ValueError):
+            self._compute([{"ts": 12.0, "direction": 1.0, "strength": 1.0}])
+
+    def test_signal_after_last_tick_dropped(self):
+        out = self._compute([
+            {"ts": 50.0, "direction": 1.0, "strength": 1.0, "episode": 1},
+        ])
+        self.assertEqual(len(out), 0)                       # INNER on entry
 
 
 if __name__ == "__main__":

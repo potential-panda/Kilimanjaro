@@ -24,6 +24,15 @@ Example spec (YAML)
     age_windows: [[null, null], [10, 300]]
     horizons: [30, 60, 120, 300]
 
+Return calc (default `fixed_horizon`, mid-to-mid look-ahead from every active
+second). For the non-overlapping, spread-aware measurement (one bid/ask trade
+per episode — see doc/overlapping-returns.md), set instead:
+
+    return_calc: episode
+    max_holds: [60, 300, null]     # cap hold in seconds; null = to episode end
+
+(`max_holds` replaces `horizons` in episode mode.)
+
 Available ops inside `expr`: see kilimanjaro/op/series.py OPS (ema, zscore,
 roll_mean/std/sum/max/min, lag, diff, ret, sign, abs, clip) — all causal.
 Frame columns: {alias}_mid, {alias}_spread_bps, {alias}_obi_k{d},
@@ -54,12 +63,14 @@ from kilimanjaro.framework import (
     run_grid_split,
     write_csv,
 )
+from kilimanjaro.return_calc.episode import EpisodeReturn
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 from kilimanjaro.signal.expression import ExpressionSignal
 
 _CSV_FIELDS = [
-    "expr", "threshold", "min_age", "max_age", "invert", "horizon",
+    "expr", "threshold", "min_age", "max_age", "invert", "horizon", "max_hold_s",
     "train_n", "train_avg_gross", "train_avg_net", "train_hit_rate", "train_ic",
+    "train_avg_hold_s", "holdout_avg_hold_s",
     "train_t_stat", "train_p_value_bootstrap", "train_total_net_bps", "train_rank_pct",
     "holdout_n", "holdout_avg_gross", "holdout_avg_net", "holdout_hit_rate", "holdout_ic",
     "holdout_t_stat", "holdout_p_value_bootstrap", "holdout_total_net_bps", "holdout_rank_pct",
@@ -68,11 +79,27 @@ _CSV_FIELDS = [
 ]
 
 
+def _return_calcs(spec: dict) -> list:
+    """Build the ReturnCalc sweep from the spec.
+
+    return_calc: fixed_horizon (default) sweeps `horizons` (mid-to-mid look-ahead
+    from every active second). return_calc: episode sweeps `max_holds` (one
+    non-overlapping bid/ask trade per episode; see doc/overlapping-returns.md);
+    a null entry means hold to the natural episode end.
+    """
+    kind = spec.get("return_calc", "fixed_horizon")
+    if kind == "episode":
+        return [EpisodeReturn(max_hold_seconds=h) for h in spec.get("max_holds", [None])]
+    if kind == "fixed_horizon":
+        return [FixedHorizonReturn(horizon_seconds=h) for h in spec["horizons"]]
+    raise ValueError(f"unknown return_calc {kind!r} (want fixed_horizon or episode)")
+
+
 def build_combos(spec: dict) -> list[tuple]:
     markets = spec["markets"]
     thresholds = spec["thresholds"]
     age_windows = spec.get("age_windows", [[None, None]])
-    horizons = spec["horizons"]
+    return_calcs = _return_calcs(spec)
 
     combos: list[tuple] = []
     for e in spec["expressions"]:
@@ -89,8 +116,8 @@ def build_combos(spec: dict) -> list[tuple]:
                         invert=invert,
                         label=e.get("label"),
                     )
-                    for horizon in horizons:
-                        combos.append((sig, FixedHorizonReturn(horizon_seconds=horizon)))
+                    for rc in return_calcs:
+                        combos.append((sig, rc))
     return combos
 
 
@@ -161,8 +188,10 @@ def main() -> None:
     def on_result(row: dict) -> None:
         w = row["window"]
         done[w] += 1
+        hold = row.get("horizon")
+        hold_str = f"H={hold}" if hold is not None else f"hold={row.get('max_hold_s')}"
         label = (f"{row.get('expr')} thr={row.get('threshold')}"
-                 f" inv={row.get('invert')} H={row.get('horizon')}")
+                 f" inv={row.get('invert')} {hold_str}")
         if row.get("status") == "ok":
             print(f"[{w:7s} {done[w]:4d}/{len(combos)}] {label}"
                   f" → n={row['n']} net={row['avg_net']:+.3f}bps t={row['t_stat']:+.2f}",
@@ -207,8 +236,10 @@ def main() -> None:
     if stable:
         print(f"\nRank-stable candidates (top {args.top_quantile:.0%} of both windows):")
         for r in stable[:20]:
+            hold = r.get("horizon")
+            hold_str = f"H={hold}" if hold is not None else f"hold={r.get('max_hold_s')}"
             print(f"  {r['expr']} thr={r['threshold']} inv={r['invert']}"
-                  f" age=[{r['min_age']},{r['max_age']}) H={r['horizon']}"
+                  f" age=[{r['min_age']},{r['max_age']}) {hold_str}"
                   f" | train {r['train_avg_net']:+.3f}bps t={r['train_t_stat']:+.2f}"
                   f" | holdout {r['holdout_avg_net']:+.3f}bps t={r['holdout_t_stat']:+.2f}"
                   f" n={r['holdout_n']}")
