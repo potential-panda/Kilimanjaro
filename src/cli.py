@@ -27,7 +27,7 @@ logging.basicConfig(
 
 
 def main() -> int:
-    from command import loop, populate, scan, verify
+    from command import generate, loop, populate, scan, verify
 
     parser = argparse.ArgumentParser(prog="cli", description="Kilimanjaro research CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -36,6 +36,7 @@ def main() -> int:
     verify.register(sub)
     scan.register(sub)
     loop.register(sub)
+    generate.register(sub)
 
     args = parser.parse_args()
     return args.func(args)
