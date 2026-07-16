@@ -38,13 +38,28 @@ _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 # else in a row (signal/return-calc params, schedule, status) is combo
 # identity, identical across windows.
 _STAT_FIELDS = [
-    "status", "n_trades", "n",
-    "avg_gross", "avg_net", "total_net_bps",
-    "hit_rate", "hit_rate_net", "std_bps", "sharpe_per_trade",
-    "t_stat", "p_value_1sided", "p_value_bootstrap",
-    "skewness", "ic",
-    "avg_hold_s", "median_hold_s", "median_gross", "p25_bps", "p75_bps",
-    "n_dd_blocked", "n_dd_triggers",
+    "status",
+    "n_trades",
+    "n",
+    "avg_gross",
+    "avg_net",
+    "total_net_bps",
+    "hit_rate",
+    "hit_rate_net",
+    "std_bps",
+    "sharpe_per_trade",
+    "t_stat",
+    "p_value_1sided",
+    "p_value_bootstrap",
+    "skewness",
+    "ic",
+    "avg_hold_s",
+    "median_hold_s",
+    "median_gross",
+    "p25_bps",
+    "p75_bps",
+    "n_dd_blocked",
+    "n_dd_triggers",
 ]
 
 
@@ -72,18 +87,22 @@ def default_split(start: str, end: str, train_fraction: float = 2 / 3) -> str:
     days = (d_end - d_start).days
     if days < 3:
         raise ValueError(f"range too short to split: {start}..{end}")
-    return (d_start + datetime.timedelta(days=max(1, round(days * train_fraction)))).isoformat()
+    return (
+        d_start + datetime.timedelta(days=max(1, round(days * train_fraction)))
+    ).isoformat()
 
 
 def _rank_pcts(rows: list[dict], prefix: str, rank_metric: str, min_n: int) -> None:
     """Add {prefix}rank_pct in-place: percentile of rank_metric among ranked
     rows (1.0 = best). Rows that are not ok or have n < min_n get NaN."""
+
     def _metric(r: dict) -> float:
         v = r.get(f"{prefix}{rank_metric}")
         return v if isinstance(v, (int, float)) else float("nan")
 
     ranked = [
-        r for r in rows
+        r
+        for r in rows
         if r.get(f"{prefix}status") == "ok"
         and (r.get(f"{prefix}n") or 0) >= min_n
         and _metric(r) == _metric(r)  # not NaN
@@ -155,11 +174,18 @@ def run_grid_split(
         def _progress(row: dict) -> None:
             if on_result:
                 on_result({**row, "window": label})
+
         return run_grid(
-            combos, target, w_start, w_end,
-            costs_bps=costs_bps, schedule=schedule, gates=gates,
+            combos,
+            target,
+            w_start,
+            w_end,
+            costs_bps=costs_bps,
+            schedule=schedule,
+            gates=gates,
             data_root=data_root,
-            on_data_loaded=data_hook, on_result=_progress,
+            on_data_loaded=data_hook,
+            on_result=_progress,
         )
 
     train_rows = _pass("train", train_start, train_end, on_data_loaded)
@@ -170,7 +196,8 @@ def run_grid_split(
     for tr, ho in zip(train_rows, holdout_rows):
         assert tr["_combo_id"] == ho["_combo_id"]
         row = {
-            k: v for k, v in tr.items()
+            k: v
+            for k, v in tr.items()
             if k not in _STAT_FIELDS and not k.startswith("_")
         }
         for f in _STAT_FIELDS:
@@ -180,18 +207,22 @@ def run_grid_split(
                 row[f"holdout_{f}"] = ho[f]
 
         identity = {
-            k: v for k, v in row.items()
+            k: v
+            for k, v in row.items()
             if not k.startswith(("train_", "holdout_")) and k != "n_combos_tested"
         }
         for window, src in (("train", tr), ("holdout", ho)):
             for month, (n, avg_net) in sorted(src.get("_monthly", {}).items()):
-                monthly_rows.append({
-                    **identity, "window": window, "month": month,
-                    "n": n, "avg_net": round(avg_net, 4),
-                })
-        row["train_pos_month_share"] = _pos_month_share(
-            tr.get("_monthly"), min_month_n
-        )
+                monthly_rows.append(
+                    {
+                        **identity,
+                        "window": window,
+                        "month": month,
+                        "n": n,
+                        "avg_net": round(avg_net, 4),
+                    }
+                )
+        row["train_pos_month_share"] = _pos_month_share(tr.get("_monthly"), min_month_n)
         row["holdout_pos_month_share"] = _pos_month_share(
             ho.get("_monthly"), min_month_n
         )
@@ -264,8 +295,11 @@ def _bh_significant(pvals: list[float | None], alpha: float) -> list[bool]:
     """
     import math
 
-    valid = [i for i, p in enumerate(pvals)
-             if p is not None and not (isinstance(p, float) and math.isnan(p))]
+    valid = [
+        i
+        for i, p in enumerate(pvals)
+        if p is not None and not (isinstance(p, float) and math.isnan(p))
+    ]
     flags = [False] * len(pvals)
     m = len(valid)
     if m == 0:
@@ -303,14 +337,22 @@ def _add_plateau(rows: list[dict]) -> None:
     neighbors (single-valued grid).
     """
     id_keys = [
-        k for k in rows[0]
+        k
+        for k in rows[0]
         if not k.startswith(("train_", "holdout_"))
         and k not in ("n_combos_tested", "stable", "verdict")
     ]
     numeric_keys = [
-        k for k in id_keys
-        if len({r[k] for r in rows if isinstance(r[k], (int, float))
-                and not isinstance(r[k], bool)}) > 1
+        k
+        for k in id_keys
+        if len(
+            {
+                r[k]
+                for r in rows
+                if isinstance(r[k], (int, float)) and not isinstance(r[k], bool)
+            }
+        )
+        > 1
     ]
 
     neighbors: dict[int, list[int]] = {i: [] for i in range(len(rows))}
@@ -329,14 +371,15 @@ def _add_plateau(rows: list[dict]) -> None:
                     neighbors[b].append(a)
 
     for i, r in enumerate(rows):
-        nb = [rows[j] for j in neighbors[i]
-              if isinstance(rows[j].get("train_avg_net"), (int, float))]
+        nb = [
+            rows[j]
+            for j in neighbors[i]
+            if isinstance(rows[j].get("train_avg_net"), (int, float))
+        ]
         if not nb:
             r["train_plateau"] = float("nan")
         else:
-            r["train_plateau"] = sum(
-                1 for x in nb if x["train_avg_net"] > 0
-            ) / len(nb)
+            r["train_plateau"] = sum(1 for x in nb if x["train_avg_net"] > 0) / len(nb)
 
 
 def _classify(r: dict, cutoff: float) -> str:

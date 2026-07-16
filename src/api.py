@@ -133,11 +133,13 @@ def api_scan_detail(kind: str, scan_id: str):
     if (folder / "params.json").is_file():
         params = json.loads((folder / "params.json").read_text())
     files = sorted(p.name for p in folder.glob("*.csv"))
-    return jsonify({
-        "summary": _scan_summary(kind, folder),
-        "params": params,
-        "files": files,
-    })
+    return jsonify(
+        {
+            "summary": _scan_summary(kind, folder),
+            "params": params,
+            "files": files,
+        }
+    )
 
 
 @app.route("/api/scans/<kind>/<scan_id>/file/<name>")
@@ -207,11 +209,13 @@ def api_hypothesis_detail(hyp_id: str):
     if spec is None:
         abort(404)
     events = _events_by_hypothesis().get(hyp_id, [])
-    return jsonify({
-        "summary": _hypothesis_summary(hyp_id, spec, events),
-        "spec": spec,
-        "events": events,
-    })
+    return jsonify(
+        {
+            "summary": _hypothesis_summary(hyp_id, spec, events),
+            "spec": spec,
+            "events": events,
+        }
+    )
 
 
 @app.route("/api/ledger")

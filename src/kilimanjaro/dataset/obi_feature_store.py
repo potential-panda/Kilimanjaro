@@ -78,16 +78,23 @@ _RAW_COLS = ["vol_imb_k1", "vol_imb_k3", "vol_imb_k5", "vol_imb_k10"]
 
 def _bs_glob(exchange: str, symbol: str, data_root: Path) -> str:
     return str(
-        data_root / "silver" / "dataset=BookState"
-        / f"exchange={exchange}" / f"symbol={symbol}"
-        / "date=*" / "*.parquet"
+        data_root
+        / "silver"
+        / "dataset=BookState"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+        / "date=*"
+        / "*.parquet"
     )
 
 
 def _out_dir(exchange: str, symbol: str, date: str, data_root: Path) -> Path:
     return (
-        data_root / "feature" / "dataset=OBIFeature"
-        / f"exchange={exchange}" / f"symbol={symbol}"
+        data_root
+        / "feature"
+        / "dataset=OBIFeature"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
         / f"date={date}"
     )
 
@@ -97,7 +104,6 @@ def _date_range(start_date: str, end_date: str) -> list[str]:
     end = datetime.date.fromisoformat(end_date)
     days = (end - start).days + 1
     return [(start + datetime.timedelta(days=i)).isoformat() for i in range(days)]
-
 
 
 def _resample_and_compute_emas(df: pd.DataFrame) -> pd.DataFrame:
@@ -170,10 +176,14 @@ def populate(
 
     LOG.info(
         "Loading BookState %s/%s from %s to %s (warmup from %s)…",
-        exchange, symbol, start_date, end_date, warmup_start,
+        exchange,
+        symbol,
+        start_date,
+        end_date,
+        warmup_start,
     )
     df = con.sql(f"""
-        SELECT ts, {', '.join(_RAW_COLS)}
+        SELECT ts, {", ".join(_RAW_COLS)}
         FROM read_parquet('{bs_glob}', hive_partitioning=true, union_by_name=true)
         WHERE date >= DATE '{warmup_start}' AND date <= DATE '{end_date}'
         ORDER BY ts
@@ -189,10 +199,9 @@ def populate(
 
     # Write per-day partitions (warmup day excluded)
     _JST = 9 * 3600
-    df["_date"] = (
-        pd.to_datetime((df["ts"] + _JST).astype("int64"), unit="s", utc=True)
-        .dt.date.astype(str)
-    )
+    df["_date"] = pd.to_datetime(
+        (df["ts"] + _JST).astype("int64"), unit="s", utc=True
+    ).dt.date.astype(str)
 
     written = 0
     for d in to_write:

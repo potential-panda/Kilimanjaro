@@ -30,9 +30,9 @@ _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 
 
 class TargetPrices(NamedTuple):
-    ts: np.ndarray    # float64, sorted ascending
-    bid: np.ndarray   # float64
-    ask: np.ndarray   # float64
+    ts: np.ndarray  # float64, sorted ascending
+    bid: np.ndarray  # float64
+    ask: np.ndarray  # float64
 
     @property
     def mid(self) -> np.ndarray:
@@ -45,13 +45,21 @@ class TargetPrices(NamedTuple):
         fill selection): the earliest tick at or after the signal moment.
         NaN `when` values map to len(ts) (= no match)."""
         when = np.asarray(when, dtype=np.float64)
-        idx = np.searchsorted(self.ts, np.where(np.isnan(when), np.inf, when), side="left")
+        idx = np.searchsorted(
+            self.ts, np.where(np.isnan(when), np.inf, when), side="left"
+        )
         return idx
 
 
 @lru_cache(maxsize=4)
-def _load(exchange: str, symbol: str, execution_size: str,
-          start_date: str, end_date: str, data_root: str) -> TargetPrices:
+def _load(
+    exchange: str,
+    symbol: str,
+    execution_size: str,
+    start_date: str,
+    end_date: str,
+    data_root: str,
+) -> TargetPrices:
     glob = mp_glob(exchange, symbol, execution_size, Path(data_root))
     con = duckdb.connect()
     try:

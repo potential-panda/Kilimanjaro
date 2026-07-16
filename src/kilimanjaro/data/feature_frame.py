@@ -40,21 +40,40 @@ _MP_FEATURES = {"mid", "spread_bps"}
 
 
 def _mp_glob(exchange: str, symbol: str, execution_size: str, data_root: Path) -> str:
-    return str(data_root / "silver" / "dataset=MarketPrice"
-               / f"exchange={exchange}" / f"symbol={symbol}"
-               / f"execution_size={execution_size}" / "date=*" / "*.parquet")
+    return str(
+        data_root
+        / "silver"
+        / "dataset=MarketPrice"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+        / f"execution_size={execution_size}"
+        / "date=*"
+        / "*.parquet"
+    )
 
 
 def _obi_glob(exchange: str, symbol: str, data_root: Path) -> str:
-    return str(data_root / "feature" / "dataset=OBIFeature"
-               / f"exchange={exchange}" / f"symbol={symbol}"
-               / "date=*" / "*.parquet")
+    return str(
+        data_root
+        / "feature"
+        / "dataset=OBIFeature"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+        / "date=*"
+        / "*.parquet"
+    )
 
 
 def _ta_glob(exchange: str, symbol: str, data_root: Path) -> str:
-    return str(data_root / "silver" / "dataset=TradeAggression"
-               / f"exchange={exchange}" / f"symbol={symbol}"
-               / "date=*" / "*.parquet")
+    return str(
+        data_root
+        / "silver"
+        / "dataset=TradeAggression"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+        / "date=*"
+        / "*.parquet"
+    )
 
 
 def _query(sql: str) -> pd.DataFrame:
@@ -190,8 +209,13 @@ def load_feature_frame(
     for alias, feats in per_alias.items():
         m = markets[alias]
         loaded[alias] = _load_market(
-            m["exchange"], m["symbol"], m.get("execution_size"),
-            feats, start, end, data_root,
+            m["exchange"],
+            m["symbol"],
+            m.get("execution_size"),
+            feats,
+            start,
+            end,
+            data_root,
         )
 
     grid_start = max(df.index.min() for df in loaded.values())
@@ -218,34 +242,72 @@ def available_features(
     """What features (and date coverage) does this market actually have?"""
     out: dict[str, dict] = {}
 
-    mp_root = data_root / "silver" / "dataset=MarketPrice" / f"exchange={exchange}" / f"symbol={symbol}"
+    mp_root = (
+        data_root
+        / "silver"
+        / "dataset=MarketPrice"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
     if mp_root.exists():
         for size_dir in sorted(mp_root.iterdir()):
-            dates = sorted(d.name[5:] for d in size_dir.iterdir() if d.name.startswith("date="))
+            dates = sorted(
+                d.name[5:] for d in size_dir.iterdir() if d.name.startswith("date=")
+            )
             if dates:
                 out[f"mid, spread_bps ({size_dir.name})"] = {
-                    "n_days": len(dates), "first": dates[0], "last": dates[-1]}
+                    "n_days": len(dates),
+                    "first": dates[0],
+                    "last": dates[-1],
+                }
 
-    obi_root = data_root / "feature" / "dataset=OBIFeature" / f"exchange={exchange}" / f"symbol={symbol}"
+    obi_root = (
+        data_root
+        / "feature"
+        / "dataset=OBIFeature"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
     if obi_root.exists():
-        dates = sorted(d.name[5:] for d in obi_root.iterdir() if d.name.startswith("date="))
+        dates = sorted(
+            d.name[5:] for d in obi_root.iterdir() if d.name.startswith("date=")
+        )
         if dates:
             sample = next((obi_root / f"date={dates[-1]}").glob("*.parquet"), None)
             cols = []
             if sample is not None:
                 import pyarrow.parquet as pq
+
                 names = pq.read_schema(sample).names
-                cols = [f"obi_k{n[len('vol_imb_k'):]}" for n in names if n.startswith("vol_imb_k")]
+                cols = [
+                    f"obi_k{n[len('vol_imb_k') :]}"
+                    for n in names
+                    if n.startswith("vol_imb_k")
+                ]
                 cols += [f"obi_{n}" for n in names if n.startswith("ema_k")]
             out["obi (OBIFeature)"] = {
-                "n_days": len(dates), "first": dates[0], "last": dates[-1],
-                "columns": cols}
+                "n_days": len(dates),
+                "first": dates[0],
+                "last": dates[-1],
+                "columns": cols,
+            }
 
-    ta_root = data_root / "silver" / "dataset=TradeAggression" / f"exchange={exchange}" / f"symbol={symbol}"
+    ta_root = (
+        data_root
+        / "silver"
+        / "dataset=TradeAggression"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
     if ta_root.exists():
-        dates = sorted(d.name[5:] for d in ta_root.iterdir() if d.name.startswith("date="))
+        dates = sorted(
+            d.name[5:] for d in ta_root.iterdir() if d.name.startswith("date=")
+        )
         if dates:
             out["ta_* (TradeAggression)"] = {
-                "n_days": len(dates), "first": dates[0], "last": dates[-1]}
+                "n_days": len(dates),
+                "first": dates[0],
+                "last": dates[-1],
+            }
 
     return out

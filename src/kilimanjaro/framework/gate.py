@@ -101,12 +101,14 @@ class RollingDrawdownGate:
                 gate_open = False
                 gate_reopen_ts = t_entry + self.cooldown_seconds
                 current_blocked = 1
-                triggers.append({
-                    "close_ts": t_entry,
-                    "reopen_ts": gate_reopen_ts,
-                    "window_sum_bps": window_sum,
-                    "n_blocked": 0,
-                })
+                triggers.append(
+                    {
+                        "close_ts": t_entry,
+                        "reopen_ts": gate_reopen_ts,
+                        "window_sum_bps": window_sum,
+                        "n_blocked": 0,
+                    }
+                )
                 continue
 
             r = pnl_arr[i]

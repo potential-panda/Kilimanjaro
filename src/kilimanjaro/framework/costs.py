@@ -42,8 +42,12 @@ def estimate_round_trip_cost_bps(
     price cache, so it is ~free when a scan is already loading those prices.
     """
     mp = load_target_prices(
-        target.exchange, target.symbol, target.execution_size,
-        start_date, end_date, data_root,
+        target.exchange,
+        target.symbol,
+        target.execution_size,
+        start_date,
+        end_date,
+        data_root,
     )
     mid = mp.mid
     good = mid > 0

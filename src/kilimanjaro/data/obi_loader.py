@@ -15,9 +15,13 @@ _VALID_HALFLIVES = frozenset([10, 30, 60, 120, 300])
 
 def _obi_glob(exchange: str, symbol: str, data_root: Path) -> str:
     return str(
-        data_root / "feature" / "dataset=OBIFeature"
-        / f"exchange={exchange}" / f"symbol={symbol}"
-        / "date=*" / "*.parquet"
+        data_root
+        / "feature"
+        / "dataset=OBIFeature"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+        / "date=*"
+        / "*.parquet"
     )
 
 

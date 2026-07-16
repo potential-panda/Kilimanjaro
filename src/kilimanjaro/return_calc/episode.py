@@ -63,7 +63,11 @@ class EpisodeReturn:
 
     @property
     def params(self) -> dict:
-        return {"max_hold_s": self.max_hold_seconds if self.max_hold_seconds is not None else -1}
+        return {
+            "max_hold_s": self.max_hold_seconds
+            if self.max_hold_seconds is not None
+            else -1
+        }
 
     def compute(
         self,
@@ -86,8 +90,12 @@ class EpisodeReturn:
                 "emits episodes (ExpressionSignal / OBIAgeSignal)."
             )
         mp = load_target_prices(
-            target.exchange, target.symbol, target.execution_size,
-            start_date, end_date, data_root,
+            target.exchange,
+            target.symbol,
+            target.execution_size,
+            start_date,
+            end_date,
+            data_root,
         )
         sig = signals.sort_values("ts", kind="stable")
 
@@ -122,19 +130,24 @@ class EpisodeReturn:
             has_exit, np.where(direction > 0, mp.bid[x], mp.ask[x]), np.nan
         )
 
-        trades = pd.DataFrame({
-            "ts": entry_ts,
-            "direction": direction,
-            "strength": strength,
-            "episode": episode,
-            "entry_exec_ts": entry_exec_ts,
-            "entry_price": entry_price,
-            "exit_ts": exit_ts,
-            "exit_exec_ts": exit_exec_ts,
-            "exit_price": exit_price,
-            "return_bps": direction * (exit_price - entry_price) / entry_price * 10000.0,
-            "holding_seconds": exit_exec_ts - entry_exec_ts,
-        })
+        trades = pd.DataFrame(
+            {
+                "ts": entry_ts,
+                "direction": direction,
+                "strength": strength,
+                "episode": episode,
+                "entry_exec_ts": entry_exec_ts,
+                "entry_price": entry_price,
+                "exit_ts": exit_ts,
+                "exit_exec_ts": exit_exec_ts,
+                "exit_price": exit_price,
+                "return_bps": direction
+                * (exit_price - entry_price)
+                / entry_price
+                * 10000.0,
+                "holding_seconds": exit_exec_ts - entry_exec_ts,
+            }
+        )
         # INNER on entry (no tick at/after start → drop); LEFT on exit (NaN → dropna at stats)
         trades = trades[has_entry].reset_index(drop=True)
 

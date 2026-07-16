@@ -19,6 +19,7 @@ import pandas as pd
 @dataclass(frozen=True)
 class MarketConfig:
     """Execution market used by ReturnCalc implementations."""
+
     exchange: str
     symbol: str
     execution_size: str
@@ -88,5 +89,4 @@ class ReturnCalc(Protocol):
         start_date: str,
         end_date: str,
         data_root: Path,
-    ) -> pd.DataFrame:
-        ...
+    ) -> pd.DataFrame: ...

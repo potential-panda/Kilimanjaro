@@ -11,6 +11,7 @@ import pandas as pd
 def _features_root() -> Path:
     import qate.env.sys_env as sys_env
     from qate.store.parquet_store import Layer, ParquetStore
+
     return ParquetStore(sys_env.PARQUET_ROOT_DIR).layer_dir[Layer.FEATURE]
 
 
@@ -22,10 +23,14 @@ def _flip_glob(
     features_root: Path,
 ) -> str:
     return str(
-        features_root / "dataset=ChartRangeSAR"
-        / f"exchange={exchange}" / f"symbol={symbol}"
-        / f"box_size_rate={box_size_rate}" / f"step={sar_step}"
-        / "date=*" / "*.parquet"
+        features_root
+        / "dataset=ChartRangeSAR"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+        / f"box_size_rate={box_size_rate}"
+        / f"step={sar_step}"
+        / "date=*"
+        / "*.parquet"
     )
 
 

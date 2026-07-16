@@ -40,8 +40,13 @@ from kilimanjaro.framework.stats import compute_stats
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 
 
-def _base_row(sig: SignalDef, rc: ReturnCalc, sched: ScheduleFilter | None,
-              combo_id: int, n_combos: int) -> dict:
+def _base_row(
+    sig: SignalDef,
+    rc: ReturnCalc,
+    sched: ScheduleFilter | None,
+    combo_id: int,
+    n_combos: int,
+) -> dict:
     row = {**sig.params, **rc.params}
     if sched is not None and sched.name:
         row["schedule"] = sched.name
@@ -124,8 +129,12 @@ def run_grid(
             data = sig0.load_data(start_date, end_date, data_root)
         except Exception as e:
             for _, combo_id, sig, rc, sched in group:
-                _emit({**_base_row(sig, rc, sched, combo_id, n_combos),
-                       "status": f"ERROR loading: {e}"})
+                _emit(
+                    {
+                        **_base_row(sig, rc, sched, combo_id, n_combos),
+                        "status": f"ERROR loading: {e}",
+                    }
+                )
             continue
 
         if on_data_loaded:
@@ -146,10 +155,13 @@ def run_grid(
 
                 for gate in gates or []:
                     trades, info = gate.apply(trades)
-                    base.update({
-                        k: v for k, v in info.items()
-                        if isinstance(v, (int, float, str))
-                    })
+                    base.update(
+                        {
+                            k: v
+                            for k, v in info.items()
+                            if isinstance(v, (int, float, str))
+                        }
+                    )
 
                 valid = trades.dropna(subset=["return_bps"])
 

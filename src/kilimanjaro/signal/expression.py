@@ -41,10 +41,28 @@ from kilimanjaro.op.series import OPS
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 
 _ALLOWED_NODES = (
-    ast.Expression, ast.Name, ast.Load, ast.Constant, ast.Call,
-    ast.BinOp, ast.UnaryOp, ast.Compare,
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.Mod, ast.USub, ast.UAdd,
-    ast.Gt, ast.GtE, ast.Lt, ast.LtE, ast.Eq, ast.NotEq,
+    ast.Expression,
+    ast.Name,
+    ast.Load,
+    ast.Constant,
+    ast.Call,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Compare,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Pow,
+    ast.Mod,
+    ast.USub,
+    ast.UAdd,
+    ast.Gt,
+    ast.GtE,
+    ast.Lt,
+    ast.LtE,
+    ast.Eq,
+    ast.NotEq,
 )
 
 
@@ -89,11 +107,14 @@ def eval_expr(expr: str, frame: pd.DataFrame) -> pd.Series:
     if missing:
         raise ValueError(f"expression needs columns missing from frame: {missing}")
     namespace = {**OPS, **{c: frame[c] for c in columns}}
-    return pd.Series(eval(  # noqa: S307 — AST-allowlisted above
-        compile(ast.parse(expr, mode="eval"), "<expr>", "eval"),
-        {"__builtins__": {}},
-        namespace,
-    ), index=frame.index)
+    return pd.Series(
+        eval(  # noqa: S307 — AST-allowlisted above
+            compile(ast.parse(expr, mode="eval"), "<expr>", "eval"),
+            {"__builtins__": {}},
+            namespace,
+        ),
+        index=frame.index,
+    )
 
 
 def _freeze_markets(markets: dict[str, dict]) -> tuple:
@@ -127,9 +148,16 @@ class ExpressionSignal:
     label: str | None = None
 
     @classmethod
-    def create(cls, markets: dict[str, dict], expr: str, threshold: float,
-               min_age: int | None = None, max_age: int | None = None,
-               invert: bool = False, label: str | None = None) -> "ExpressionSignal":
+    def create(
+        cls,
+        markets: dict[str, dict],
+        expr: str,
+        threshold: float,
+        min_age: int | None = None,
+        max_age: int | None = None,
+        invert: bool = False,
+        label: str | None = None,
+    ) -> "ExpressionSignal":
         validate_expr(expr)  # fail fast at construction
         return cls(
             markets_key=_freeze_markets(markets),
@@ -165,7 +193,9 @@ class ExpressionSignal:
             for alias, ex, sym, size in self.markets_key
         }
 
-    def load_data(self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT) -> pd.DataFrame:
+    def load_data(
+        self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT
+    ) -> pd.DataFrame:
         return load_feature_frame(
             self._markets(), self.columns, start, end, data_root=data_root
         )

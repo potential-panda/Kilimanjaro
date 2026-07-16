@@ -64,8 +64,12 @@ class BetweenSignalReturn:
                  jst_hour, jst_weekday, jst_date].
         """
         mp = load_target_prices(
-            target.exchange, target.symbol, target.execution_size,
-            start_date, end_date, data_root,
+            target.exchange,
+            target.symbol,
+            target.execution_size,
+            start_date,
+            end_date,
+            data_root,
         )
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
         direction = sig["direction"].values
@@ -87,18 +91,23 @@ class BetweenSignalReturn:
             has_exit, np.where(direction > 0, mp.bid[x], mp.ask[x]), np.nan
         )
 
-        trades = pd.DataFrame({
-            "ts": sig["ts"].values,
-            "direction": direction,
-            "strength": sig["strength"].values,
-            "exit_ts": sig["exit_ts"].values,
-            "entry_exec_ts": entry_exec_ts,
-            "entry_price": entry_price,
-            "exit_exec_ts": exit_exec_ts,
-            "exit_price": exit_price,
-            "return_bps": direction * (exit_price - entry_price) / entry_price * 10000.0,
-            "holding_seconds": exit_exec_ts - entry_exec_ts,
-        })
+        trades = pd.DataFrame(
+            {
+                "ts": sig["ts"].values,
+                "direction": direction,
+                "strength": sig["strength"].values,
+                "exit_ts": sig["exit_ts"].values,
+                "entry_exec_ts": entry_exec_ts,
+                "entry_price": entry_price,
+                "exit_exec_ts": exit_exec_ts,
+                "exit_price": exit_price,
+                "return_bps": direction
+                * (exit_price - entry_price)
+                / entry_price
+                * 10000.0,
+                "holding_seconds": exit_exec_ts - entry_exec_ts,
+            }
+        )
         # ASOF entry join was INNER: signals with no tick at/after ts drop out
         trades = trades[has_entry].reset_index(drop=True)
 

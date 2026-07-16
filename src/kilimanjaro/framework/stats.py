@@ -74,7 +74,9 @@ def block_bootstrap_pvalue(
     for chunk_start in range(0, n_boot, _BOOT_CHUNK):
         chunk = min(_BOOT_CHUNK, n_boot - chunk_start)
         starts = rng.integers(0, n, size=(chunk, n_blocks))
-        idx = (starts[:, :, None] + offsets[None, None, :]).reshape(chunk, -1)[:, :n] % n
+        idx = (starts[:, :, None] + offsets[None, None, :]).reshape(chunk, -1)[
+            :, :n
+        ] % n
         means = centered[idx].mean(axis=1)
         n_ge += int((means >= obs).sum())
 
@@ -106,18 +108,31 @@ def compute_stats(
 
     if n == 0:
         base: dict = {
-            "n": 0, "avg_gross": nan, "avg_net": nan,
-            "hit_rate": nan, "hit_rate_net": nan,
-            "std_bps": nan, "sharpe_per_trade": nan,
-            "t_stat": nan, "p_value_1sided": nan,
+            "n": 0,
+            "avg_gross": nan,
+            "avg_net": nan,
+            "hit_rate": nan,
+            "hit_rate_net": nan,
+            "std_bps": nan,
+            "sharpe_per_trade": nan,
+            "t_stat": nan,
+            "p_value_1sided": nan,
             "p_value_bootstrap": nan,
-            "skewness": nan, "total_net_bps": nan,
+            "skewness": nan,
+            "total_net_bps": nan,
         }
         if signal_strength is not None:
             base["ic"] = nan
         if holding_seconds is not None:
-            base.update({"avg_hold_s": nan, "median_hold_s": nan,
-                         "median_gross": nan, "p25_bps": nan, "p75_bps": nan})
+            base.update(
+                {
+                    "avg_hold_s": nan,
+                    "median_hold_s": nan,
+                    "median_gross": nan,
+                    "p25_bps": nan,
+                    "p75_bps": nan,
+                }
+            )
         return base
 
     net = returns - costs_bps
@@ -127,6 +142,7 @@ def compute_stats(
 
     if n > 1 and std_net > 0:
         from scipy import stats as _st
+
         t_stat = float(avg_net / (std_net / np.sqrt(n)))
         p_value = float(_st.t.sf(t_stat, df=n - 1))
         sharpe = avg_net / std_net

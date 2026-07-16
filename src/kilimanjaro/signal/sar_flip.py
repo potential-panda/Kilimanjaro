@@ -46,7 +46,9 @@ class SARFlipSignal:
     def cache_key(self) -> tuple:
         return (self.flip_exchange, self.flip_symbol, self.box_size_rate, self.sar_step)
 
-    def load_data(self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT) -> pd.DataFrame:
+    def load_data(
+        self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT
+    ) -> pd.DataFrame:
         """Load all flip events with LEAD-derived exit_ts."""
         return load_sar_flips(
             exchange=self.flip_exchange,

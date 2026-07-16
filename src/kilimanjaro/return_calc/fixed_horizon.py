@@ -50,8 +50,12 @@ class FixedHorizonReturn:
                  jst_hour, jst_weekday, jst_date].
         """
         mp = load_target_prices(
-            target.exchange, target.symbol, target.execution_size,
-            start_date, end_date, data_root,
+            target.exchange,
+            target.symbol,
+            target.execution_size,
+            start_date,
+            end_date,
+            data_root,
         )
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
         direction = sig["direction"].values
@@ -68,14 +72,16 @@ class FixedHorizonReturn:
         x = np.clip(exit_idx, 0, max(n_mp - 1, 0))
         exit_mid = np.where(has_exit, mid[x], np.nan)
 
-        trades = pd.DataFrame({
-            "ts": sig["ts"].values,
-            "direction": direction,
-            "strength": sig["strength"].values,
-            "entry_mid": entry_mid,
-            "exit_mid": exit_mid,
-            "return_bps": direction * (exit_mid - entry_mid) / entry_mid * 10000.0,
-        })
+        trades = pd.DataFrame(
+            {
+                "ts": sig["ts"].values,
+                "direction": direction,
+                "strength": sig["strength"].values,
+                "entry_mid": entry_mid,
+                "exit_mid": exit_mid,
+                "return_bps": direction * (exit_mid - entry_mid) / entry_mid * 10000.0,
+            }
+        )
         # entry join was INNER; exit stays LEFT (NaN return, dropped at stats)
         trades = trades[has_entry].reset_index(drop=True)
 

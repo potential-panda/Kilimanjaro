@@ -43,18 +43,20 @@ class OBIAgeSignal:
     @property
     def params(self) -> dict:
         return {
-            "depth":     self.depth,
-            "halflife":  self.halflife,
+            "depth": self.depth,
+            "halflife": self.halflife,
             "threshold": self.threshold,
-            "min_age":   self.min_age,
-            "max_age":   self.max_age,
+            "min_age": self.min_age,
+            "max_age": self.max_age,
         }
 
     @property
     def cache_key(self) -> tuple:
         return (self.signal_exchange, self.signal_symbol, self.depth, self.halflife)
 
-    def load_data(self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT) -> pd.DataFrame:
+    def load_data(
+        self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT
+    ) -> pd.DataFrame:
         """Load [ts, obi] series for this (depth, halflife). Shared across combos."""
         return load_obi_series(
             exchange=self.signal_exchange,
