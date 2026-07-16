@@ -1,0 +1,32 @@
+# Trade-aggression lead-lag screen: does BINANCE ETH_USDT aggressive order flow
+# predict GMO ETH_JPY price? First real use of the corrected TradeAggression
+# features (ta_* were 1000x-windowed garbage until 2026-07-15).
+#
+# Cheap screen: fixed_horizon mid-to-mid (is there ANY directional edge?), NOT
+# spread-aware yet. Survivors get an episode (bid/ask) re-test, like basis did.
+# All signals z-scored over 30min so one threshold scale fits every expression.
+# --no-ledger: exploratory; create a hypothesis only if something survives.
+markets:
+  a:
+    exchange: BINANCE
+    symbol: ETH_USDT
+    execution_size: '0.1'
+target:
+  exchange: GMO
+  symbol: ETH_JPY
+  execution_size: '0.3'
+expressions:
+- label: imb5_z          # short-window aggressive-volume imbalance, unusual vs 30min
+  expr: zscore(a_ta_imbalance_qty_5s, 1800)
+  invert: [false, true]  # follow (flow -> price) vs fade
+- label: imb30_z         # persistent imbalance
+  expr: zscore(a_ta_imbalance_qty_30s, 1800)
+  invert: [false, true]
+- label: netflow10_z     # signed aggressive volume (buy_qty - sell_qty)
+  expr: zscore(a_ta_net_flow_10s, 1800)
+  invert: [false, true]
+thresholds: [1.5, 2.5]
+age_windows:
+- [0, 60]     # fresh flow only — order-flow edge decays fast
+- [0, 300]
+horizons: [30, 120, 300]
