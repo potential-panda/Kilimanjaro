@@ -20,9 +20,19 @@ python src/cli.py populate chart-range-sar   # precompute SAR flip events
 python src/cli.py verify  chart-range-sar    # compare bars/SAR vs backtest InfluxDB BAR
 python src/cli.py scan                       # flip-anchored signal scan
 python src/cli.py verify-scan                # compare scan vs backtest ORDER + EVAL
+python src/cli.py loop --queue scan-specs/queue --start ... --end ...
+                                             # autonomous scanner loop (stages 1-4)
 ```
 
-Subcommand modules live in `src/command/` (populate.py, verify.py, scan.py).
+Subcommand modules live in `src/command/` (populate.py, verify.py, scan.py, loop.py).
+
+`loop` is the **driver** (Stage A of the 1-7 research loop): it walks a queue of
+scan-specs and runs each through validate → dedup → scan → verdict → ledger,
+drafting a `REVIEW_PACKET.md` for rank-stable survivors and parking them at the
+human gate (never auto-promotes). Idempotent — a spec whose (content, window)
+fingerprint is already in the ledger is skipped. Logic lives in
+`src/kilimanjaro/driver/` (the driver of the framework, not part of framework/core).
+See `doc/requirements/agent-loop-design.md` for the state machine.
 
 ## Key modules
 
@@ -31,6 +41,7 @@ Subcommand modules live in `src/command/` (populate.py, verify.py, scan.py).
 | `src/kilimanjaro/dataset/range_sar_store.py` | populate + verify ChartRangeSAR parquet store |
 | `src/kilimanjaro/scan/flip_sar.py` | `scan()` and `verify()` for flip-anchored SAR signals |
 | `src/kilimanjaro/framework/` | scan framework: `run_grid_split` (train/holdout + rank stability — the default way to run any grid), Gate protocol + RollingDrawdownGate, block-bootstrap p-value |
+| `src/kilimanjaro/driver/` | autonomous scanner loop (Stage A): `run_once`/`process_spec` drive validate→dedup→scan→verdict→ledger→review-packet over a queue; canonical `scan_runner.build_combos`. The driver of the framework, not core. |
 | `src/kilimanjaro/signal/expression.py` | `ExpressionSignal`: signals as AST-validated formulas over the feature frame |
 | `src/kilimanjaro/data/feature_frame.py` | multi-market 1s feature frame (mid/spread, OBI, TradeAggression) |
 | `src/kilimanjaro/data/price_cache.py` | per-window target-price cache — full-year flip grid runs in ~40s (was ~35min); keep return calcs on this, never per-combo parquet scans |

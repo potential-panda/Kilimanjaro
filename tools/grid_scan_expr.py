@@ -63,62 +63,10 @@ from kilimanjaro.framework import (
     run_grid_split,
     write_csv,
 )
-from kilimanjaro.return_calc.episode import EpisodeReturn
-from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
-from kilimanjaro.signal.expression import ExpressionSignal
-
-_CSV_FIELDS = [
-    "expr", "threshold", "min_age", "max_age", "invert", "horizon", "max_hold_s",
-    "train_n", "train_avg_gross", "train_avg_net", "train_hit_rate", "train_ic",
-    "train_avg_hold_s", "holdout_avg_hold_s",
-    "train_t_stat", "train_p_value_bootstrap", "train_total_net_bps", "train_rank_pct",
-    "holdout_n", "holdout_avg_gross", "holdout_avg_net", "holdout_hit_rate", "holdout_ic",
-    "holdout_t_stat", "holdout_p_value_bootstrap", "holdout_total_net_bps", "holdout_rank_pct",
-    "train_pos_month_share", "holdout_pos_month_share", "train_plateau",
-    "verdict", "stable", "n_combos_tested", "train_status", "holdout_status",
-]
-
-
-def _return_calcs(spec: dict) -> list:
-    """Build the ReturnCalc sweep from the spec.
-
-    return_calc: fixed_horizon (default) sweeps `horizons` (mid-to-mid look-ahead
-    from every active second). return_calc: episode sweeps `max_holds` (one
-    non-overlapping bid/ask trade per episode; see doc/overlapping-returns.md);
-    a null entry means hold to the natural episode end.
-    """
-    kind = spec.get("return_calc", "fixed_horizon")
-    if kind == "episode":
-        return [EpisodeReturn(max_hold_seconds=h) for h in spec.get("max_holds", [None])]
-    if kind == "fixed_horizon":
-        return [FixedHorizonReturn(horizon_seconds=h) for h in spec["horizons"]]
-    raise ValueError(f"unknown return_calc {kind!r} (want fixed_horizon or episode)")
-
-
-def build_combos(spec: dict) -> list[tuple]:
-    markets = spec["markets"]
-    thresholds = spec["thresholds"]
-    age_windows = spec.get("age_windows", [[None, None]])
-    return_calcs = _return_calcs(spec)
-
-    combos: list[tuple] = []
-    for e in spec["expressions"]:
-        inverts = e.get("invert", [False])
-        for invert in inverts:
-            for threshold in thresholds:
-                for (min_age, max_age) in age_windows:
-                    sig = ExpressionSignal.create(
-                        markets=markets,
-                        expr=e["expr"],
-                        threshold=threshold,
-                        min_age=min_age,
-                        max_age=max_age,
-                        invert=invert,
-                        label=e.get("label"),
-                    )
-                    for rc in return_calcs:
-                        combos.append((sig, rc))
-    return combos
+# build_combos + the CSV field list live in the driver's scan_runner, the
+# canonical spec -> scan path; this tool is a thin CLI over it.
+from kilimanjaro.driver.scan_runner import CSV_FIELDS as _CSV_FIELDS
+from kilimanjaro.driver.scan_runner import build_combos
 
 
 def _round_row(r: dict) -> dict:
