@@ -261,6 +261,16 @@ Reference documents for established baselines and design decisions:
   flip scan parameters (box=0.0025, step=0.02, rolling_dd gate only) with
   gate calibration rationale, validated results for XRP and ETH A–D variants,
   and the Oct-10-2025 chaos-event protection rationale.
+- [`doc/overlapping-returns.md`](doc/overlapping-returns.md) — why per-second
+  signals with overlapping-horizon returns inflate significance, the defenses
+  (block bootstrap, effective-n, episode sampling), and how an episode is
+  defined (`op/age.py::threshold_episode`).
+- [`doc/calibration.md`](doc/calibration.md) — calibrating the fast scan against
+  Himalaya: per-mechanism (not per-formula) verification, the acceptance bar that
+  scales with mechanism tightness, and the calibration-registry idea.
+- [`doc/lead-lag-2026-investigation.md`](doc/lead-lag-2026-investigation.md) —
+  the March-2026 OOS collapse root-cause: a MarketPrice data artifact from
+  degenerate book snapshots (not lead-lag decay) and the collector/pipeline fixes.
 
 ## First Slice Recommendation
 
