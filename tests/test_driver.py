@@ -27,24 +27,26 @@ _GOOD_SPEC = {
 }
 
 
-def _row(stable, **over):
+def _row(stable, mt=True, **over):
     r = {"expr": "imb", "threshold": 1.5, "invert": False, "min_age": 0, "max_age": 60,
          "horizon": 60, "train_avg_net": 1.2, "train_t_stat": 3.0, "holdout_avg_net": 1.1,
-         "holdout_t_stat": 2.5, "holdout_rank_pct": 0.95, "holdout_n": 500,
-         "train_pos_month_share": 0.8, "holdout_pos_month_share": 0.75, "verdict": "stable",
-         "stable": stable}
+         "holdout_t_stat": 2.5, "holdout_p_value_bootstrap": 0.01, "holdout_rank_pct": 0.95,
+         "holdout_n": 500, "train_pos_month_share": 0.8, "holdout_pos_month_share": 0.75,
+         "verdict": "stable", "stable": stable, "mt_significant": mt}
     r.update(over)
     return r
 
 
 def _fake_res(rows):
+    stable = [r for r in rows if r["stable"]]
     return {
-        "rows": rows, "stable": [r for r in rows if r["stable"]], "monthly_rows": [],
-        "verdict_counts": {"stable": sum(r["stable"] for r in rows),
-                           "noise": sum(not r["stable"] for r in rows)},
+        "rows": rows, "stable": stable, "monthly_rows": [],
+        "verdict_counts": {"stable": len(stable), "noise": len(rows) - len(stable)},
         "windows": {"train": ["2025-07-01", "2026-02-28"], "holdout": ["2026-03-01", "2026-06-30"]},
         "params": {"rank_metric": "t_stat", "top_quantile": 0.1, "min_n": 30,
-                   "min_month_n": 10, "n_combos": len(rows), "costs_bps": 1.0, "gates": []},
+                   "min_month_n": 10, "mt_alpha": 0.1,
+                   "n_mt_significant": sum(r["mt_significant"] for r in rows),
+                   "n_combos": len(rows), "costs_bps": 6.5, "gates": []},
     }
 
 
@@ -74,16 +76,24 @@ class TestValidate(unittest.TestCase):
 
 
 class TestPolicy(unittest.TestCase):
-    def test_passes_with_a_stable_combo(self):
-        out = evaluate(_fake_res([_row(True), _row(False)]))
+    def test_passes_with_a_confirmed_survivor(self):
+        out = evaluate(_fake_res([_row(True, mt=True), _row(False)]))
         self.assertTrue(out.passed)
         self.assertEqual(out.status, "scan-passed")
-        self.assertEqual(out.n_stable, 1)
+        self.assertEqual(out.n_survivors, 1)
 
     def test_fails_with_no_stable(self):
         out = evaluate(_fake_res([_row(False), _row(False)]))
         self.assertFalse(out.passed)
         self.assertEqual(out.status, "scan-failed")
+
+    def test_stable_but_fdr_dropped_fails(self):
+        # rank-stable but did not clear multiple-testing -> not a survivor
+        out = evaluate(_fake_res([_row(True, mt=False)]))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.status, "scan-failed")
+        self.assertEqual(out.n_stable, 1)
+        self.assertEqual(out.n_survivors, 0)
 
 
 class TestProcessSpec(unittest.TestCase):

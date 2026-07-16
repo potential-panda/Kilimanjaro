@@ -147,8 +147,16 @@ def main() -> None:
         else:
             print(f"[{w:7s} {done[w]:4d}/{len(combos)}] {label} → {row['status']}", flush=True)
 
+    # Gap 1: charge the real round-trip target spread (spec may override).
+    from kilimanjaro.framework.costs import estimate_round_trip_cost_bps
+    costs_bps = spec.get("costs_bps")
+    if costs_bps is None:
+        costs_bps = estimate_round_trip_cost_bps(target, args.start, args.end)
+    print(f"Cost: {costs_bps:.2f} bps round-trip (target spread)")
+
     res = run_grid_split(
         combos, target, args.start, split, args.end,
+        costs_bps=costs_bps,
         schedule=schedule,
         rank_metric=args.rank_metric,
         top_quantile=args.top_quantile,

@@ -87,7 +87,8 @@ def process_spec(
         if outcome.passed:
             packet = write_review_packet(spec, res, outcome, out_dir, s, e, fp)
         return {**base, "status": outcome.status, "headline": outcome.headline,
-                "n_stable": outcome.n_stable, "scan_folder": str(out_dir),
+                "n_stable": outcome.n_stable, "n_survivors": outcome.n_survivors,
+                "scan_folder": str(out_dir),
                 "review_packet": str(packet) if packet else None}
     except Exception as ex:  # noqa: BLE001 — one bad spec must not stop the loop
         LOG.exception("scan failed for %s (%s)", scan_name, hyp)

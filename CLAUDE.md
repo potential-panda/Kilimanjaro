@@ -83,6 +83,18 @@ The scan is **not** expected to be a 100% replica of the backtest. The goal is
 to confirm the scan reflects the **same signal direction and magnitude trend**
 as the backtest, so it can be used to generate entry signals for live trading.
 
+**Calibrate per mechanism, not per formula** (full write-up: `doc/calibration.md`).
+The formula is only an entry trigger; scan↔Himalaya fidelity lives in the
+*mechanism* = entry style + return calc + execution model. Verify a mechanism
+once (a few param sets, varied entry conditions), and every formula using it
+inherits the trust — a handful of calibrations, not one per idea. The acceptance
+bar scales with tightness: a close mirror (flip + between-signal) demands
+near-exact agreement; a looser mechanism (episode) demands only direction +
+magnitude-order + param-ranking agreement. Calibration bounds model risk, not
+eliminates it — re-check when the mechanism or simulator changes; own the rest.
+Currently only flip + between-signal is calibrated (ETH). Expression +
+fixed-horizon and expression + episode are **trend-only** until verified.
+
 Known structural differences (not bugs):
 
 | difference | reason |

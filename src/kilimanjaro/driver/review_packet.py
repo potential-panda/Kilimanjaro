@@ -20,21 +20,22 @@ def _fmt(v, nd=3):
         return str(v)
 
 
-def _survivor_table(stable: list[dict]) -> str:
-    if not stable:
+def _survivor_table(rows: list[dict]) -> str:
+    if not rows:
         return "_none_\n"
     cols = ["expr", "threshold", "invert", "min_age", "max_age", "horizon", "max_hold_s"]
     head = "| " + " | ".join(cols + [
-        "train_net", "train_t", "holdout_net", "holdout_t", "holdout_n",
-        "train_pos_mo", "holdout_pos_mo", "verdict"]) + " |\n"
+        "train_net", "train_t", "holdout_net", "holdout_t", "holdout_p_boot",
+        "holdout_n", "holdout_pos_mo", "verdict"]) + " |\n"
     sep = "|" + "---|" * (len(cols) + 8) + "\n"
     body = ""
-    for r in stable:
+    for r in rows:
         params = " | ".join(str(r.get(c, "")) for c in cols)
         body += (f"| {params} | {_fmt(r.get('train_avg_net'))} | {_fmt(r.get('train_t_stat'),2)}"
                  f" | {_fmt(r.get('holdout_avg_net'))} | {_fmt(r.get('holdout_t_stat'),2)}"
-                 f" | {r.get('holdout_n')} | {r.get('train_pos_month_share')}"
-                 f" | {r.get('holdout_pos_month_share')} | {r.get('verdict')} |\n")
+                 f" | {_fmt(r.get('holdout_p_value_bootstrap'),4)}"
+                 f" | {r.get('holdout_n')} | {r.get('holdout_pos_month_share')}"
+                 f" | {r.get('verdict')} |\n")
     return head + sep + body
 
 
@@ -46,12 +47,16 @@ def _yellow_flags(res: dict, outcome: Outcome) -> list[str]:
                      "— edge may be regime-specific.")
     if counts.get("decayed"):
         flags.append(f"{counts['decayed']} decayed combos — watch for OOS erosion.")
+    dropped = outcome.n_stable - outcome.n_survivors
+    if dropped:
+        flags.append(f"{dropped} rank-stable combo(s) were dropped by the FDR correction "
+                     "— they did not clear multiple-testing.")
     best = outcome.best or {}
     hm = best.get("holdout_pos_month_share")
     if isinstance(hm, (int, float)) and hm < 0.6:
-        flags.append(f"best combo holdout monthly consistency low (pos_month_share={hm}).")
-    if outcome.n_stable == 1:
-        flags.append("only one rank-stable combo — thin plateau, confirm it is not a fluke.")
+        flags.append(f"best survivor holdout monthly consistency low (pos_month_share={hm}).")
+    if outcome.n_survivors == 1:
+        flags.append("only one confirmed survivor — thin plateau, confirm it is not a fluke.")
     return flags
 
 
@@ -66,6 +71,8 @@ def write_review_packet(
     exprs = "\n".join(f"  - `{e.get('label', e['expr'])}`: `{e['expr']}` "
                       f"invert={e.get('invert', [False])}" for e in spec["expressions"])
     flags = _yellow_flags(res, outcome)
+    survivors = [r for r in (res.get("stable") or []) if r.get("mt_significant")]
+    p = res["params"]
 
     md = f"""# Review packet — {hyp} (scan-passed)
 
@@ -83,8 +90,10 @@ This is a scan survivor, NOT an approval — promotion is your call.
 ## Scan
 - window: train/holdout split of {start} .. {end}  (windows: {res['windows']})
 - combos tested: {outcome.n_combos}
-- selection: rank stability, top {res['params']['top_quantile']:.0%} of both windows,
-  min_n={res['params']['min_n']}, costs={res['params']['costs_bps']} bps
+- selection: rank stability (top {p['top_quantile']:.0%} of both windows, min_n={p['min_n']})
+  AND Benjamini-Hochberg FDR at alpha={p.get('mt_alpha')} on holdout bootstrap p
+- cost charged: **{p['costs_bps']:.2f} bps** round-trip (target spread, mid-to-mid screen)
+- rank-stable: {outcome.n_stable} | confirmed after FDR: {outcome.n_survivors}
 - verdict mix: {outcome.verdicts}
 - fingerprint: `{fingerprint}`
 - scan folder: `{out_dir}`
@@ -92,8 +101,8 @@ This is a scan survivor, NOT an approval — promotion is your call.
 ## Result
 **{outcome.headline}**
 
-### Rank-stable survivors
-{_survivor_table(res.get('stable') or [])}
+### Confirmed survivors (rank-stable AND FDR-significant)
+{_survivor_table(survivors)}
 
 ## Yellow flags
 {chr(10).join('- ' + f for f in flags) if flags else '- none'}

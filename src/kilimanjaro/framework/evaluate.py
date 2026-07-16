@@ -110,6 +110,7 @@ def run_grid_split(
     top_quantile: float = 0.10,
     min_n: int = 30,
     min_month_n: int = 10,
+    mt_alpha: float = 0.10,
     on_data_loaded: Callable[[tuple, Any], None] | None = None,
     on_result: Callable[[dict], None] | None = None,
 ) -> dict:
@@ -210,6 +211,19 @@ def run_grid_split(
         )
         r["verdict"] = _classify(r, cutoff)
 
+    # Multiple-testing control (Gap 2): with many combos, some clear rank
+    # stability by luck. Benjamini-Hochberg on the holdout bootstrap p-values
+    # controls the false-discovery rate across all combos tested, so the bar
+    # tightens automatically as the grid grows. `stable` stays the rank-based
+    # consistency flag; `mt_significant` is the FDR-survivor flag; a trustworthy
+    # survivor is both (the driver's policy requires both).
+    mt_flags = _bh_significant(
+        [r.get("holdout_p_value_bootstrap") for r in merged], mt_alpha
+    )
+    for r, sig in zip(merged, mt_flags):
+        r["mt_significant"] = bool(sig)
+    n_mt_significant = sum(mt_flags)
+
     stable = sorted(
         (r for r in merged if r["stable"]),
         key=lambda r: -r["holdout_rank_pct"],
@@ -232,11 +246,40 @@ def run_grid_split(
             "top_quantile": top_quantile,
             "min_n": min_n,
             "min_month_n": min_month_n,
+            "mt_alpha": mt_alpha,
+            "n_mt_significant": n_mt_significant,
             "n_combos": len(combos),
             "costs_bps": costs_bps,
             "gates": [g.params for g in gates or []],
         },
     }
+
+
+def _bh_significant(pvals: list[float | None], alpha: float) -> list[bool]:
+    """Benjamini-Hochberg FDR: which one-sided p-values are discoveries at `alpha`.
+
+    Controls the expected false-discovery rate across the whole family of combos.
+    NaN/None p-values (too few trades to test) are excluded from the family and
+    never flagged. Returns a boolean per input position.
+    """
+    import math
+
+    valid = [i for i, p in enumerate(pvals)
+             if p is not None and not (isinstance(p, float) and math.isnan(p))]
+    flags = [False] * len(pvals)
+    m = len(valid)
+    if m == 0:
+        return flags
+    order = sorted(valid, key=lambda i: pvals[i])
+    thresh = None
+    for rank, i in enumerate(order, start=1):
+        if pvals[i] <= (rank / m) * alpha:
+            thresh = pvals[i]  # largest p that still passes the BH line
+    if thresh is not None:
+        for i in valid:
+            if pvals[i] <= thresh:
+                flags[i] = True
+    return flags
 
 
 def _pos_month_share(monthly: dict | None, min_month_n: int) -> float:
