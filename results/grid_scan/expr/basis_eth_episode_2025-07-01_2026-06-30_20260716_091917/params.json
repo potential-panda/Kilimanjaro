@@ -1,0 +1,77 @@
+{
+  "scan_id": "basis_eth_episode_2025-07-01_2026-06-30_20260716_091917",
+  "spec_file": "scan-specs/basis_eth_episode.yaml",
+  "spec": {
+    "hypothesis_id": "hyp-20260714-002",
+    "return_calc": "episode",
+    "markets": {
+      "a": {
+        "exchange": "BINANCE",
+        "symbol": "ETH_USDT",
+        "execution_size": "0.1"
+      },
+      "b": {
+        "exchange": "GMO",
+        "symbol": "ETH_JPY",
+        "execution_size": "0.1"
+      }
+    },
+    "target": {
+      "exchange": "GMO",
+      "symbol": "ETH_JPY",
+      "execution_size": "0.3"
+    },
+    "expressions": [
+      {
+        "label": "basis_z_15m",
+        "expr": "zscore(a_mid / b_mid, 900)",
+        "invert": [
+          false,
+          true
+        ]
+      },
+      {
+        "label": "basis_z_1h",
+        "expr": "zscore(a_mid / b_mid, 3600)",
+        "invert": [
+          false,
+          true
+        ]
+      }
+    ],
+    "thresholds": [
+      1.5,
+      2.5
+    ],
+    "age_windows": [
+      [
+        null,
+        null
+      ]
+    ],
+    "max_holds": [
+      300,
+      900,
+      null
+    ]
+  },
+  "start": "2025-07-01",
+  "end": "2026-06-30",
+  "windows": {
+    "train": [
+      "2025-07-01",
+      "2026-02-28"
+    ],
+    "holdout": [
+      "2026-03-01",
+      "2026-06-30"
+    ]
+  },
+  "rank_metric": "t_stat",
+  "top_quantile": 0.1,
+  "min_n": 30,
+  "min_month_n": 10,
+  "n_combos": 24,
+  "costs_bps": 1.0,
+  "gates": []
+}
