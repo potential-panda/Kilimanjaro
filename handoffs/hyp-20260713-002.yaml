@@ -1,9 +1,8 @@
 handoff:
   hypothesis_id: hyp-20260713-002
-  # DRAFT prepared ahead of approval at lulurun's request (2026-07-14).
-  # Per handoffs/README.md this becomes active only once a human_approval
-  # event moves hyp-20260713-002 to backtest-approved; set the event id here.
-  ledger_approval_event_id: null
+  # ACTIVE — lulurun approved 2026-07-16 (evt-20260716-002, human_approval,
+  # draft -> backtest-approved). Ready to run in Himalaya per himalaya_run_config.
+  ledger_approval_event_id: evt-20260716-002
   intended_strategy_family: Range-bar SAR between-flip execution, fixed params
   description: >
     Single frozen parameter set — the sole rank-stable survivor of the
