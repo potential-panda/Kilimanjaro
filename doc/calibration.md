@@ -27,9 +27,10 @@ that needs a scan-vs-Himalaya check is the **mechanism**, not the signal:
 CLAUDE.md): all mechanisms execute at bid/ask, so the spread is already inside
 the return, and the only added cost is the flat round-trip latency slippage
 (`ROUND_TRIP_COST_BPS = 1.0`). Never estimate/add a spread cost on top — it
-double-counts. The flat cost is a *mean*; slippage *variance* is not modelled,
-so the screen's drawdown depth is optimistic and Himalaya stays the drawdown
-authority.
+double-counts. The 0.5 bps/order is the **realized 1-year average** (volatile
+spikes included), and **Himalaya applies the same flat 0.5 bps/order** — so the
+scan and Himalaya share one cost model by design, which is what lets the scan
+reproduce Himalaya closely rather than diverge on cost.
 
 Calibrate a mechanism once, on a few param sets, and **every formula using that
 mechanism inherits the trust** — you never re-verify per formula. That is what

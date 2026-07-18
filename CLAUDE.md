@@ -89,13 +89,19 @@ Fixed policy for **every** scan — see `src/kilimanjaro/framework/costs.py`:
    of a bid/ask fill double-counts it. (There is no `estimate_round_trip_cost_bps`
    anymore — it was removed for this reason.)
 3. **The only added cost is latency slippage: `ROUND_TRIP_COST_BPS = 1.0`**
-   (0.5 bps/order × 2 orders per round-trip), from production experience of the
-   ~100 ms exchange-API round-trip. This is the single `costs_bps` knob and the
-   default in `run_grid` / `run_grid_split`.
+   (0.5 bps/order × 2 orders per round-trip). The 0.5 bps/order is the **realized
+   average from a full year of real trading** — volatile-window spikes are
+   already inside that average, so it is not an under-estimate. This is the
+   single `costs_bps` knob and the default in `run_grid` / `run_grid_split`.
 
-This is a *mean* slippage estimate; it does not model slippage *variance* (which
-spikes in volatile windows and deepens realized drawdowns), so screen drawdowns
-run shallower than Himalaya's — trust the backtest for drawdown depth.
+**This deliberately matches Himalaya**, which applies the same flat 0.5 bps/order
+on top of bid/ask execution. Same execution price source (bid/ask right after the
+signal) + same flat cost ⇒ the scan is designed to reproduce Himalaya closely.
+
+Trust hierarchy: the **scan** aims to be ~95% of real; **Himalaya** is ~99% (it
+runs the same codebase as live trading) and is the **final examination of
+survivors** — the last line before a promotion decision. The scan filters
+cheaply and honestly; Himalaya confirms the few that pass.
 
 ## Verification philosophy
 

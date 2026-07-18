@@ -54,9 +54,9 @@ exactly "how much return do I get per unit of drawdown pain I must endure."
 
 Cost policy (framework/costs.py): the per-trade returns fed here are already
 bid/ask (spread paid) and net of the flat round-trip latency slippage. Do not
-re-charge spread or cost inside these metrics. The flat cost captures mean
-slippage, not its variance — so screen drawdowns run shallower than the
-simulator's; the Himalaya backtest remains the drawdown authority.
+re-charge spread or cost inside these metrics. The 0.5 bps/order is the realized
+1-year average (spikes included) and matches the flat cost Himalaya applies, so
+these path metrics are meant to track Himalaya's curve — not sit below it.
 """
 
 from __future__ import annotations
