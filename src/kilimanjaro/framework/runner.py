@@ -35,6 +35,7 @@ import pandas as pd
 from kilimanjaro.framework.gate import Gate
 from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
 from kilimanjaro.framework.schedule import ScheduleFilter
+from kilimanjaro.framework.performance import compute_path_metrics
 from kilimanjaro.framework.stats import compute_stats
 
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
@@ -172,7 +173,13 @@ def run_grid(
                     stat_kwargs["holding_seconds"] = valid["holding_seconds"]
 
                 stats = compute_stats(valid["return_bps"], costs_bps, **stat_kwargs)
-                row = {**base, "n_trades": len(trades), **stats, "status": "ok"}
+                # Path/drawdown metrics on the net-return equity curve — the
+                # trade-distribution stats above are path-blind (see performance.py).
+                path = compute_path_metrics(
+                    valid["return_bps"].to_numpy() - costs_bps,
+                    valid["ts"].to_numpy(),
+                )
+                row = {**base, "n_trades": len(trades), **stats, **path, "status": "ok"}
 
                 # Per-month sub-stats from the trades already in memory —
                 # this is what makes decay/regime classification ~free

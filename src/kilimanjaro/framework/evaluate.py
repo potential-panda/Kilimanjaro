@@ -62,6 +62,13 @@ _STAT_FIELDS = [
     "n_dd_triggers",
 ]
 
+# Path/drawdown metrics (performance.py) differ per window, so they must be
+# split into train_/holdout_ like the trade stats — not treated as combo
+# identity. Appended (deduped) so the source of truth stays performance.py.
+from kilimanjaro.framework.performance import PATH_FIELDS as _PATH_FIELDS
+
+_STAT_FIELDS += [f for f in _PATH_FIELDS if f not in _STAT_FIELDS]
+
 
 def split_windows(start: str, split: str, end: str) -> tuple[str, str, str, str]:
     """Return (train_start, train_end, holdout_start, holdout_end).
