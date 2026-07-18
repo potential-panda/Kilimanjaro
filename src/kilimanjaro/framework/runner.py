@@ -32,10 +32,11 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.gate import Gate
+from kilimanjaro.framework.performance import compute_path_metrics
 from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
 from kilimanjaro.framework.schedule import ScheduleFilter
-from kilimanjaro.framework.performance import compute_path_metrics
 from kilimanjaro.framework.stats import compute_stats
 
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
@@ -61,7 +62,7 @@ def run_grid(
     target: MarketConfig,
     start_date: str,
     end_date: str,
-    costs_bps: float = 1.0,
+    costs_bps: float = ROUND_TRIP_COST_BPS,
     schedule: ScheduleFilter | None = None,
     gates: list[Gate] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,

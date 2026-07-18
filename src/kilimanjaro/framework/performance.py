@@ -51,6 +51,12 @@ Ratios (calmar/martin/recovery/sharpe/sortino) are self-normalizing, so they are
 the right fields to *rank* on; the raw bps drawdowns are diagnostics that scale
 with trade frequency. `martin` is the recommended default rank metric — it is
 exactly "how much return do I get per unit of drawdown pain I must endure."
+
+Cost policy (framework/costs.py): the per-trade returns fed here are already
+bid/ask (spread paid) and net of the flat round-trip latency slippage. Do not
+re-charge spread or cost inside these metrics. The flat cost captures mean
+slippage, not its variance — so screen drawdowns run shallower than the
+simulator's; the Himalaya backtest remains the drawdown authority.
 """
 
 from __future__ import annotations

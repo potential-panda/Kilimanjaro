@@ -99,19 +99,23 @@ class TestFixedHorizonReturn(unittest.TestCase):
             return FixedHorizonReturn(horizon_seconds=horizon).compute(
                 _signals(rows), TARGET, "2026-01-01", "2026-01-02")
 
-    def test_mid_to_mid_at_horizon(self):
+    def test_buy_ask_to_bid_at_horizon(self):
+        # bid/ask execution (spread paid): BUY enters ask, exits bid
         out = self._compute(
             [{"ts": 12.0, "direction": 1.0, "strength": 0.5}], horizon=15)
         r = out.iloc[0]
-        self.assertEqual(r["entry_mid"], 110.0)      # first tick >= 12 → ts=20
-        self.assertEqual(r["exit_mid"], 120.0)       # first tick >= 27 → ts=30
-        self.assertAlmostEqual(r["return_bps"], (120 - 110) / 110 * 1e4)
+        self.assertEqual(r["entry_price"], 111.0)    # first tick >= 12 → ts=20, ask
+        self.assertEqual(r["exit_price"], 119.0)     # first tick >= 27 → ts=30, bid
+        self.assertAlmostEqual(r["return_bps"], (119 - 111) / 111 * 1e4)
 
-    def test_direction_signs_return(self):
-        up = self._compute([{"ts": 12.0, "direction": 1.0, "strength": 1.0}], 15)
+    def test_sell_bid_to_ask(self):
+        # SELL enters bid, exits ask — spread costs it in the opposite direction,
+        # so it is NOT the exact negative of the BUY (that is the point of bid/ask)
         dn = self._compute([{"ts": 12.0, "direction": -1.0, "strength": -1.0}], 15)
-        self.assertAlmostEqual(
-            up.iloc[0]["return_bps"], -dn.iloc[0]["return_bps"])
+        r = dn.iloc[0]
+        self.assertEqual(r["entry_price"], 109.0)    # SELL → bid at ts=20
+        self.assertEqual(r["exit_price"], 121.0)     # SELL → ask at ts=30
+        self.assertAlmostEqual(r["return_bps"], -1 * (121 - 109) / 109 * 1e4)
 
     def test_horizon_beyond_data_nan(self):
         out = self._compute([{"ts": 35.0, "direction": 1.0, "strength": 1.0}], 100)

@@ -19,6 +19,11 @@ Rank stability replaces p-value filtering as the selection criterion: a real
 edge should be near the top on data it has never seen, not merely significant
 on the data that selected it. p-values (including the block-bootstrap one)
 remain in the output as evidence, not as the gate.
+
+Cost policy (framework/costs.py): every combo's returns are bid/ask (spread
+already paid) and net of the flat round-trip latency slippage
+(ROUND_TRIP_COST_BPS, the default `costs_bps` here). We never estimate or add a
+separate spread cost — that would double-count.
 """
 
 from __future__ import annotations
@@ -27,7 +32,13 @@ import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.gate import Gate
+
+# Path/drawdown metrics (performance.py) differ per window, so they must be
+# split into train_/holdout_ like the trade stats — not treated as combo
+# identity. Appended (deduped) so the source of truth stays performance.py.
+from kilimanjaro.framework.performance import PATH_FIELDS as _PATH_FIELDS
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.runner import run_grid
 from kilimanjaro.framework.schedule import ScheduleFilter
@@ -61,11 +72,6 @@ _STAT_FIELDS = [
     "n_dd_blocked",
     "n_dd_triggers",
 ]
-
-# Path/drawdown metrics (performance.py) differ per window, so they must be
-# split into train_/holdout_ like the trade stats — not treated as combo
-# identity. Appended (deduped) so the source of truth stays performance.py.
-from kilimanjaro.framework.performance import PATH_FIELDS as _PATH_FIELDS
 
 _STAT_FIELDS += [f for f in _PATH_FIELDS if f not in _STAT_FIELDS]
 
@@ -128,7 +134,7 @@ def run_grid_split(
     start_date: str,
     split_date: str,
     end_date: str,
-    costs_bps: float = 1.0,
+    costs_bps: float = ROUND_TRIP_COST_BPS,
     schedule: ScheduleFilter | None = None,
     gates: list[Gate] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,

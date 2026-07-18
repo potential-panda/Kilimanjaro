@@ -77,6 +77,26 @@ across the train/holdout split, never in-sample p-values.
 SAR state converges before the target window — backtest runs from Jan 1, cold
 start without warmup diverges ~2% of bars.
 
+## Execution cost policy (base rule)
+
+Fixed policy for **every** scan — see `src/kilimanjaro/framework/costs.py`:
+
+1. **Scans execute at the actual bid/ask, never mid.** Every return calc
+   (`BetweenSignalReturn`, `EpisodeReturn`, `FixedHorizonReturn`) enters at the
+   aggressive side (ask for BUY, bid for SELL) and exits at the passive side.
+   The **bid-ask spread is therefore already paid inside every scan return.**
+2. **Do NOT estimate or add a separate spread cost.** Charging the spread on top
+   of a bid/ask fill double-counts it. (There is no `estimate_round_trip_cost_bps`
+   anymore — it was removed for this reason.)
+3. **The only added cost is latency slippage: `ROUND_TRIP_COST_BPS = 1.0`**
+   (0.5 bps/order × 2 orders per round-trip), from production experience of the
+   ~100 ms exchange-API round-trip. This is the single `costs_bps` knob and the
+   default in `run_grid` / `run_grid_split`.
+
+This is a *mean* slippage estimate; it does not model slippage *variance* (which
+spikes in volatile windows and deepens realized drawdowns), so screen drawdowns
+run shallower than Himalaya's — trust the backtest for drawdown depth.
+
 ## Verification philosophy
 
 The scan is **not** expected to be a 100% replica of the backtest. The goal is

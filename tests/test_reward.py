@@ -1,22 +1,19 @@
-"""Reward-function hardening: Gap 1 (real spread cost) and Gap 2 (multiple-
-testing / Benjamini-Hochberg FDR). Pure unit tests, no data."""
+"""Reward-function hardening: cost policy (flat round-trip latency slippage,
+bid/ask returns) and Gap 2 (multiple-testing / Benjamini-Hochberg FDR).
+Pure unit tests, no data."""
 
-import math
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
-
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.data.price_cache import TargetPrices  # noqa: E402
-from kilimanjaro.framework.costs import estimate_round_trip_cost_bps  # noqa: E402
+from kilimanjaro.framework.costs import (  # noqa: E402
+    PER_ORDER_SLIPPAGE_BPS,
+    ROUND_TRIP_COST_BPS,
+    round_trip_cost_bps,
+)
 from kilimanjaro.framework.evaluate import _bh_significant  # noqa: E402
-from kilimanjaro.framework.protocol import MarketConfig  # noqa: E402
-
-TARGET = MarketConfig("GMO", "ETH_JPY", "0.3")
 
 
 class TestBenjaminiHochberg(unittest.TestCase):
@@ -47,28 +44,23 @@ class TestBenjaminiHochberg(unittest.TestCase):
         self.assertEqual(_bh_significant([None, float("nan")], 0.10), [False, False])
 
 
-class TestSpreadCost(unittest.TestCase):
-    def _prices(self, bids, asks):
-        return TargetPrices(ts=np.arange(len(bids), dtype=float),
-                            bid=np.array(bids, dtype=float), ask=np.array(asks, dtype=float))
+class TestCostPolicy(unittest.TestCase):
+    """The base cost policy: bid/ask returns already pay the spread, so the only
+    cost is flat latency slippage — 0.5 bps/order, 1.0 bps round-trip. We never
+    estimate/add a spread cost (that double-counts)."""
 
-    def _estimate(self, prices):
-        with patch("kilimanjaro.framework.costs.load_target_prices", return_value=prices):
-            return estimate_round_trip_cost_bps(TARGET, "2026-01-01", "2026-01-31")
+    def test_round_trip_is_two_orders_of_slippage(self):
+        self.assertEqual(PER_ORDER_SLIPPAGE_BPS, 0.5)
+        self.assertEqual(ROUND_TRIP_COST_BPS, 1.0)
+        self.assertEqual(ROUND_TRIP_COST_BPS, 2 * PER_ORDER_SLIPPAGE_BPS)
 
-    def test_median_spread_in_bps(self):
-        # mids 100, 110; spreads 2/100, 2/110 in bps -> 200, ~181.8; median ~190.9
-        got = self._estimate(self._prices([99.0, 109.0], [101.0, 111.0]))
-        self.assertAlmostEqual(got, (200.0 + 2 / 110 * 1e4) / 2, places=3)
+    def test_helper_returns_the_constant(self):
+        self.assertEqual(round_trip_cost_bps(), ROUND_TRIP_COST_BPS)
 
-    def test_floor_applies_on_tight_book(self):
-        # zero spread -> floor 1.0
-        got = self._estimate(self._prices([100.0, 100.0], [100.0, 100.0]))
-        self.assertEqual(got, 1.0)
-
-    def test_empty_prices_returns_floor(self):
-        got = self._estimate(self._prices([], []))
-        self.assertEqual(got, 1.0)
+    def test_no_spread_estimator_exists(self):
+        # the spread-estimate cost path was removed on purpose
+        import kilimanjaro.framework.costs as costs
+        self.assertFalse(hasattr(costs, "estimate_round_trip_cost_bps"))
 
 
 if __name__ == "__main__":

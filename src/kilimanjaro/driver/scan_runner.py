@@ -30,7 +30,7 @@ from kilimanjaro.framework import (
     run_grid_split,
     write_csv,
 )
-from kilimanjaro.framework.costs import estimate_round_trip_cost_bps
+from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.return_calc.episode import EpisodeReturn
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 from kilimanjaro.signal.expression import ExpressionSignal
@@ -104,12 +104,13 @@ def run_spec(
     schedule = ScheduleFilter(block_gmo_maintenance=(t["exchange"].upper() == "GMO"))
     split = split or default_split(start, end)
 
-    # Gap 1: charge the real round-trip spread of the target market so the
-    # mid-to-mid screen cannot pass sub-spread mirages. A spec may override
-    # (e.g. costs_bps: 0 for a pure signal-existence study).
+    # Cost policy (framework/costs.py): returns are bid/ask, so the spread is
+    # already paid — we add ONLY the flat round-trip latency slippage, never an
+    # estimated spread (that double-counts). A spec may override (e.g.
+    # costs_bps: 0 for a pure signal-existence study).
     costs_bps = spec.get("costs_bps")
     if costs_bps is None:
-        costs_bps = estimate_round_trip_cost_bps(target, start, end)
+        costs_bps = ROUND_TRIP_COST_BPS
 
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     scan_id = f"{scan_name}_{start}_{end}_{ts}"

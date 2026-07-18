@@ -1,4 +1,9 @@
-"""Fixed-horizon return: measure mid-price return at exactly ts + H seconds.
+"""Fixed-horizon return: tradeable bid/ask return over a fixed hold of H seconds.
+
+Per the Kilimanjaro cost policy (framework/costs.py): execution is at the
+**actual bid/ask**, never mid — BUY enters at ask / exits at bid, SELL the
+reverse — so the spread is already paid inside the return. Only the flat
+round-trip latency slippage is charged on top, upstream (costs_bps).
 
 Prices come from the shared per-window target-price cache — one parquet load
 per (market, window), then a searchsorted per combo, instead of a full
@@ -24,9 +29,10 @@ _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 class FixedHorizonReturn:
     """Compute return from signal time to signal time + horizon_seconds.
 
-    entry: first MarketPrice mid at or after signal ts
-    exit:  first MarketPrice mid at or after signal ts + horizon_seconds
-    return_bps = direction × (exit_mid - entry_mid) / entry_mid × 10000
+    Bid/ask execution (spread-inclusive, per the cost policy):
+      entry: ask (BUY) / bid (SELL) at first tick at or after signal ts
+      exit:  bid (BUY) / ask (SELL) at first tick at or after ts + horizon
+      return_bps = direction × (exit_price - entry_price) / entry_price × 10000
     """
 
     horizon_seconds: int
@@ -46,7 +52,7 @@ class FixedHorizonReturn:
         """Join signals with cached target prices and compute fixed-horizon returns.
 
         Input signals must have [ts, direction, strength].
-        Returns [ts, direction, strength, entry_mid, exit_mid, return_bps,
+        Returns [ts, direction, strength, entry_price, exit_price, return_bps,
                  jst_hour, jst_weekday, jst_date].
         """
         mp = load_target_prices(
@@ -59,27 +65,34 @@ class FixedHorizonReturn:
         )
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
         direction = sig["direction"].values
-        mid = mp.mid
         n_mp = len(mp.ts)
 
+        # Bid/ask execution: enter aggressive (ask BUY / bid SELL), exit passive.
         entry_idx = mp.first_at_or_after(sig["ts"].values)
         has_entry = entry_idx < n_mp
         e = np.clip(entry_idx, 0, max(n_mp - 1, 0))
-        entry_mid = np.where(has_entry, mid[e], np.nan)
+        entry_price = np.where(
+            has_entry, np.where(direction > 0, mp.ask[e], mp.bid[e]), np.nan
+        )
 
         exit_idx = mp.first_at_or_after(sig["ts"].values + self.horizon_seconds)
         has_exit = exit_idx < n_mp
         x = np.clip(exit_idx, 0, max(n_mp - 1, 0))
-        exit_mid = np.where(has_exit, mid[x], np.nan)
+        exit_price = np.where(
+            has_exit, np.where(direction > 0, mp.bid[x], mp.ask[x]), np.nan
+        )
 
         trades = pd.DataFrame(
             {
                 "ts": sig["ts"].values,
                 "direction": direction,
                 "strength": sig["strength"].values,
-                "entry_mid": entry_mid,
-                "exit_mid": exit_mid,
-                "return_bps": direction * (exit_mid - entry_mid) / entry_mid * 10000.0,
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "return_bps": direction
+                * (exit_price - entry_price)
+                / entry_price
+                * 10000.0,
             }
         )
         # entry join was INNER; exit stays LEFT (NaN return, dropped at stats)

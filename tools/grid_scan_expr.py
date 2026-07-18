@@ -147,12 +147,13 @@ def main() -> None:
         else:
             print(f"[{w:7s} {done[w]:4d}/{len(combos)}] {label} → {row['status']}", flush=True)
 
-    # Gap 1: charge the real round-trip target spread (spec may override).
-    from kilimanjaro.framework.costs import estimate_round_trip_cost_bps
+    # Cost policy (framework/costs.py): bid/ask returns already include the
+    # spread; add only the flat round-trip latency slippage (spec may override).
+    from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
     costs_bps = spec.get("costs_bps")
     if costs_bps is None:
-        costs_bps = estimate_round_trip_cost_bps(target, args.start, args.end)
-    print(f"Cost: {costs_bps:.2f} bps round-trip (target spread)")
+        costs_bps = ROUND_TRIP_COST_BPS
+    print(f"Cost: {costs_bps:.2f} bps round-trip (latency slippage; spread in bid/ask)")
 
     res = run_grid_split(
         combos, target, args.start, split, args.end,
