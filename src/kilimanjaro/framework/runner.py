@@ -34,7 +34,10 @@ import pandas as pd
 
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.gate import Gate
-from kilimanjaro.framework.performance import compute_path_metrics
+from kilimanjaro.framework.performance import (
+    compute_path_metrics,
+    compute_path_metrics_jpy,
+)
 from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
 from kilimanjaro.framework.schedule import ScheduleFilter
 from kilimanjaro.framework.stats import compute_stats
@@ -176,11 +179,19 @@ def run_grid(
                 stats = compute_stats(valid["return_bps"], costs_bps, **stat_kwargs)
                 # Path/drawdown metrics on the net-return equity curve — the
                 # trade-distribution stats above are path-blind (see performance.py).
-                path = compute_path_metrics(
-                    valid["return_bps"].to_numpy() - costs_bps,
-                    valid["ts"].to_numpy(),
-                )
+                net = valid["return_bps"].to_numpy() - costs_bps
+                ts_arr = valid["ts"].to_numpy()
+                path = compute_path_metrics(net, ts_arr)
                 row = {**base, "n_trades": len(trades), **stats, **path, "status": "ok"}
+                # JPY per-fill curve (Himalaya-faithful) when we know the fill
+                # price and execution size — notional = size × entry_price.
+                if "entry_price" in valid.columns:
+                    try:
+                        size = float(target.execution_size)
+                        notional = size * valid["entry_price"].to_numpy()
+                        row.update(compute_path_metrics_jpy(net, ts_arr, notional))
+                    except (TypeError, ValueError):
+                        pass
 
                 # Per-month sub-stats from the trades already in memory —
                 # this is what makes decay/regime classification ~free

@@ -91,9 +91,34 @@ PATH_FIELDS = [
     "pct_time_underwater",
 ]
 
+# JPY per-fill variant (Himalaya-faithful): same ideas, but the equity curve is
+# actual JPY PnL (net_bps × notional, notional = execution_size × entry_price)
+# cumulated at TRADE resolution, not equal-weight bps on a daily grid. This is
+# the curve Grafana/Himalaya draw, so its drawdown/Martin/Calmar track Himalaya
+# where the bps/daily curve does not (see doc/calibration.md). Use for scan↔
+# Himalaya fidelity and a survivor's real drawdown; keep bps for cross-market
+# ranking (scale-free).
+JPY_FIELDS = [
+    "jpy_total",
+    "jpy_ann_return",
+    "sharpe_jpy_daily",
+    "calmar_jpy",
+    "martin_jpy",
+    "recovery_jpy",
+    "jpy_max_dd",
+    "jpy_avg_dd",
+    "jpy_ulcer",
+    "jpy_dd_max_days",
+    "jpy_pct_time_underwater",
+]
+
 
 def _nan_metrics() -> dict:
     return {k: float("nan") for k in PATH_FIELDS}
+
+
+def _nan_jpy() -> dict:
+    return {k: float("nan") for k in JPY_FIELDS}
 
 
 def daily_equity(net_bps: np.ndarray, ts_seconds: np.ndarray) -> pd.Series:
@@ -205,4 +230,77 @@ def compute_path_metrics(
         "dd_max_days": int(durs.max()) if durs.size else 0,
         "dd_avg_days": float(durs.mean()) if durs.size else 0.0,
         "pct_time_underwater": float((dd > _TOL).mean()),
+    }
+
+
+def compute_path_metrics_jpy(
+    net_bps: np.ndarray,
+    ts_seconds: np.ndarray,
+    notional: np.ndarray,
+    periods_per_year: int = 365,
+    min_points: int = 5,
+) -> dict:
+    """Himalaya-faithful path metrics on the JPY per-fill equity curve.
+
+    net_bps  : per-trade NET returns (bps), costs already applied.
+    notional : per-trade JPY notional = execution_size × entry_price.
+    Equity = cumulative JPY PnL (net_bps/1e4 × notional) at trade resolution;
+    drawdown is measured per fill (catches intraday dips the daily bps curve
+    hides). Durations come from the fill timestamps, in real days. Keys are
+    JPY_FIELDS. All-NaN if too few trades.
+    """
+    net_bps = np.asarray(net_bps, dtype=float)
+    ts = np.asarray(ts_seconds, dtype=float)
+    notional = np.asarray(notional, dtype=float)
+    if net_bps.size == 0 or net_bps.size < min_points:
+        return _nan_jpy()
+
+    order = np.argsort(ts, kind="stable")
+    ts = ts[order]
+    pnl = (net_bps[order] / 1e4) * notional[order]  # per-fill JPY PnL
+    equity = np.cumsum(pnl)
+    total = float(equity[-1])
+    span_days = max((ts[-1] - ts[0]) / 86400.0, 1.0)
+    ann_return = total / span_days * periods_per_year
+
+    dd = _drawdown_series(equity)  # per-fill drawdown, JPY
+    max_dd = float(dd.max())
+    avg_dd = float(dd.mean())
+    ulcer = float(np.sqrt(np.mean(dd**2)))
+    pct_uw = float((dd > _TOL).mean())
+
+    # longest underwater stretch in real days (episode boundaries via ts)
+    under = dd > _TOL
+    dd_max_days = 0.0
+    if under.any():
+        edges = np.diff(under.astype(np.int8))
+        starts = list(np.where(edges == 1)[0] + 1)
+        ends = list(np.where(edges == -1)[0] + 1)
+        if under[0]:
+            starts = [0] + starts
+        if under[-1]:
+            ends = ends + [len(dd) - 1]
+        durs = [(ts[min(e, len(ts) - 1)] - ts[s]) / 86400.0 for s, e in zip(starts, ends)]
+        dd_max_days = float(max(durs)) if durs else 0.0
+
+    # daily Sharpe (JST day buckets of per-fill PnL)
+    day = (ts.astype("int64") + 9 * 3600) // 86400
+    daily = pd.Series(pnl).groupby(day).sum()
+    dstd = float(daily.std(ddof=1)) if len(daily) > 1 else 0.0
+    sharpe = (
+        float(daily.mean() / dstd * np.sqrt(periods_per_year)) if dstd > 0 else float("nan")
+    )
+
+    return {
+        "jpy_total": total,
+        "jpy_ann_return": ann_return,
+        "sharpe_jpy_daily": sharpe,
+        "calmar_jpy": ann_return / max_dd if max_dd > _TOL else float("nan"),
+        "martin_jpy": ann_return / ulcer if ulcer > _TOL else float("nan"),
+        "recovery_jpy": total / max_dd if max_dd > _TOL else float("nan"),
+        "jpy_max_dd": max_dd,
+        "jpy_avg_dd": avg_dd,
+        "jpy_ulcer": ulcer,
+        "jpy_dd_max_days": dd_max_days,
+        "jpy_pct_time_underwater": pct_uw,
     }
