@@ -16,7 +16,7 @@ side, exit at the passive side), the spread-aware test a mid-to-mid screen
 cannot give.
 
 Requires the signal to carry an `episode` column (ExpressionSignal and
-OBIAgeSignal emit it via op.age.threshold_episode). Rows sharing an episode id
+emit it via op.age.threshold_episode). Rows sharing an episode id
 are one continuous run on the 1s grid; entry = first, natural exit = one grid
 step past the last active second.
 
@@ -87,7 +87,7 @@ class EpisodeReturn:
         if "episode" not in signals.columns:
             raise ValueError(
                 "EpisodeReturn needs an 'episode' column; use a signal that "
-                "emits episodes (ExpressionSignal / OBIAgeSignal)."
+                "emits episodes (ExpressionSignal)."
             )
         mp = load_target_prices(
             target.exchange,

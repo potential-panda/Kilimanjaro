@@ -41,7 +41,7 @@ def load_obi_series(
     """Load the full 1s OBI series for one (depth, halflife) over a date range.
 
     Returns a DataFrame with columns [ts, obi] — no threshold filtering applied.
-    Pass the result to OBIAgeSignal.generate() or directly to scan() to avoid
+    Feed the result into the feature frame / ExpressionSignal path to avoid
     re-reading parquet on every threshold/horizon combo in a grid sweep.
     """
     if depth not in _VALID_DEPTHS:

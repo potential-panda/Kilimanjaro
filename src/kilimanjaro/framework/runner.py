@@ -7,15 +7,15 @@ per combo.
 Usage
 -----
     from kilimanjaro.framework import run_grid, MarketConfig, ScheduleFilter
-    from kilimanjaro.signal.obi_age import OBIAgeSignal
+    from kilimanjaro.signal import ExpressionSignal
     from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 
+    market = {"a": {"exchange": "BINANCE", "symbol": "ETH_USDT", "execution_size": None}}
     combos = [
-        (OBIAgeSignal("BINANCE", "ETH_USDT", depth=5, halflife=300, threshold=0.5),
-         FixedHorizonReturn(60))
-        for threshold in [0.3, 0.4, 0.5]
-        for horizon in [30, 60, 120]
-        ...
+        (ExpressionSignal.create(markets=market, expr="a_obi_ema_k5_300s", threshold=t),
+         FixedHorizonReturn(h))
+        for t in [0.3, 0.4, 0.5]
+        for h in [30, 60, 120]
     ]
     target = MarketConfig("GMO", "ETH_JPY", "0.3")
     rows = run_grid(combos, target, "2026-05-01", "2026-06-30", costs_bps=1.0)

@@ -128,7 +128,7 @@ def _freeze_markets(markets: dict[str, dict]) -> tuple:
 class ExpressionSignal:
     """Signal that fires while |expr| > threshold, with optional age window.
 
-    Identical episode semantics to OBIAgeSignal (threshold_age on the 1s
+    Threshold/age/episode semantics on the 1s grid (threshold_age on the 1s
     grid), applied to an arbitrary formula instead of a fixed OBI column.
 
     cache_key = (markets, columns the expression needs) — all thresholds,

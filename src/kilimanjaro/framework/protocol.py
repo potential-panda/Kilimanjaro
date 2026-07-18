@@ -48,7 +48,7 @@ class SignalDef(Protocol):
     def cache_key(self) -> tuple:
         """Signals with the same cache_key share one load_data() call.
 
-        Example: OBIAgeSignal uses (depth, halflife) — all threshold/age
+        Example: an OBI ExpressionSignal keys on (markets, columns) — all threshold/age
         combos for that pair reuse the same loaded OBI series.
         """
         ...

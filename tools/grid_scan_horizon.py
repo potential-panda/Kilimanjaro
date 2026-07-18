@@ -43,9 +43,10 @@ from kilimanjaro.framework import (
     run_grid_split,
     write_csv,
 )
+from kilimanjaro.data.feature_frame import obi_column, parse_obi_column
 from kilimanjaro.op.age import threshold_age
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
-from kilimanjaro.signal.obi_age import OBIAgeSignal
+from kilimanjaro.signal import ExpressionSignal
 
 # ── Grid parameters ────────────────────────────────────────────────────────────
 DEPTHS      = [1, 3, 5, 10]
@@ -176,6 +177,13 @@ def _compute_age_stats(obi_series, n_days: int) -> list[dict]:
 
 def _label_row(r: dict) -> dict:
     r = dict(r)
+    # ExpressionSignal rows carry the OBI column in `expr` (its label); recover
+    # depth/halflife from it so the output keeps its (depth, halflife) columns.
+    if "depth" not in r and r.get("expr"):
+        try:
+            r["depth"], r["halflife"] = parse_obi_column(r["expr"])
+        except ValueError:
+            pass
     r["halflife"] = _HL_LABEL.get(r.get("halflife"), str(r.get("halflife")))
     r["min_age"] = _age_label(r.get("min_age"))
     r["max_age"] = _age_label(r.get("max_age"))
@@ -232,16 +240,26 @@ def main() -> None:
         block_gmo_maintenance=(cfg["target_exchange"].upper() == "GMO"),
     )
 
+    # OBI-age is just an ExpressionSignal over the OBI column: the whole scan
+    # now runs through the same expression machinery. (depth, halflife) selects
+    # the column (obi_k{d} / obi_ema_k{d}_{hl}s); the label carries them back
+    # into the output rows via parse_obi_column.
+    sig_market = {
+        "a": {
+            "exchange": cfg["signal_exchange"],
+            "symbol": cfg["signal_symbol"],
+            "execution_size": None,
+        }
+    }
     combos = [
         (
-            OBIAgeSignal(
-                signal_exchange=cfg["signal_exchange"],
-                signal_symbol=cfg["signal_symbol"],
-                depth=depth,
-                halflife=halflife,
+            ExpressionSignal.create(
+                markets=sig_market,
+                expr=obi_column(depth, halflife, "a"),
                 threshold=threshold,
                 min_age=min_age,
                 max_age=max_age,
+                label=obi_column(depth, halflife),  # base name, parseable
             ),
             FixedHorizonReturn(horizon_seconds=horizon),
         )
@@ -258,10 +276,14 @@ def main() -> None:
     age_stats: list[dict] = []
 
     def on_data_loaded(cache_key: tuple, data) -> None:
-        _, _, depth, halflife = cache_key
+        # ExpressionSignal cache_key = (markets_key, columns); one OBI column here.
+        _markets_key, columns = cache_key
+        col = columns[0]
+        depth, halflife = parse_obi_column(col)
         print(f"  Loaded OBI series: depth={depth} halflife={_HL_LABEL[halflife]}", flush=True)
-        _write_age_hist(data, depth, halflife, out_dir)
-        for stat in _compute_age_stats(data, train_days):
+        obi_df = data[["ts", col]].rename(columns={col: "obi"})
+        _write_age_hist(obi_df, depth, halflife, out_dir)
+        for stat in _compute_age_stats(obi_df, train_days):
             age_stats.append({"depth": depth, "halflife": _HL_LABEL[halflife], **stat})
 
     done = {"train": 0, "holdout": 0}

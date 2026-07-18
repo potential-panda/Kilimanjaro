@@ -35,8 +35,36 @@ _DEFAULT_FFILL_LIMIT_S = 300
 
 _OBI_RAW_RE = re.compile(r"^obi_k(\d+)$")
 _OBI_EMA_RE = re.compile(r"^obi_ema_(k\d+_\d+s)$")
+_OBI_EMA_PARTS_RE = re.compile(r"^obi_ema_k(\d+)_(\d+)s$")
 _TA_RE = re.compile(r"^ta_(\w+)$")
 _MP_FEATURES = {"mid", "spread_bps"}
+
+
+def obi_column(depth: int, halflife: int | None, alias: str | None = None) -> str:
+    """Feature-frame OBI column name for a (depth, halflife).
+
+    halflife=None -> raw ``obi_k{depth}``; else the pre-EMA'd
+    ``obi_ema_k{depth}_{halflife}s``. With ``alias`` -> ``{alias}_{name}``.
+    This is the bridge that lets an OBI-age scan be a plain ExpressionSignal.
+    """
+    name = f"obi_k{depth}" if halflife is None else f"obi_ema_k{depth}_{halflife}s"
+    return f"{alias}_{name}" if alias else name
+
+
+def parse_obi_column(col: str) -> tuple[int, int | None]:
+    """Inverse of :func:`obi_column` (alias prefix tolerated).
+
+    ``obi_k5`` -> (5, None); ``a_obi_ema_k5_60s`` -> (5, 60).
+    """
+    i = col.find("obi_")
+    base = col[i:] if i != -1 else col
+    m = _OBI_RAW_RE.match(base)
+    if m:
+        return int(m.group(1)), None
+    m = _OBI_EMA_PARTS_RE.match(base)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    raise ValueError(f"not an OBI column: {col!r}")
 
 
 def _mp_glob(exchange: str, symbol: str, execution_size: str, data_root: Path) -> str:
