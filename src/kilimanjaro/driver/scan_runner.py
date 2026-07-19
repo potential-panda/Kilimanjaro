@@ -31,6 +31,7 @@ from kilimanjaro.framework import (
     write_csv,
 )
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
+from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
 from kilimanjaro.return_calc.episode import EpisodeReturn
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 from kilimanjaro.signal.expression import ExpressionSignal
@@ -101,7 +102,14 @@ def run_spec(
     combos = build_combos(spec)
     t = spec["target"]
     target = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
-    schedule = ScheduleFilter(block_gmo_maintenance=(t["exchange"].upper() == "GMO"))
+    # Unified schedule: orion is the source of truth (framework/orion_schedule).
+    # Default "nofilter" = orion's Saturday-maintenance block; a spec may set
+    # schedule_version to sweep default_active / weekday / us_on / ...
+    schedule = (
+        OrionScheduleFilter(spec.get("schedule_version", "nofilter"))
+        if t["exchange"].upper() == "GMO"
+        else None
+    )
     split = split or default_split(start, end)
 
     # Cost policy (framework/costs.py): returns are bid/ask, so the spread is
