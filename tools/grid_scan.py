@@ -47,6 +47,7 @@ from kilimanjaro.framework import (
     run_grid_split,
     write_csv,
 )
+from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
 from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
 from kilimanjaro.scan.flip_sar import DEFAULT_BLOCK_JST_DATES
 from kilimanjaro.signal.sar_flip import SARFlipSignal
@@ -69,26 +70,16 @@ _US_NIGHT_HOURS = [h for h in range(24) if not 6 <= h <= 21]
 _US_DAY_HOURS = list(range(6, 22))
 
 
-def _make_schedules(active_start_hour: int) -> dict[str, dict]:
-    """Build the 7 named schedules for a market.
+def _schedule_versions(xrp: bool = False) -> list[str]:
+    """The orion schedule versions this market sweeps.
 
-    Schedule hours are JST; "block" = skip flips in those hours. Naming caveat:
-    "active"/"inactive" here refer to the GMO daytime peak, the OPPOSITE of the
-    older doc/flip-scan-baseline.md variants where "active" meant the US-night
-    window — see that doc's naming-map section. The old meaning is available
-    here as us_on/us_off.
+    Schedules are orion's (framework/orion_schedule.py = single source of truth),
+    so scan and Himalaya apply the identical rule. XRP's active/inactive windows
+    start one hour later, which orion encodes as xrp_active / xrp_inactive.
     """
-    active_hours = list(range(active_start_hour, 22))
-    off_hours = [h for h in range(24) if h not in active_hours]
-    return {
-        "nofilter": dict(block_weekday_hours=[], block_weekend_hours=[]),
-        "active": dict(block_weekday_hours=off_hours, block_weekend_hours=_ALL_HOURS),
-        "inactive": dict(block_weekday_hours=active_hours, block_weekend_hours=[]),
-        "weekday": dict(block_weekday_hours=[], block_weekend_hours=_ALL_HOURS),
-        "weekend": dict(block_weekday_hours=_ALL_HOURS, block_weekend_hours=[]),
-        "us_on": dict(block_weekday_hours=_US_DAY_HOURS, block_weekend_hours=_ALL_HOURS),
-        "us_off": dict(block_weekday_hours=_US_NIGHT_HOURS, block_weekend_hours=[]),
-    }
+    active = "xrp_active" if xrp else "default_active"
+    inactive = "xrp_inactive" if xrp else "default_inactive"
+    return ["nofilter", active, inactive, "weekday", "weekend", "us_on", "us_off"]
 
 
 # Per-market config: flip source, execution target, execution size, and schedules.
@@ -100,7 +91,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange": "GMO",
         "target_symbol": "ETH_JPY",
         "execution_size": "0.3",
-        "schedules": _make_schedules(6),
+        "schedule_versions": _schedule_versions(),
     },
     "xrp": {
         "flip_exchange": "BINANCE",
@@ -108,7 +99,7 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange": "GMO",
         "target_symbol": "XRP_JPY",
         "execution_size": "150",
-        "schedules": _make_schedules(7),
+        "schedule_versions": _schedule_versions(xrp=True),
     },
     "btc": {
         "flip_exchange": "BINANCE",
@@ -116,23 +107,40 @@ MARKET_CONFIGS: dict[str, dict] = {
         "target_exchange": "GMO",
         "target_symbol": "BTC_JPY",
         "execution_size": "0.01",
-        "schedules": _make_schedules(6),
+        "schedule_versions": _schedule_versions(),
     },
 }
 
 _CSV_FIELDS = [
-    "box", "step", "schedule",
-    "train_n_trades", "train_avg_net", "train_total_net_bps", "train_t_stat",
-    "train_p_value_bootstrap", "train_n_dd_blocked", "train_rank_pct",
-    "holdout_n_trades", "holdout_avg_net", "holdout_total_net_bps", "holdout_t_stat",
-    "holdout_p_value_bootstrap", "holdout_n_dd_blocked", "holdout_rank_pct",
-    "train_pos_month_share", "holdout_pos_month_share", "train_plateau",
-    "verdict", "stable", "n_combos_tested", "train_status", "holdout_status",
+    "box",
+    "step",
+    "schedule",
+    "train_n_trades",
+    "train_avg_net",
+    "train_total_net_bps",
+    "train_t_stat",
+    "train_p_value_bootstrap",
+    "train_n_dd_blocked",
+    "train_rank_pct",
+    "holdout_n_trades",
+    "holdout_avg_net",
+    "holdout_total_net_bps",
+    "holdout_t_stat",
+    "holdout_p_value_bootstrap",
+    "holdout_n_dd_blocked",
+    "holdout_rank_pct",
+    "train_pos_month_share",
+    "holdout_pos_month_share",
+    "train_plateau",
+    "verdict",
+    "stable",
+    "n_combos_tested",
+    "train_status",
+    "holdout_status",
 ]
 
 
 def _build_combos(market_cfg: dict) -> list[tuple]:
-    is_gmo = market_cfg["target_exchange"].upper() == "GMO"
     combos = []
     for box in BOXES:
         for step in STEPS:
@@ -142,15 +150,11 @@ def _build_combos(market_cfg: dict) -> list[tuple]:
                 box_size_rate=box,
                 sar_step=step,
             )
-            for sched_name, hours in market_cfg["schedules"].items():
-                sched = ScheduleFilter(
-                    block_weekday_hours=hours["block_weekday_hours"],
-                    block_weekend_hours=hours["block_weekend_hours"],
-                    block_jst_dates=list(DEFAULT_BLOCK_JST_DATES),
-                    block_gmo_maintenance=is_gmo,
-                    has_exit_col="exit_ts",
-                    name=sched_name,
-                )
+            # Schedule = orion's, applied on the entry ts — same rule Himalaya
+            # runs. Weekend/maintenance handling is inherited from orion's
+            # version definitions; no parallel block lists here.
+            for version in market_cfg["schedule_versions"]:
+                sched = OrionScheduleFilter(version, has_exit_col="exit_ts")
                 combos.append((sig, BetweenSignalReturn(), sched))
     return combos
 
@@ -249,7 +253,11 @@ def main() -> None:
             )
 
     res = run_grid_split(
-        combos, target, args.start, split, args.end,
+        combos,
+        target,
+        args.start,
+        split,
+        args.end,
         gates=[gate],
         rank_metric=args.rank_metric,
         top_quantile=args.top_quantile,
@@ -293,9 +301,13 @@ def main() -> None:
     print(f"Verdicts: {res['verdict_counts']}")
 
     if stable:
-        print(f"\nRank-stable candidates (top {args.top_quantile:.0%} of both windows):")
-        hdr = (f"  {'box':>7} {'step':>5} {'sched':>9}"
-               f" {'tr_net':>8} {'tr_t':>6} {'ho_net':>8} {'ho_t':>6} {'ho_n':>6}")
+        print(
+            f"\nRank-stable candidates (top {args.top_quantile:.0%} of both windows):"
+        )
+        hdr = (
+            f"  {'box':>7} {'step':>5} {'sched':>9}"
+            f" {'tr_net':>8} {'tr_t':>6} {'ho_net':>8} {'ho_t':>6} {'ho_n':>6}"
+        )
         print(hdr)
         print("  " + "-" * (len(hdr) - 2))
         for r in stable:
@@ -312,6 +324,7 @@ def main() -> None:
         print("\n(--no-ledger: run NOT recorded in ledger/events.jsonl)")
     else:
         from grid_ledger import record_grid_scan
+
         event = record_grid_scan(
             hypothesis_id=args.hypothesis_id,
             actor_id="grid-scan-flip",
