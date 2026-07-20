@@ -59,11 +59,20 @@ forever cadence wrapping generate+loop) is not built yet. See
 | `src/kilimanjaro/data/price_cache.py` | per-window target-price cache — full-year flip grid runs in ~40s (was ~35min); keep return calcs on this, never per-combo parquet scans |
 | `src/kilimanjaro/op/series.py` | causal op library (`ema`, `zscore`, `lag`, `ret`, …) — causality is test-enforced |
 
-Grid tools (`tools/grid_scan.py` flip, `tools/grid_scan_horizon.py` OBI-age,
-`tools/grid_scan_expr.py` expression specs) all run through `run_grid_split`
-and record one `scan_attached` ledger event per run (`--no-ledger` to skip,
-`--hypothesis-id` to re-attribute). Selection criterion is rank stability
-across the train/holdout split, never in-sample p-values.
+Grid scans run via `cli.py grid <flavour>` — three flavours over one shared
+core (`driver/scan_runner.run_grid_scan`):
+
+```
+python src/cli.py grid flip --market btc --start ... --end ...   # box×step×schedule
+python src/cli.py grid expr --spec my.yaml --start ... --end ...  # formula specs
+python src/cli.py grid obi  --market eth --start ... --end ...    # depth×halflife×age×threshold×horizon
+```
+
+Combo builders live in `driver/{flip_grid,scan_runner,obi_grid}.py`; all run
+through `run_grid_split` and record one `scan_attached` ledger event per run
+(`--no-ledger` to skip, `--hypothesis-id` to re-attribute). Selection criterion
+is rank stability across the train/holdout split, never in-sample p-values.
+(The old `tools/grid_scan*.py` were consolidated into these.)
 
 ## Data paths
 
