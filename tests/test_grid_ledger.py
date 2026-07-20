@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from grid_ledger import record_grid_scan  # noqa: E402
+from kilimanjaro.ledger.grid import record_grid_scan  # noqa: E402
 
 
 def _fake_res(stable_rows):

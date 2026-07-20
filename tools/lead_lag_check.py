@@ -34,23 +34,29 @@ import pandas as pd
 ROOT = "/panda/makalu-data/silver/dataset=MarketPrice"
 
 MARKETS = {
-    "ETH": ("exchange=BINANCE/symbol=ETH_USDT/execution_size=0.1",
-            "exchange=GMO/symbol=ETH_JPY/execution_size=0.1"),
-    "XRP": ("exchange=BINANCE/symbol=XRP_USDT/execution_size=150",
-            "exchange=GMO/symbol=XRP_JPY/execution_size=150"),
+    "ETH": (
+        "exchange=BINANCE/symbol=ETH_USDT/execution_size=0.1",
+        "exchange=GMO/symbol=ETH_JPY/execution_size=0.1",
+    ),
+    "XRP": (
+        "exchange=BINANCE/symbol=XRP_USDT/execution_size=150",
+        "exchange=GMO/symbol=XRP_JPY/execution_size=150",
+    ),
 }
 
 GRIDS = {
     # name: (step_seconds, lags_in_steps)
-    "100ms": (0.1, np.arange(-10, 31)),   # -1000ms .. +3000ms
-    "1s": (1.0, np.arange(-10, 11)),      # -10s .. +10s
+    "100ms": (0.1, np.arange(-10, 31)),  # -1000ms .. +3000ms
+    "1s": (1.0, np.arange(-10, 11)),  # -10s .. +10s
 }
 
 
 def _load_day(path: str, date: str) -> pd.DataFrame | None:
     try:
-        return pd.read_parquet(f"{ROOT}/{path}/date={date}/data.parquet",
-                               columns=["ts", "mid", "spread_bps"])
+        return pd.read_parquet(
+            f"{ROOT}/{path}/date={date}/data.parquet",
+            columns=["ts", "mid", "spread_bps"],
+        )
     except FileNotFoundError:
         return None
 
@@ -62,7 +68,9 @@ def _grid_returns(
     idx = np.searchsorted(df["ts"].values, grid, side="right") - 1
     mid = np.where(idx >= 0, df["mid"].values[np.clip(idx, 0, None)], np.nan)
     if medfilt > 1:
-        mid = pd.Series(mid).rolling(medfilt, center=True, min_periods=1).median().values
+        mid = (
+            pd.Series(mid).rolling(medfilt, center=True, min_periods=1).median().values
+        )
     return np.diff(np.log(mid))
 
 
@@ -109,19 +117,21 @@ def day_rows(market: str, date: str, winsorize: bool, medfilt: int) -> list[dict
         opt_k = max(corrs, key=lambda k: abs(corrs[k]))
         pos_max = max(v for k, v in corrs.items() if k > 0)
         neg_max = max(v for k, v in corrs.items() if k < 0)
-        rows.append({
-            "market": market,
-            "grid": grid_name,
-            "date": date,
-            "n_points": n,
-            "corr0": round(corrs[0], 5),
-            "max_corr": round(corrs[opt_k], 5),
-            "opt_lag_ms": int(opt_k * step * 1000),
-            "pos_edge": round(pos_max - neg_max, 5),
-            "gmo_spread_bps_med": round(float(df_lag["spread_bps"].median()), 3),
-            "binance_ticks": len(df_lead),
-            "gmo_ticks": len(df_lag),
-        })
+        rows.append(
+            {
+                "market": market,
+                "grid": grid_name,
+                "date": date,
+                "n_points": n,
+                "corr0": round(corrs[0], 5),
+                "max_corr": round(corrs[opt_k], 5),
+                "opt_lag_ms": int(opt_k * step * 1000),
+                "pos_edge": round(pos_max - neg_max, 5),
+                "gmo_spread_bps_med": round(float(df_lag["spread_bps"].median()), 3),
+                "binance_ticks": len(df_lead),
+                "gmo_ticks": len(df_lag),
+            }
+        )
     return rows
 
 
@@ -131,11 +141,20 @@ def main() -> None:
     )
     ap.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
     ap.add_argument("--end", required=True, help="End date YYYY-MM-DD (inclusive)")
-    ap.add_argument("--markets", nargs="+", default=list(MARKETS), choices=list(MARKETS))
-    ap.add_argument("--winsorize", action="store_true",
-                    help="Clip returns at the per-day 99.9%% |r| quantile")
-    ap.add_argument("--medfilt", type=int, default=1,
-                    help="Centered rolling-median width on the resampled mid (1 = off)")
+    ap.add_argument(
+        "--markets", nargs="+", default=list(MARKETS), choices=list(MARKETS)
+    )
+    ap.add_argument(
+        "--winsorize",
+        action="store_true",
+        help="Clip returns at the per-day 99.9%% |r| quantile",
+    )
+    ap.add_argument(
+        "--medfilt",
+        type=int,
+        default=1,
+        help="Centered rolling-median width on the resampled mid (1 = off)",
+    )
     ap.add_argument("--out", required=True, help="Output CSV path")
     args = ap.parse_args()
 

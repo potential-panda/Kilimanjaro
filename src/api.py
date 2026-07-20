@@ -33,8 +33,8 @@ _WEB_DIR = _ROOT / "web"
 _GRID_SCAN_DIR = _ROOT / "results" / "grid_scan"
 _SCAN_KINDS = ("flip", "horizon", "expr")
 
-sys.path.insert(0, str(_ROOT / "tools"))
-from ledger import _latest_status, load_events, load_specs  # noqa: E402
+sys.path.insert(0, str(_ROOT / "src"))
+from kilimanjaro.ledger.core import _latest_status, load_events, load_specs  # noqa: E402
 
 app = Flask(__name__, static_folder=str(_WEB_DIR))
 

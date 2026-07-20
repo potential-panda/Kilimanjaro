@@ -96,7 +96,9 @@ def query_list(makalu_root: Path = _DEFAULT_MAKALU_ROOT) -> dict[str, dict]:
     return {d["dataset"]: d for d in data.get("datasets", [])}
 
 
-def describe_view(view_name: str, makalu_root: Path = _DEFAULT_MAKALU_ROOT) -> list[str] | None:
+def describe_view(
+    view_name: str, makalu_root: Path = _DEFAULT_MAKALU_ROOT
+) -> list[str] | None:
     """Column names via DESCRIBE, or None if the view isn't registered/query fails."""
     result = _run_cli(makalu_root, ["query", "--sql", f"DESCRIBE {view_name}"])
     if result.returncode != 0:
@@ -118,7 +120,10 @@ def resolve_actual_layer(
     if (data_root / catalog_layer / f"dataset={dataset_name}").is_dir():
         return catalog_layer
     for layer in _ALL_LAYERS:
-        if layer != catalog_layer and (data_root / layer / f"dataset={dataset_name}").is_dir():
+        if (
+            layer != catalog_layer
+            and (data_root / layer / f"dataset={dataset_name}").is_dir()
+        ):
             return layer
     return None
 
@@ -147,7 +152,11 @@ def parse_data_check(output: str) -> dict:
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     if lines and lines[0].startswith("Available "):
         key = lines[0][len("Available ") : -1]
-        return {"status": "needs_partition_value", "missing_partition": key, "values": lines[1:]}
+        return {
+            "status": "needs_partition_value",
+            "missing_partition": key,
+            "values": lines[1:],
+        }
 
     result: dict = {}
     missing_dates: list[str] = []
@@ -171,10 +180,14 @@ def parse_data_check(output: str) -> dict:
         elif in_missing_block:
             m = _RANGE_RE.match(line)
             if m:
-                missing_dates.append({"start": m.group(1), "end": m.group(2) or m.group(1)})
+                missing_dates.append(
+                    {"start": m.group(1), "end": m.group(2) or m.group(1)}
+                )
     result["missing_dates"] = missing_dates
-    result["status"] = "available" if result.get("missing_count") == 0 else (
-        "partial" if "missing_count" in result else "unknown"
+    result["status"] = (
+        "available"
+        if result.get("missing_count") == 0
+        else ("partial" if "missing_count" in result else "unknown")
     )
     return result
 
@@ -185,11 +198,22 @@ def _layer_from_location(location: str) -> str | None:
 
 
 def data_check(
-    dataset: str, exchange: str, symbol: str,
-    start_date: str | None = None, end_date: str | None = None,
+    dataset: str,
+    exchange: str,
+    symbol: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
     makalu_root: Path = _DEFAULT_MAKALU_ROOT,
 ) -> dict:
-    args = ["data-check", "--dataset", dataset, "--exchange", exchange, "--symbol", symbol]
+    args = [
+        "data-check",
+        "--dataset",
+        dataset,
+        "--exchange",
+        exchange,
+        "--symbol",
+        symbol,
+    ]
     if start_date:
         args += ["--start", start_date]
     if end_date:
@@ -201,15 +225,29 @@ def data_check(
 
 
 def filesystem_date_probe(
-    dataset_name: str, layer: str, exchange: str, symbol: str,
-    start_date: str | None, end_date: str | None,
+    dataset_name: str,
+    layer: str,
+    exchange: str,
+    symbol: str,
+    start_date: str | None,
+    end_date: str | None,
     data_root: Path = _DEFAULT_DATA_ROOT,
 ) -> dict:
     """Fallback per makalu-integration-contract.md's "Fallback for
     Feature/Research Datasets" -- used whenever data-check doesn't cover a
     dataset (today: feature and research layers)."""
-    base = data_root / layer / f"dataset={dataset_name}" / f"exchange={exchange}" / f"symbol={symbol}"
-    existing = sorted(p.name.split("=", 1)[1] for p in base.glob("date=*") if p.is_dir()) if base.is_dir() else []
+    base = (
+        data_root
+        / layer
+        / f"dataset={dataset_name}"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
+    existing = (
+        sorted(p.name.split("=", 1)[1] for p in base.glob("date=*") if p.is_dir())
+        if base.is_dir()
+        else []
+    )
 
     if not start_date or not end_date:
         return {
@@ -231,7 +269,11 @@ def filesystem_date_probe(
     # Collapse consecutive missing dates into ranges, matching data-check's shape.
     ranges: list[dict] = []
     for d_str in missing:
-        if ranges and (date.fromisoformat(ranges[-1]["end"]) + timedelta(days=1)).isoformat() == d_str:
+        if (
+            ranges
+            and (date.fromisoformat(ranges[-1]["end"]) + timedelta(days=1)).isoformat()
+            == d_str
+        ):
             ranges[-1]["end"] = d_str
         else:
             ranges.append({"start": d_str, "end": d_str})
@@ -239,14 +281,20 @@ def filesystem_date_probe(
     if not missing:
         status = "available"
     elif not existing_set:
-        status = "missing"  # no data for this exchange/symbol at all, not just this window
+        status = (
+            "missing"  # no data for this exchange/symbol at all, not just this window
+        )
     else:
         status = "partial"
     return {"status": status, "missing_dates": ranges}
 
 
 def population_action_for(
-    dataset_name: str, layer: str, query_verified: bool, has_any_data: bool, scope_available: bool
+    dataset_name: str,
+    layer: str,
+    query_verified: bool,
+    has_any_data: bool,
+    scope_available: bool,
 ) -> str:
     if query_verified and scope_available:
         return "none"
@@ -272,13 +320,19 @@ def build_dataset_entry(
     view_name = name.lower()
 
     query_verified = name in registered
-    resolved_layer = catalog_layer if query_verified else resolve_actual_layer(name, catalog_layer, data_root)
+    resolved_layer = (
+        catalog_layer
+        if query_verified
+        else resolve_actual_layer(name, catalog_layer, data_root)
+    )
     has_any_data = resolved_layer is not None
     # Reliability is about whether this dataset *actually is* bronze, not
     # what the catalog claims -- BookState/BookChange's catalog_layer says
     # "bronze" but that's exactly the mismatch this model exists to not trust.
     reliability = "guaranteed" if name in ("Trade", "OrderBook") else "candidate"
-    canonicality = "canonical" if catalog_layer in _CANONICAL_LAYERS else "research-ephemeral"
+    canonicality = (
+        "canonical" if catalog_layer in _CANONICAL_LAYERS else "research-ephemeral"
+    )
 
     columns = describe_view(view_name, makalu_root) if query_verified else None
 
@@ -295,13 +349,21 @@ def build_dataset_entry(
     warnings: list[str] = []
 
     if needs_extra_partitions(catalog_entry):
-        extra = sorted(set(catalog_entry.get("partition_columns", [])) - _BASE_PARTITIONS)
-        warnings.append(f"{name} requires extra partitions {extra} beyond exchange/symbol; date-availability check skipped in v1")
+        extra = sorted(
+            set(catalog_entry.get("partition_columns", [])) - _BASE_PARTITIONS
+        )
+        warnings.append(
+            f"{name} requires extra partitions {extra} beyond exchange/symbol; date-availability check skipped in v1"
+        )
     elif resolved_layer is not None:
         probe = data_check(name, exchange, symbol, start_date, end_date, makalu_root)
         if probe.get("status") == "unsupported_by_data_check":
-            warnings.append(f"data-check does not support {name}; used filesystem fallback per the integration contract")
-            probe = filesystem_date_probe(name, resolved_layer, exchange, symbol, start_date, end_date, data_root)
+            warnings.append(
+                f"data-check does not support {name}; used filesystem fallback per the integration contract"
+            )
+            probe = filesystem_date_probe(
+                name, resolved_layer, exchange, symbol, start_date, end_date, data_root
+            )
             availability["method"] = "path_template_filesystem"
         else:
             availability["method"] = "data_check"
@@ -309,12 +371,16 @@ def build_dataset_entry(
         availability["missing_dates"] = probe.get("missing_dates", [])
         if probe.get("status") == "needs_partition_value":
             availability["status"] = "unknown"
-            warnings.append(f"data-check needs an explicit value: {probe.get('missing_partition')}")
+            warnings.append(
+                f"data-check needs an explicit value: {probe.get('missing_partition')}"
+            )
     else:
         availability["status"] = "missing"
 
     scope_available = availability["status"] == "available"
-    population_action = population_action_for(name, catalog_layer, query_verified, has_any_data, scope_available)
+    population_action = population_action_for(
+        name, catalog_layer, query_verified, has_any_data, scope_available
+    )
 
     if catalog_layer != resolved_layer and resolved_layer is not None:
         warnings.append(
@@ -338,7 +404,9 @@ def build_dataset_entry(
         "source_dataset": catalog_entry.get("source_dataset"),
         "path_template": f"{data_root}/{resolved_layer or catalog_layer}/dataset={name}/exchange={{exchange}}/symbol={{symbol}}/date={{date}}/data.parquet",
         "columns": {
-            "metadata_source": "describe" if columns is not None else "dataset_definitions_md",
+            "metadata_source": "describe"
+            if columns is not None
+            else "dataset_definitions_md",
             "names": columns or [],
         },
         "availability": availability,
@@ -362,8 +430,14 @@ def build_inventory(
         for market in markets:
             datasets.append(
                 build_dataset_entry(
-                    entry, market["exchange"], market["symbol"], start_date, end_date, registered,
-                    makalu_root, data_root,
+                    entry,
+                    market["exchange"],
+                    market["symbol"],
+                    start_date,
+                    end_date,
+                    registered,
+                    makalu_root,
+                    data_root,
                 )
             )
 
@@ -378,7 +452,9 @@ def build_inventory(
     }
 
 
-def write_inventory(inventory: dict, inventory_dir: Path = _DEFAULT_INVENTORY_DIR) -> Path:
+def write_inventory(
+    inventory: dict, inventory_dir: Path = _DEFAULT_INVENTORY_DIR
+) -> Path:
     ts = inventory["created_at"].replace(":", "").replace("-", "")
     path = inventory_dir / f"inventory-{ts}.yaml"
     inventory_dir.mkdir(parents=True, exist_ok=True)
@@ -387,9 +463,16 @@ def write_inventory(inventory: dict, inventory_dir: Path = _DEFAULT_INVENTORY_DI
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build a Kilimanjaro data inventory snapshot")
-    parser.add_argument("--market", action="append", required=True, metavar="EXCHANGE:SYMBOL",
-                         help="Repeatable, e.g. --market GMO:BTC_JPY --market BINANCE:BTC_USDT")
+    parser = argparse.ArgumentParser(
+        description="Build a Kilimanjaro data inventory snapshot"
+    )
+    parser.add_argument(
+        "--market",
+        action="append",
+        required=True,
+        metavar="EXCHANGE:SYMBOL",
+        help="Repeatable, e.g. --market GMO:BTC_JPY --market BINANCE:BTC_USDT",
+    )
     parser.add_argument("--start", default=None)
     parser.add_argument("--end", default=None)
     parser.add_argument("--makalu-root", default=str(_DEFAULT_MAKALU_ROOT))
@@ -402,7 +485,10 @@ def main() -> int:
         markets.append({"exchange": exchange, "symbol": symbol})
 
     inventory = build_inventory(
-        markets, start_date=args.start, end_date=args.end, makalu_root=Path(args.makalu_root)
+        markets,
+        start_date=args.start,
+        end_date=args.end,
+        makalu_root=Path(args.makalu_root),
     )
     path = write_inventory(inventory, Path(args.out_dir))
     print(f"Wrote {path}")

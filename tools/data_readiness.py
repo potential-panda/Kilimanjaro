@@ -62,7 +62,10 @@ def _unsupported_transform_reasons(h: dict) -> list[str]:
         )
 
     for ds in h["feature"]["source_datasets"]:
-        if ds["dataset"] != _SUPPORTED_DATASET and ds["dataset"] not in _PRECOMPUTED_FEATURE_DATASETS:
+        if (
+            ds["dataset"] != _SUPPORTED_DATASET
+            and ds["dataset"] not in _PRECOMPUTED_FEATURE_DATASETS
+        ):
             reasons.append(
                 f"{ds['exchange']}/{ds['symbol']}/{ds['dataset']}: tools/scanner.py v1 only supports bronze "
                 f"{_SUPPORTED_DATASET} or a known precomputed feature dataset {sorted(_PRECOMPUTED_FEATURE_DATASETS)} "
@@ -76,8 +79,13 @@ def _unsupported_transform_reasons(h: dict) -> list[str]:
             f"supports bronze {_SUPPORTED_DATASET} as the target source dataset"
         )
 
-    research_metadata = (h.get("data_requirements") or {}).get("research_metadata") or {}
-    if target_type == "research_label" and research_metadata.get("metadata_status") != "complete":
+    research_metadata = (h.get("data_requirements") or {}).get(
+        "research_metadata"
+    ) or {}
+    if (
+        target_type == "research_label"
+        and research_metadata.get("metadata_status") != "complete"
+    ):
         reasons.append(
             f"research_metadata.metadata_status is {research_metadata.get('metadata_status')!r}, "
             "not 'complete' -- missing build_id/generated_at blocks scan-ready per "
@@ -92,7 +100,10 @@ def _dataset_market_pairs(h: dict) -> list[tuple[str, str, str]]:
     declared markets x datasets cross product (covers any extra context
     dataset listed without being a direct feature/target source, e.g. a
     regime dataset)."""
-    pairs = {(ds["dataset"], ds["exchange"], ds["symbol"]) for ds in h["feature"]["source_datasets"]}
+    pairs = {
+        (ds["dataset"], ds["exchange"], ds["symbol"])
+        for ds in h["feature"]["source_datasets"]
+    }
     t = h["target"]["source_dataset"]
     pairs.add((t["dataset"], t["exchange"], t["symbol"]))
     dr = h.get("data_requirements") or {}
@@ -112,8 +123,16 @@ def _distinct_days_from_probe(probe: dict) -> int | None:
     return max(total - (probe.get("missing_count") or 0), 0)
 
 
-def _filesystem_distinct_days(dataset_name: str, layer: str, exchange: str, symbol: str, data_root: Path) -> int:
-    base = data_root / layer / f"dataset={dataset_name}" / f"exchange={exchange}" / f"symbol={symbol}"
+def _filesystem_distinct_days(
+    dataset_name: str, layer: str, exchange: str, symbol: str, data_root: Path
+) -> int:
+    base = (
+        data_root
+        / layer
+        / f"dataset={dataset_name}"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
     if not base.is_dir():
         return 0
     return len([p for p in base.glob("date=*") if p.is_dir()])
@@ -142,8 +161,17 @@ def assess_data_readiness(
         if dataset_name in _PRECOMPUTED_FEATURE_DATASETS:
             # Kilimanjaro-owned, never in Makalu's catalog by design -- check
             # its own markets/features/ tree instead of the Makalu inventory.
-            feature_dir = _ROOT / "markets" / "features" / f"dataset={dataset_name}" / f"exchange={exchange}" / f"symbol={symbol}"
-            date_dirs = sorted(feature_dir.glob("date=*")) if feature_dir.is_dir() else []
+            feature_dir = (
+                _ROOT
+                / "markets"
+                / "features"
+                / f"dataset={dataset_name}"
+                / f"exchange={exchange}"
+                / f"symbol={symbol}"
+            )
+            date_dirs = (
+                sorted(feature_dir.glob("date=*")) if feature_dir.is_dir() else []
+            )
             distinct_days = len(date_dirs)
             if distinct_days < minimum_distinct_days:
                 needs_more_data_reasons.append(
@@ -155,10 +183,16 @@ def assess_data_readiness(
                 sample = next(date_dirs[-1].glob("*.parquet"), None)
                 if sample is not None:
                     columns = list(pq.ParquetFile(sample).schema_arrow.names)
-            datasets_checked.append({
-                "dataset": dataset_name, "exchange": exchange, "symbol": symbol,
-                "in_catalog": "kilimanjaro_local", "distinct_days": distinct_days, "columns": columns,
-            })
+            datasets_checked.append(
+                {
+                    "dataset": dataset_name,
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "in_catalog": "kilimanjaro_local",
+                    "distinct_days": distinct_days,
+                    "columns": columns,
+                }
+            )
             continue
 
         catalog_entry = catalog.get(dataset_name)
@@ -167,31 +201,50 @@ def assess_data_readiness(
                 f"{exchange}/{symbol}/{dataset_name}: no Makalu catalog entry at all -- "
                 "no existing pipeline can produce it"
             )
-            datasets_checked.append({
-                "dataset": dataset_name, "exchange": exchange, "symbol": symbol,
-                "in_catalog": False, "distinct_days": None, "columns": None,
-            })
+            datasets_checked.append(
+                {
+                    "dataset": dataset_name,
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "in_catalog": False,
+                    "distinct_days": None,
+                    "columns": None,
+                }
+            )
             continue
 
         query_verified = dataset_name in registered
         resolved_layer = (
-            catalog_entry["layer"] if query_verified
-            else _inventory.resolve_actual_layer(dataset_name, catalog_entry["layer"], data_root)
+            catalog_entry["layer"]
+            if query_verified
+            else _inventory.resolve_actual_layer(
+                dataset_name, catalog_entry["layer"], data_root
+            )
         )
-        columns = _inventory.describe_view(dataset_name.lower(), makalu_root) if query_verified else None
+        columns = (
+            _inventory.describe_view(dataset_name.lower(), makalu_root)
+            if query_verified
+            else None
+        )
 
         if resolved_layer is None:
             distinct_days: int | None = 0
-            needs_more_data_reasons.append(f"{exchange}/{symbol}/{dataset_name}: no populated data found in any layer")
+            needs_more_data_reasons.append(
+                f"{exchange}/{symbol}/{dataset_name}: no populated data found in any layer"
+            )
         elif _inventory.needs_extra_partitions(catalog_entry):
             # v1 limitation shared with tools/inventory.py: date coverage
             # for extra-partition datasets isn't checked here either --
             # not enough signal to confidently block or pass on it.
             distinct_days = None
         else:
-            probe = _inventory.data_check(dataset_name, exchange, symbol, makalu_root=makalu_root)
+            probe = _inventory.data_check(
+                dataset_name, exchange, symbol, makalu_root=makalu_root
+            )
             if probe.get("status") == "unsupported_by_data_check":
-                distinct_days = _filesystem_distinct_days(dataset_name, resolved_layer, exchange, symbol, data_root)
+                distinct_days = _filesystem_distinct_days(
+                    dataset_name, resolved_layer, exchange, symbol, data_root
+                )
             elif probe.get("status") == "missing":
                 distinct_days = 0
             else:
@@ -203,14 +256,26 @@ def assess_data_readiness(
                     f"need at least {minimum_distinct_days}"
                 )
 
-        datasets_checked.append({
-            "dataset": dataset_name, "exchange": exchange, "symbol": symbol,
-            "in_catalog": True, "query_verified": query_verified, "resolved_layer": resolved_layer,
-            "distinct_days": distinct_days, "columns": columns,
-        })
+        datasets_checked.append(
+            {
+                "dataset": dataset_name,
+                "exchange": exchange,
+                "symbol": symbol,
+                "in_catalog": True,
+                "query_verified": query_verified,
+                "resolved_layer": resolved_layer,
+                "distinct_days": distinct_days,
+                "columns": columns,
+            }
+        )
 
     required_columns = dr.get("required_columns") or []
-    known_columns = {c for entry in datasets_checked if entry.get("columns") for c in entry["columns"]}
+    known_columns = {
+        c
+        for entry in datasets_checked
+        if entry.get("columns")
+        for c in entry["columns"]
+    }
     any_columns_known = any(entry.get("columns") for entry in datasets_checked)
     if any_columns_known:
         for col in required_columns:
@@ -236,7 +301,9 @@ def assess_data_readiness(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check a hypothesis spec's data requirements against a live Makalu inventory")
+    parser = argparse.ArgumentParser(
+        description="Check a hypothesis spec's data requirements against a live Makalu inventory"
+    )
     parser.add_argument("spec_path")
     parser.add_argument("--makalu-root", default=str(_inventory._DEFAULT_MAKALU_ROOT))
     parser.add_argument("--data-root", default=str(_inventory._DEFAULT_DATA_ROOT))

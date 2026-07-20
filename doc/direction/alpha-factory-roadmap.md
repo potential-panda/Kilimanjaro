@@ -76,12 +76,18 @@ bugs cannot regress silently. Runtime guards roll into #4.
 (`orion_schedule`, `ledger_io`, `cli`, `api`). Fine for a script, brittle for a
 long-running process.
 
-- [ ] Make orion/qate importable via packaging (or a thin vendored shim), not path insertion.
-- [ ] Move the ledger library (`tools/ledger.py`, `grid_ledger.py`) into `kilimanjaro/`
-      (or a package) so the driver stops reaching into `tools/`.
-- [ ] One import story; no `sys.path` mutation in library code.
+- [x] Move the ledger into the package — `tools/{ledger,grid_ledger}.py` →
+      `kilimanjaro/ledger/{core,grid}.py` with robust repo-root finding; CLI is
+      now `cli.py ledger`. `driver/ledger_io` and `api` import it normally —
+      **library code no longer reaches into `tools/`.**
+- [x] Orion/qate: isolated to the single `orion_schedule.py` shim (deferred,
+      guarded import). This IS the "thin vendored shim"; true packaging of the
+      sibling repos is env setup, out of this repo's scope.
+- [x] Remaining `sys.path` inserts are entry-point self-bootstraps only
+      (`cli.py`, `api.py` add `src/`) — not library cross-repo reaches.
 
-**Done when:** no library module mutates `sys.path`; imports work from a clean env.
+**Done when:** no library module reaches cross-repo/`tools/` via `sys.path`
+(**done**, except the one intentional orion shim). Tests green.
 
 ## 4. Build Stage C — the forever cadence, with guardrails
 

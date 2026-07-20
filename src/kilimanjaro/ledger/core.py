@@ -21,12 +21,26 @@ import yaml
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
-_ROOT = Path(__file__).parent.parent
+def _find_repo_root(start: Path) -> Path:
+    """Walk up to the repo root (the dir holding schemas/ + ledger/)."""
+    for p in (start, *start.parents):
+        if (p / "schemas").is_dir() and (p / "ledger").is_dir():
+            return p
+    return start.parents[3]  # fallback: src/kilimanjaro/ledger/core.py -> root
+
+
+_ROOT = _find_repo_root(Path(__file__).resolve())
 _SCHEMAS_DIR = _ROOT / "schemas"
 _DEFAULT_LEDGER_PATH = _ROOT / "ledger" / "events.jsonl"
 _DEFAULT_SPECS_DIR = _ROOT / "specs"
 
-_REJECTION_STATUSES = {"invalid-spec", "duplicate", "needs-tooling", "scan-failed", "retired"}
+_REJECTION_STATUSES = {
+    "invalid-spec",
+    "duplicate",
+    "needs-tooling",
+    "scan-failed",
+    "retired",
+}
 _REJECTION_DECISION_REASONS = {
     "missing-mechanism",
     "duplicate",
@@ -62,7 +76,11 @@ def _ledger_event_validator() -> Draft202012Validator:
 def next_event_id(existing_events: list[dict], at: datetime) -> str:
     date_str = at.strftime("%Y%m%d")
     prefix = f"evt-{date_str}-"
-    seqs = [int(e["event_id"][len(prefix) :]) for e in existing_events if e["event_id"].startswith(prefix)]
+    seqs = [
+        int(e["event_id"][len(prefix) :])
+        for e in existing_events
+        if e["event_id"].startswith(prefix)
+    ]
     return f"{prefix}{(max(seqs) + 1) if seqs else 1:03d}"
 
 
@@ -113,7 +131,10 @@ def append_event(
         event["details"] = details
 
     validator = _ledger_event_validator()
-    errors = [f"{'/'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}" for e in validator.iter_errors(event)]
+    errors = [
+        f"{'/'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}"
+        for e in validator.iter_errors(event)
+    ]
     if errors:
         raise ValueError("invalid ledger event: " + "; ".join(errors))
 
@@ -133,7 +154,9 @@ def load_specs(specs_dir: Path = _DEFAULT_SPECS_DIR) -> dict[str, dict]:
     return specs
 
 
-def _latest_status(hypothesis_id: str, spec: dict, events_by_hyp: dict[str, list[dict]]) -> str:
+def _latest_status(
+    hypothesis_id: str, spec: dict, events_by_hyp: dict[str, list[dict]]
+) -> str:
     events = sorted(events_by_hyp.get(hypothesis_id, []), key=lambda e: e["created_at"])
     for event in reversed(events):
         if event.get("to_status"):
@@ -141,12 +164,16 @@ def _latest_status(hypothesis_id: str, spec: dict, events_by_hyp: dict[str, list
     return spec.get("hypothesis", {}).get("status", "draft")
 
 
-def current_status(hypothesis_id: str, spec: dict, ledger_path: Path = _DEFAULT_LEDGER_PATH) -> str:
+def current_status(
+    hypothesis_id: str, spec: dict, ledger_path: Path = _DEFAULT_LEDGER_PATH
+) -> str:
     """Public wrapper: the ledger's last to_status for this hypothesis, or
     the spec's own status field if nothing's been recorded yet. The ledger
     is authoritative once any event exists -- the spec's status field is
     only an initial/illustrative value, never updated in place."""
-    events = [e for e in load_events(ledger_path) if e["hypothesis_id"] == hypothesis_id]
+    events = [
+        e for e in load_events(ledger_path) if e["hypothesis_id"] == hypothesis_id
+    ]
     return _latest_status(hypothesis_id, spec, {hypothesis_id: events})
 
 
@@ -173,19 +200,28 @@ def search(
     for hyp_id, spec in specs.items():
         h = spec.get("hypothesis", {})
         hyp_events = events_by_hyp.get(hyp_id, [])
-        decision_reasons_seen = {e["decision_reason"] for e in hyp_events if e.get("decision_reason")}
+        decision_reasons_seen = {
+            e["decision_reason"] for e in hyp_events if e.get("decision_reason")
+        }
         current_status = _latest_status(hyp_id, spec, events_by_hyp)
 
         if family and h.get("family") != family:
             continue
         if mechanism_keyword:
             haystack = " ".join(
-                [h.get("title", ""), h.get("summary", ""), h.get("expected_edge_mechanism", "")]
+                [
+                    h.get("title", ""),
+                    h.get("summary", ""),
+                    h.get("expected_edge_mechanism", ""),
+                ]
             ).lower()
             if mechanism_keyword.lower() not in haystack:
                 continue
         if dataset:
-            datasets = [d.get("dataset") for d in h.get("data_requirements", {}).get("datasets", [])]
+            datasets = [
+                d.get("dataset")
+                for d in h.get("data_requirements", {}).get("datasets", [])
+            ]
             if dataset not in datasets:
                 continue
         if exchange or symbol:
@@ -255,18 +291,22 @@ def _cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Kilimanjaro research ledger")
-    sub = parser.add_subparsers(dest="command", required=True)
-
+def register_cli(sub: "argparse._SubParsersAction") -> None:
+    """Add the append/search subcommands to a subparsers action (reused by
+    both this module's main() and cli.py's `ledger` command)."""
     p_append = sub.add_parser("append", help="Append a ledger event")
     p_append.add_argument("--hypothesis-id", required=True)
     p_append.add_argument(
         "--event-type",
         required=True,
         choices=[
-            "status_transition", "scan_attached", "human_approval",
-            "waiver", "correction", "threshold_change", "taxonomy_change",
+            "status_transition",
+            "scan_attached",
+            "human_approval",
+            "waiver",
+            "correction",
+            "threshold_change",
+            "taxonomy_change",
         ],
     )
     p_append.add_argument("--actor-type", required=True, choices=["agent", "human"])
@@ -280,7 +320,11 @@ def main() -> int:
 
     p_search = sub.add_parser("search", help="Search specs+ledger jointly")
     p_search.add_argument("--family", default=None)
-    p_search.add_argument("--mechanism", default=None, help="keyword matched against title/summary/mechanism")
+    p_search.add_argument(
+        "--mechanism",
+        default=None,
+        help="keyword matched against title/summary/mechanism",
+    )
     p_search.add_argument("--dataset", default=None)
     p_search.add_argument("--exchange", default=None)
     p_search.add_argument("--symbol", default=None)
@@ -289,6 +333,11 @@ def main() -> int:
     p_search.add_argument("--rejected-only", action="store_true")
     p_search.set_defaults(func=_cmd_search)
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Kilimanjaro research ledger")
+    sub = parser.add_subparsers(dest="command", required=True)
+    register_cli(sub)
     args = parser.parse_args()
     return args.func(args)
 

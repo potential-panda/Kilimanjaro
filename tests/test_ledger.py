@@ -12,9 +12,9 @@ import unittest
 import yaml
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from ledger import append_event, load_specs, search  # noqa: E402
+from kilimanjaro.ledger.core import append_event, load_specs, search  # noqa: E402
 
 _FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -1,26 +1,19 @@
 """Driver <-> ledger glue.
 
-The ledger lives in tools/ (ledger.py, grid_ledger.py) and is the machine's
-durable memory. The driver records every outcome there and uses it for dedup —
-no separate state file. This module is the one place that reaches into tools/,
-keeping that coupling localized.
+The ledger (`kilimanjaro.ledger`) is the machine's durable memory. The driver
+records every outcome there and uses it for dedup — no separate state file.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from pathlib import Path
 
+from kilimanjaro.ledger.core import append_event, load_events
+from kilimanjaro.ledger.grid import record_grid_scan
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_TOOLS = _REPO_ROOT / "tools"
-if str(_TOOLS) not in sys.path:
-    sys.path.insert(0, str(_TOOLS))
-
-from grid_ledger import record_grid_scan  # noqa: E402
-from ledger import append_event, load_events  # noqa: E402
-
 DEFAULT_LEDGER_PATH = _REPO_ROOT / "ledger" / "events.jsonl"
 
 

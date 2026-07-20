@@ -13,14 +13,9 @@ side effect of running a grid.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from ledger import append_event  # noqa: E402
-
-_DEFAULT_LEDGER_PATH = Path(__file__).parent.parent / "ledger" / "events.jsonl"
+from kilimanjaro.ledger.core import _DEFAULT_LEDGER_PATH, append_event
 
 
 def _headline(res: dict) -> str:
@@ -29,16 +24,15 @@ def _headline(res: dict) -> str:
     if not stable:
         counts = res.get("verdict_counts", {})
         extra = ", ".join(
-            f"{counts[v]} {v}" for v in ("decayed", "regime_dependent")
-            if counts.get(v)
+            f"{counts[v]} {v}" for v in ("decayed", "regime_dependent") if counts.get(v)
         )
-        return (
-            f"0/{n} combos rank-stable across train/holdout — no candidates"
-            + (f" ({extra})" if extra else "")
+        return f"0/{n} combos rank-stable across train/holdout — no candidates" + (
+            f" ({extra})" if extra else ""
         )
     top = stable[0]
     param_keys = [
-        k for k in top
+        k
+        for k in top
         if not k.startswith(("train_", "holdout_"))
         and k not in ("stable", "n_combos_tested", "window")
     ]
