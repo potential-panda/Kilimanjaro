@@ -117,13 +117,20 @@ dedup done; the daemon + ledger-digest are the remaining polish.**
 discovery. Intentionally last (reward-first), but it's the thinnest part vs the
 ambition.
 
-- [ ] Feedback loop: bias generation toward families/regions that survived.
-- [ ] Mutation / crossover (GP-style) over the expression AST, dedup-guarded.
-- [ ] Guard against the AlphaGPT failure mode (cost-blind, overfit) — the reward
-      layer already does this; keep it in front of every generated idea.
+- [x] Feedback loop — `generate.family_scores` joins the ledger (outcomes) to the
+      specs on disk (family) and counts survivors per family; `propose_specs`
+      orders families by that score (`_priority_order`), so the generator favors
+      what has actually survived. Wired into `generate(feedback=True)` (Stage C
+      gets it automatically); degrades to equal round-robin with no history.
+- [ ] Mutation / crossover (GP-style) over the expression AST, dedup-guarded —
+      the deeper "search, not enumeration" step; still to build.
+- [x] AlphaGPT failure mode (cost-blind, overfit) — kept in front: every
+      generated idea still passes the full reward layer (cost, FDR, rank
+      stability, calibration quarantine) before it can survive.
 
-**Done when:** the generator proposes ideas informed by past outcomes, not a
-fixed template list, without lowering the survival bar.
+**Done when:** the generator proposes ideas informed by past outcomes (**done for
+family-level feedback**) without lowering the survival bar (**kept**). The
+AST-mutation search is the remaining depth.
 
 ---
 

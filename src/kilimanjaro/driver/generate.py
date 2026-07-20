@@ -167,6 +167,49 @@ def next_seq(date_str: str, *scan_dirs: Path) -> int:
     return max(used) + 1
 
 
+def _priority_order(families: list[dict], family_priority: dict[str, float] | None) -> list[int]:
+    """Family indices ordered by feedback priority (desc), stable for ties.
+
+    None -> identity (equal round-robin). Families that have produced survivors
+    lead, so within a bounded batch they contribute more proposals.
+    """
+    order = list(range(len(families)))
+    if family_priority:
+        order.sort(key=lambda i: -family_priority.get(families[i]["family"], 0.0))
+    return order
+
+
+def family_scores(*scan_dirs: Path, ledger_path: Path | None = None) -> dict[str, float]:
+    """Per-family count of hypotheses that reached scan-passed or better.
+
+    Joins the ledger (outcomes, by hypothesis_id) to the specs on disk (which
+    carry `family`). This is the generator's feedback signal — bias toward
+    families that have actually survived. Empty when there is no history yet,
+    so generation falls back to equal round-robin.
+    """
+    from kilimanjaro.ledger.core import load_events
+
+    hyp_family: dict[str, str] = {}
+    for d in scan_dirs:
+        for path in Path(d).rglob("*.yaml"):
+            try:
+                spec = yaml.safe_load(path.read_text())
+            except Exception:  # noqa: BLE001
+                continue
+            if isinstance(spec, dict) and spec.get("family") and spec.get("hypothesis_id"):
+                hyp_family[spec["hypothesis_id"]] = spec["family"]
+
+    good = {"scan-passed", "backtest-approved", "promoted", "live"}
+    scores: dict[str, float] = {}
+    events = load_events(ledger_path) if ledger_path else load_events()
+    for ev in events:
+        if ev.get("to_status") in good:
+            fam = hyp_family.get(ev.get("hypothesis_id"))
+            if fam:
+                scores[fam] = scores.get(fam, 0.0) + 1.0
+    return scores
+
+
 def propose_specs(
     limit: int,
     date_str: str,
@@ -176,8 +219,13 @@ def propose_specs(
     data_root: Path = _DEFAULT_DATA_ROOT,
     pairs: list[tuple] = PAIRS,
     families: list[dict] = FAMILIES,
+    family_priority: dict[str, float] | None = None,
 ) -> list[dict]:
-    """Return up to `limit` new, deduped, data-viable scan-specs with hyp ids."""
+    """Return up to `limit` new, deduped, data-viable scan-specs with hyp ids.
+
+    `family_priority` (e.g. from family_scores) biases which families lead —
+    feedback toward what has survived. None keeps the equal round-robin.
+    """
     feat: dict[tuple, dict] = {}
 
     def features(ex, sym):
@@ -197,6 +245,8 @@ def propose_specs(
                 col.append(_spec_for(fam, pair, lf, tf))
         buckets.append(col)
 
+    # Feedback: order families by past success, then round-robin for diversity.
+    buckets = [buckets[i] for i in _priority_order(families, family_priority)]
     ordered: list[dict] = []
     for i in range(max((len(b) for b in buckets), default=0)):
         for b in buckets:
@@ -240,10 +290,18 @@ def generate(
     *,
     scan_dirs: list[Path] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
+    feedback: bool = True,
 ) -> list[Path]:
-    """Full stage-B step: dedup against existing specs, propose, write to queue."""
+    """Full stage-B step: dedup against existing specs, propose, write to queue.
+
+    feedback=True biases family selection toward what has survived (family_scores
+    from the ledger); it degrades to equal round-robin when there is no history.
+    """
     scan_dirs = scan_dirs or [Path("scan-specs")]
     seen = existing_signatures(*scan_dirs)
     seq = next_seq(date_str, *scan_dirs)
-    specs = propose_specs(limit, date_str, seen=seen, seq_start=seq, data_root=data_root)
+    prio = family_scores(*scan_dirs) if feedback else None
+    specs = propose_specs(
+        limit, date_str, seen=seen, seq_start=seq, data_root=data_root, family_priority=prio
+    )
     return write_specs(specs, queue_dir)
