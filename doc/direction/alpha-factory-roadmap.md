@@ -54,16 +54,21 @@ had no test guarding them. A loop that self-modifies needs green, meaningful
 tests. Today: ~118 tests, **14 dead files** (importing removed tools) + **3 real
 failures**.
 
-- [ ] Delete/rewrite the 14 stale test files (import removed tools:
-      grid_scan, propose_expressions, scan_workflow, scanner, …).
-- [ ] Fix the 3 currently-failing tests.
-- [ ] Add regression tests encoding the caught bugs: schedule parity
-      (scan == orion), cost policy (bid/ask + flat, no spread double-count),
-      JPY-per-fill vs bps.
-- [ ] Add invariant guards the loop can assert at runtime (causality, no
-      look-ahead, dedup fingerprint, cost sanity).
+- [x] Delete/rewrite the 14 stale test files — 13 deleted (removed tools),
+      `test_grid_scan` → `test_flip_grid` (covers the new module).
+- [x] Fix the 3 failing tests — 2 were the `grid_scan_expr` import (build_combos
+      lives in `scan_runner`); 1 was a live-data-coupled inventory assertion,
+      now tests the structural invariant instead of a drifted date range.
+- [x] Regression tests for the caught bugs — `test_orion_schedule` (schedule
+      parity: scan == orion, and default_active trades Sunday / blocks Saturday);
+      `test_performance` (JPY per-fill arithmetic + bps↔jpy distinction); cost
+      policy already in `test_reward` + `test_return_calc` (bid/ask).
+- [ ] Runtime invariant guards the loop can assert (causality, no look-ahead,
+      dedup fingerprint, cost sanity) — some exist (causality is test-enforced,
+      fingerprint dedup in ledger_io); fold the rest into Stage C (#4).
 
-**Done when:** `pytest` is green, and the caught bugs cannot regress silently.
+**Done when:** `pytest` is green (**done: 135 passed, 0 errors**), and the caught
+bugs cannot regress silently. Runtime guards roll into #4.
 
 ## 3. Package the cross-repo boundaries (kill the sys.path hacks)
 

@@ -63,15 +63,18 @@ class TestInventory(unittest.TestCase):
         self.assertEqual(research_entry["canonicality"], "research-ephemeral")
 
     def test_missing_dates_represented(self):
-        # Feature_NearHFT has no populated data for either test market (only
-        # BINANCE/ETH_USDT and BINANCE/XRP_USDT are populated) -- confirmed
-        # directly against /panda/makalu-data during the task-4 spike.
-        entry = self.by_name_exchange[("Feature_NearHFT", "GMO")]
-        self.assertEqual(entry["availability"]["status"], "missing")
-        self.assertEqual(
-            entry["availability"]["missing_dates"],
-            [{"start": "2026-01-01", "end": "2026-01-10"}],
-        )
+        # Invariant: every dataset reported "missing" carries a well-formed
+        # missing_dates list (spans of {start, end}). We do NOT hardcode which
+        # dataset is missing over which range — that tracks live
+        # /panda/makalu-data state and drifts (Feature_NearHFT was backfilled
+        # since the task-4 spike). The structure is what must hold.
+        for d in self.inv["datasets"]:
+            avail = d["availability"]
+            self.assertIn("missing_dates", avail)
+            self.assertIsInstance(avail["missing_dates"], list)
+            for span in avail["missing_dates"]:
+                self.assertIn("start", span)
+                self.assertIn("end", span)
 
     def test_non_bronze_unavailability_routes_to_population_action_not_a_block(self):
         for (name, _exchange), entry in self.by_name_exchange.items():

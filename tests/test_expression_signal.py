@@ -171,8 +171,7 @@ class TestExpressionSignal(unittest.TestCase):
 
 class TestBuildCombos(unittest.TestCase):
     def test_spec_expansion(self):
-        sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
-        from grid_scan_expr import build_combos
+        from kilimanjaro.driver.scan_runner import build_combos
         spec = {
             "markets": {"a": {"exchange": "X", "symbol": "Y", "execution_size": "1"}},
             "expressions": [
@@ -191,8 +190,7 @@ class TestBuildCombos(unittest.TestCase):
         self.assertEqual(rc.params["horizon"], 30)
 
     def test_episode_return_calc_mode(self):
-        sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
-        from grid_scan_expr import build_combos
+        from kilimanjaro.driver.scan_runner import build_combos
         spec = {
             "return_calc": "episode",
             "markets": {"a": {"exchange": "X", "symbol": "Y", "execution_size": "1"}},
