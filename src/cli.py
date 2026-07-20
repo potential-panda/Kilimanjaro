@@ -27,7 +27,7 @@ logging.basicConfig(
 
 
 def main() -> int:
-    from command import generate, grid, ledger, loop, populate, scan, verify
+    from command import factory, generate, grid, ledger, loop, populate, scan, verify
 
     parser = argparse.ArgumentParser(prog="cli", description="Kilimanjaro research CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -39,6 +39,7 @@ def main() -> int:
     loop.register(sub)
     generate.register(sub)
     ledger.register(sub)
+    factory.register(sub)
 
     args = parser.parse_args()
     return args.func(args)

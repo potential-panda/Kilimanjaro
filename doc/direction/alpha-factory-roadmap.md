@@ -94,13 +94,22 @@ long-running process.
 **Why:** `loop.py` walks a queue once; there is no continuous scheduler. Stage C
 wraps generate+loop into a repeating cadence.
 
-- [ ] Cadence runner (generate → loop → sleep → repeat) with resource caps and rate limits.
-- [ ] Idempotency + dedup at scale (fingerprint already exists; make it the spine).
-- [ ] Hard human gate on 5–7 (never auto-promote); park survivors at the review packet.
-- [ ] Observability: run log, cost/time budget, "what did the loop learn today" digest.
+- [x] Cadence runner — `driver/stage_c.run_cadence` + `cli.py factory`:
+      generate → loop → sleep → repeat, **bounded by design** (refuses to start
+      without `cycles` or `max_minutes`); `gen_per_cycle` caps new ideas/cycle.
+- [x] Idempotency + dedup — inherited (generate signatures + ledger fingerprint);
+      Stage C just repeats the deduped pass, so nothing is re-queued/re-scanned.
+- [x] Hard human gate — Stage C only repeats `run_once`, which parks survivors at
+      the review packet and never promotes. Tested (survivors accumulate in the
+      digest, promotion never happens).
+- [~] Observability — per-cycle callback + accumulated Digest (cycles, generated,
+      scanned, verdict mix, survivors) done. **Remaining:** write the per-run
+      digest to the ledger, a real cost budget (not just wall-clock), and a
+      persistent daemon (start/stop) for multi-day unattended runs.
 
 **Done when:** the loop runs unattended for days, never crosses the human gate,
-and its ledger tells you what it tried and rejected.
+and its ledger tells you what it tried and rejected. ← **cadence + human-gate +
+dedup done; the daemon + ledger-digest are the remaining polish.**
 
 ## 5. Deepen the generator (search, not enumeration)
 
