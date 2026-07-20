@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from kilimanjaro.driver.policy import Outcome
+from kilimanjaro.framework import calibration
 
 
 def _fmt(v, nd=3):
@@ -74,10 +75,31 @@ def write_review_packet(
     survivors = [r for r in (res.get("stable") or []) if r.get("mt_significant")]
     p = res["params"]
 
+    cal = calibration.lookup(calibration.spec_mechanism(spec))
+    if cal.is_calibrated:
+        cal_block = (
+            f"- mechanism: `{cal.mechanism}` — status: **CALIBRATED**\n"
+            f"- {cal.evidence}\n"
+            "- The scan's net numbers are Himalaya-verified for this mechanism; "
+            "trust the magnitudes, subject to the usual residual model risk."
+        )
+    else:
+        cal_block = (
+            f"- mechanism: `{cal.mechanism}` — status: **⚠️ TREND-ONLY**\n"
+            f"- {cal.evidence}\n"
+            "- **Do NOT promote on the scan's absolute PnL/Sharpe.** They are not "
+            "Himalaya-verified for this mechanism — treat direction, magnitude-order "
+            "and param-ranking as indicative only. Himalaya calibration here is "
+            "blocked on a Stage-5 signal strategy (orion has only SAR-flip)."
+        )
+
     md = f"""# Review packet — {hyp} (scan-passed)
 
 **Recommended decision:** human review for Himalaya backtest approval.
 This is a scan survivor, NOT an approval — promotion is your call.
+
+## Calibration (scan↔Himalaya trust)
+{cal_block}
 
 ## Hypothesis
 - id: `{hyp}`
@@ -92,7 +114,7 @@ This is a scan survivor, NOT an approval — promotion is your call.
 - combos tested: {outcome.n_combos}
 - selection: rank stability (top {p['top_quantile']:.0%} of both windows, min_n={p['min_n']})
   AND Benjamini-Hochberg FDR at alpha={p.get('mt_alpha')} on holdout bootstrap p
-- cost charged: **{p['costs_bps']:.2f} bps** round-trip (target spread, mid-to-mid screen)
+- cost charged: **{p['costs_bps']:.2f} bps** round-trip (flat latency slippage; bid/ask fills already pay the spread)
 - rank-stable: {outcome.n_stable} | confirmed after FDR: {outcome.n_survivors}
 - verdict mix: {outcome.verdicts}
 - fingerprint: `{fingerprint}`
@@ -113,9 +135,10 @@ This is a scan survivor, NOT an approval — promotion is your call.
 2. Reject -> retire with a reason.
 3. Request a variant (changed horizon/threshold/regime) -> new spec, new hypothesis id.
 
-Reminder: this survivor is mid-to-mid + flat-cost unless run_calc is `episode`.
-If it is fixed_horizon, confirm it survives real bid/ask execution (an episode
-re-test) before trusting the net numbers.
+Reminder: execution is bid/ask (spread paid) + flat latency cost on every
+mechanism. Trust in the *net numbers* is gated by the Calibration section above,
+not by the return calc — a trend-only mechanism needs Himalaya (or its Stage-5
+strategy) before its absolute PnL/Sharpe can be believed.
 """
     path = out_dir / "REVIEW_PACKET.md"
     path.write_text(md)

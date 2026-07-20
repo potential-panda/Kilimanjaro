@@ -82,5 +82,21 @@ trend-only"* — so the funnel itself tells you when a "pass" rests on an unveri
 judge, instead of you having to remember. Same principle as putting rigor in the
 framework defaults: the machine refuses to quietly over-trust itself.
 
-(Registry not built yet; `cli.py verify-scan` is the per-mechanism check, so far
-run only for flip + between-signal on ETH.)
+**Built** — `src/kilimanjaro/framework/calibration.py` is the machine-readable
+registry (`lookup`, `spec_mechanism`, `is_calibrated`); the review packet reads it
+and stamps every survivor with **CALIBRATED** or **⚠️ TREND-ONLY** so the human
+gate can never mistake an unverified judge for a verified one. Current status:
+
+| mechanism | status | why |
+|---|---|---|
+| `flip+between_signal` | **calibrated** | ETH May 2026 + BTC 2025-07..2026-06 scan↔Himalaya match (post schedule/cost fixes) |
+| `expression+fixed_horizon` | trend-only | no orion counterpart to Himalaya-check (see below) |
+| `expression+episode` | trend-only | same |
+
+**Ground-truth blocker (2026-07):** Himalaya only backtests SAR-flip strategies —
+every orion variant (v1..v9, v601...) is parabolic-SAR. So expression mechanisms
+**cannot be Himalaya-calibrated until a signal-driven strategy exists in orion**
+(Stage 5, human-gated). Their *execution model* (bid/ask first-tick fills + flat
+latency cost + orion schedule) is inherited from the flip calibration and verified;
+what stays unverified is entry/exit-timing fidelity. Until that Stage-5 strategy
+exists, expression scans are trend-only by design, and the registry says so.
