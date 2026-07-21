@@ -6,6 +6,7 @@ records every outcome there and uses it for dedup — no separate state file.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 from pathlib import Path
@@ -87,5 +88,30 @@ def record_scan_attached(
         out_dir=out_dir,
         market=market,
         res=res,
+        ledger_path=ledger_path,
+    )
+
+
+def new_run_id(at: datetime.datetime | None = None) -> str:
+    """Run-level id for a Stage-C cadence run: run-YYYYMMDDTHHMMSSZ (UTC)."""
+    at = at or datetime.datetime.now(datetime.timezone.utc)
+    return at.strftime("run-%Y%m%dT%H%M%SZ")
+
+
+def record_cadence_digest(
+    run_id: str,
+    actor_id: str,
+    details: dict,
+    ledger_path: Path = DEFAULT_LEDGER_PATH,
+) -> dict:
+    """Append a run-level `cadence_digest` event — what a Stage-C run tried and
+    rejected (cycles, generated, scanned, verdict mix, survivors). Not tied to a
+    single hypothesis; the ledger's durable record of an unattended run."""
+    return append_event(
+        hypothesis_id=run_id,
+        event_type="cadence_digest",
+        actor_type="agent",
+        actor_id=actor_id,
+        details=details,
         ledger_path=ledger_path,
     )

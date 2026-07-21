@@ -43,8 +43,13 @@ driver of the framework, not part of framework/core):
   survivors and parking them at the human gate (never auto-promotes). Idempotent
   — a spec whose (content, window) fingerprint is already in the ledger is skipped.
 
-Stages 5-7 (build qate strategy, Himalaya, prod) stay human-gated. Stage C (a
-forever cadence wrapping generate+loop) is not built yet. See
+Stages 5-7 (build qate strategy, Himalaya, prod) stay human-gated. **Stage C**
+(`cli.py factory` / `driver/stage_c.run_cadence`) wraps generate+loop into a
+repeating cadence: bounded by `--cycles`, `--max-minutes`, or `--max-scans` (a
+cost budget = grid scans actually run), or run as a `--daemon` (graceful
+`--stop` via SIGTERM) for multi-day unattended runs. It never crosses the human
+gate — it only repeats `run_once` — and writes a run-level `cadence_digest`
+event to the ledger (what it tried and rejected). See
 `doc/requirements/agent-loop-design.md` for the state machine.
 
 ## Key modules

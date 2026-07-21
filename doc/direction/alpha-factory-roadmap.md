@@ -102,14 +102,19 @@ wraps generate+loop into a repeating cadence.
 - [x] Hard human gate — Stage C only repeats `run_once`, which parks survivors at
       the review packet and never promotes. Tested (survivors accumulate in the
       digest, promotion never happens).
-- [~] Observability — per-cycle callback + accumulated Digest (cycles, generated,
-      scanned, verdict mix, survivors) done. **Remaining:** write the per-run
-      digest to the ledger, a real cost budget (not just wall-clock), and a
-      persistent daemon (start/stop) for multi-day unattended runs.
+- [x] Observability — per-cycle callback + accumulated Digest (cycles, generated,
+      scanned, verdict mix, survivors), and a run-level `cadence_digest` event
+      written to the ledger (`ledger_io.record_cadence_digest`: what it tried and
+      rejected, `run-<UTC>` id).
+- [x] Cost budget — `--max-scans` bounds a run by grid scans actually run
+      (scan-passed + scan-failed), alongside `--cycles` / `--max-minutes`.
+- [x] Persistent daemon — `factory --daemon` runs unattended (PID file, SIGTERM/
+      SIGINT handlers, interruptible sleep); `factory --stop` requests a graceful
+      shutdown that finishes the in-flight cycle, records the digest, and exits.
 
 **Done when:** the loop runs unattended for days, never crosses the human gate,
-and its ledger tells you what it tried and rejected. ← **cadence + human-gate +
-dedup done; the daemon + ledger-digest are the remaining polish.**
+and its ledger tells you what it tried and rejected. ← **done: cadence,
+human-gate, dedup, cost budget, ledger-digest, and daemon start/stop.**
 
 ## 5. Deepen the generator (search, not enumeration)
 
