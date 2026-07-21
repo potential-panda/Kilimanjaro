@@ -15,7 +15,7 @@ grid.
 
 An expression signal is evaluated on a **1-second grid**. At most seconds the
 condition is "on", and we measure a return over some horizon `H` (seconds) ahead
-— either a fixed horizon (`FixedHorizonReturn`, mid-to-mid at `ts+H`) or the
+— either a fixed horizon (`FixedHorizonReturn`, bid/ask at `ts+H`) or the
 run to the next flip. Two observations one second apart therefore look forward
 into windows that overlap by `H-1` seconds. They share almost all of their
 price path.
@@ -186,7 +186,7 @@ holdout split and washed out entirely once a survivor is re-measured per episode
 | Block bootstrap p-value | **built** (`stats.py::block_bootstrap_pvalue`) |
 | Episode identification | **built** (`op/age.py::threshold_age`, `group` id) |
 | Event sampling (`age == 0`) | **available** via `ExpressionSignal` age gate |
-| Episode id on signal rows | **built** (`op/age.py::threshold_episode`; emitted by ExpressionSignal / OBIAgeSignal) |
-| `EpisodeReturn` calc + bid/ask execution | **built** (`return_calc/episode.py`; `grid_scan_expr` spec `return_calc: episode`) |
+| Episode id on signal rows | **built** (`op/age.py::threshold_episode`; emitted by ExpressionSignal) |
+| `EpisodeReturn` calc + bid/ask execution | **built** (`return_calc/episode.py`; `cli.py grid expr` spec `return_calc: episode`) |
 | `n_episodes` column in per-second output | **to build** — distinct `group` count next to `n` (with `EpisodeReturn`, `n` already is the episode count) |
 | Newey–West / HAC closed-form SE | optional; bootstrap covers it for now |

@@ -201,7 +201,7 @@ Research-layer datasets (`TripleBarrierLabel`, `TripleBarrierLabel_tmp`,
 as "ephemeral and rebuildable, not canonical." Any scan or ledger entry that
 uses one of these as a target must record which build/regen of that dataset
 was used — see `evaluation-framework.md` and the ledger schema in
-`autonomous-readiness-plan.md`.
+`../../schemas/ledger_event.schema.json`.
 
 ## Notes on scope
 

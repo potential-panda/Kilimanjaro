@@ -132,7 +132,7 @@ A single report per hypothesis id containing: the metrics above, the
 parameter/horizon grid (not just the best cell), the stability breakdown,
 and a one-line natural-language verdict citing which threshold(s) passed or
 failed. This report is what gets attached to the ledger entry — see
-`autonomous-readiness-plan.md` for the minimum schema.
+`../../schemas/ledger_event.schema.json` for the event schema.
 
 ## 2. Backtest protocol (Himalaya)
 

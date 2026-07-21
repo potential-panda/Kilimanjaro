@@ -15,7 +15,6 @@ The product is the repeatable loop and its memory, not autonomous live strategy 
 These requirements preserve the approved phase-1 direction from:
 
 - `/home/lulurun/workspace/Kilimanjaro/direction/workflow-strategy.md`
-- `/home/lulurun/workspace/Kilimanjaro/direction/tool-gap-analysis.md`
 - `/home/lulurun/workspace/Kilimanjaro/direction/hypothesis-taxonomy.md`
 - `/home/lulurun/workspace/Kilimanjaro/direction/evaluation-framework.md`
 

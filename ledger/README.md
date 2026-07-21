@@ -16,28 +16,25 @@ Rules:
 - Under version-control conflict, preserve both valid event lines and order
   by `created_at`; duplicate `event_id`s are invalid.
 
-Events are written automatically by the grid scan tools
-(`tools/grid_scan.py`, `tools/grid_scan_horizon.py`): every run appends one
-`scan_attached` event to its hypothesis — default per tool / market config,
-override with `--hypothesis-id`, escape hatch `--no-ledger` for throwaway
-exploration — carrying the scan folder, train/holdout windows, number of
-combos tested, and the rank-stable survivors. Grid runs never write status
-transitions: promotion (`backtest-approved`) stays a human `human_approval`
-event, and demotion/retirement stays a deliberate `status_transition`,
-never a side effect of running a scan.
+Events are written automatically by the grid scans (`cli.py grid {flip,obi,expr}`)
+and the Stage-A loop / Stage-C cadence: every run appends one `scan_attached`
+event to its hypothesis — default per market/spec, override with
+`--hypothesis-id`, escape hatch `--no-ledger` for throwaway exploration —
+carrying the scan folder, train/holdout windows, number of combos tested, and
+the rank-stable survivors. Grid runs never write status transitions: promotion
+(`backtest-approved`) stays a human `human_approval` event, and
+demotion/retirement stays a deliberate `status_transition`, never a side effect
+of running a scan.
 
-(The earlier `tools/scan_workflow.py` spec pipeline referenced here was
-removed in the tools cleanup along with `validate_spec.py` /
-`threshold_evaluator.py`; validate specs directly against
-`schemas/hypothesis_spec.schema.json` for now.)
-
-Lower-level operations remain available directly via `tools/ledger.py`:
+The ledger library lives in `src/kilimanjaro/ledger/` (`core` = the event log,
+`grid` = the scan_attached recorder). Lower-level operations are available via
+`cli.py ledger`:
 
 ```bash
 # Append an event manually (event_id and created_at are generated) --
 # e.g. a human_approval promoting a scan-passed hypothesis, or marking a
 # duplicate without running a scan at all.
-python tools/ledger.py append \
+python src/cli.py ledger append \
   --hypothesis-id hyp-20260618-001 --event-type human_approval \
   --actor-type human --actor-id lulurun \
   --from-status scan-passed --to-status backtest-approved \
@@ -46,7 +43,7 @@ python tools/ledger.py append \
 # Search jointly across specs/ (family, mechanism, datasets, symbols) and
 # this ledger (decision reasons, status) -- ledger events alone don't carry
 # the descriptive fields, only the linked spec does.
-python tools/ledger.py search --family order_book_imbalance --rejected-only
+python src/cli.py ledger search --family order_book_imbalance --rejected-only
 ```
 
 A duplicate can be marked with `--to-status duplicate --decision-reason

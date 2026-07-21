@@ -2,8 +2,8 @@
 
 How every grid scan in this repo is judged. Implemented in
 `src/kilimanjaro/framework/evaluate.py` (`run_grid_split`); used by all
-three grid tools (`tools/grid_scan.py`, `tools/grid_scan_horizon.py`,
-`tools/grid_scan_expr.py`). Every run records its outcome as a
+every grid-scan flavour (`cli.py grid {flip,obi,expr}`, one shared core in
+`driver/scan_runner.run_grid_scan`). Every run records its outcome as a
 `scan_attached` ledger event.
 
 ## Why this exists
@@ -97,7 +97,6 @@ before acting.
 
 So "what changed in March 2026" is mostly an **ETH** story (decay), not a
 board-wide regime shift: XRP was never cleanly persistent, and BTC held.
-Lead-lag is ruled out as the cause (doc/lead-lag-2026-investigation.md).
 
 ## Output files per run
 
