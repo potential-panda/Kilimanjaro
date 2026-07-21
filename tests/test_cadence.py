@@ -27,7 +27,7 @@ def _mock(generate_return=("a.yaml", "b.yaml"), summary=_SUMMARY):
     )
 
 
-class TestStageC(unittest.TestCase):
+class TestCadence(unittest.TestCase):
     def test_refuses_unbounded_run(self):
         with self.assertRaises(ValueError):
             cadence.run_cadence("/tmp/q", "2026-01-01", "2026-06-30")  # no bound at all
@@ -116,6 +116,46 @@ class TestStageC(unittest.TestCase):
         self.assertEqual(det["n_survivors"], 2)
         self.assertEqual(det["window"], ["2026-01-01", "2026-06-30"])
         self.assertEqual(det["stop_reason"], "cycles")
+
+    def test_cycle_error_is_isolated(self):
+        # cycle 1 throws; the cadence logs it and keeps going.
+        calls = {"n": 0}
+
+        def flaky(*a, **k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("boom")
+            return _SUMMARY
+
+        with tempfile.TemporaryDirectory() as d, patch(
+            "kilimanjaro.driver.cadence.gen.generate", return_value=[]
+        ), patch(
+            "kilimanjaro.driver.cadence.run_once", side_effect=flaky
+        ), patch("kilimanjaro.driver.cadence._interruptible_sleep"):
+            digest = cadence.run_cadence(
+                Path(d) / "q", "2026-01-01", "2026-06-30",
+                cycles=3, record_digest=False,
+            )
+        self.assertEqual(calls["n"], 3)  # did not stop on the failure
+        self.assertEqual(digest.cycles, 3)
+        self.assertEqual(digest.errors, 1)
+        self.assertEqual(digest.stop_reason, "cycles")
+        # the 2 good cycles still accumulated
+        self.assertEqual(digest.counts, {"scan-passed": 2, "scan-failed": 4})
+
+    def test_too_many_consecutive_errors_stops(self):
+        with tempfile.TemporaryDirectory() as d, patch(
+            "kilimanjaro.driver.cadence.gen.generate", return_value=[]
+        ), patch(
+            "kilimanjaro.driver.cadence.run_once", side_effect=RuntimeError("always")
+        ), patch("kilimanjaro.driver.cadence._interruptible_sleep"):
+            digest = cadence.run_cadence(
+                Path(d) / "q", "2026-01-01", "2026-06-30",
+                cycles=100, max_consecutive_errors=3, record_digest=False,
+            )
+        self.assertEqual(digest.stop_reason, "too_many_errors")
+        self.assertEqual(digest.errors, 3)
+        self.assertEqual(digest.cycles, 3)
 
 
 if __name__ == "__main__":

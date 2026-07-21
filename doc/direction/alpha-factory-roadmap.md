@@ -111,6 +111,9 @@ wraps generate+loop into a repeating cadence.
 - [x] Persistent daemon — `factory --daemon` runs unattended (PID file, SIGTERM/
       SIGINT handlers, interruptible sleep); `factory --stop` requests a graceful
       shutdown that finishes the in-flight cycle, records the digest, and exits.
+- [x] Cycle isolation + logging — a failing cycle is caught, logged, and the run
+      continues (stops after `--max-consecutive-errors` in a row); `--daemon`
+      writes a rotating log (`.cadence.log`). One bad cycle can't kill a run.
 
 **Done when:** the loop runs unattended for days, never crosses the human gate,
 and its ledger tells you what it tried and rejected. ← **done: cadence,

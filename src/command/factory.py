@@ -35,10 +35,32 @@ def register(sub: argparse._SubParsersAction) -> None:
                    help="Run unattended until stopped (--stop); handles SIGTERM/SIGINT gracefully")
     p.add_argument("--stop", action="store_true", help="Signal a running daemon to stop, then exit")
     p.add_argument("--pid-file", default=".cadence.pid", help="Daemon PID file (default .cadence.pid)")
+    p.add_argument("--log-file", default=None,
+                   help="Write a rotating log here (daemon defaults to .cadence.log)")
+    p.add_argument("--max-consecutive-errors", type=int, default=5,
+                   help="Stop after this many failed cycles in a row (default 5)")
     p.set_defaults(func=_run_factory)
 
 
+def _setup_logging(log_file: Path) -> None:
+    import logging
+    import logging.handlers
+
+    logger = logging.getLogger("kilimanjaro")
+    logger.setLevel(logging.INFO)
+    handler = logging.handlers.RotatingFileHandler(
+        log_file, maxBytes=10_000_000, backupCount=5
+    )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+    )
+    logger.addHandler(handler)
+
+
 def _on_cycle(cr) -> None:
+    if cr.error:
+        print(f"[cycle {cr.cycle}] FAILED — {cr.error} (isolated; continuing)", flush=True)
+        return
     live = {k: v for k, v in cr.counts.items() if v}
     print(f"[cycle {cr.cycle}] generated={cr.generated} scanned={cr.scanned} "
           f"scans_run={cr.scans_run} verdicts={live} survivors={len(cr.survivors)}", flush=True)
@@ -78,6 +100,11 @@ def _run_factory(args: argparse.Namespace) -> int:
         print("--start and --end are required")
         return 2
 
+    log_file = args.log_file or (".cadence.log" if args.daemon else None)
+    if log_file:
+        _setup_logging(Path(log_file))
+        print(f"Logging to {log_file}", flush=True)
+
     stop_flag = {"v": False}
     stop_requested = None
     if args.daemon:
@@ -111,7 +138,8 @@ def _run_factory(args: argparse.Namespace) -> int:
             cycles=args.cycles, max_minutes=args.max_minutes, max_scans=args.max_scans,
             gen_per_cycle=args.gen_per_cycle, interval_seconds=args.interval_seconds,
             split=args.split, results_root=Path(args.results_root), dry_run=args.dry_run,
-            stop_requested=stop_requested, on_cycle=_on_cycle,
+            stop_requested=stop_requested, max_consecutive_errors=args.max_consecutive_errors,
+            on_cycle=_on_cycle,
         )
     except ValueError as e:
         print(f"Error: {e}")

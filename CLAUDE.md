@@ -47,7 +47,9 @@ steps 5-7 (build qate strategy, Himalaya, prod) stay human-gated. The **cadence*
 (`cli.py factory` / `driver/cadence.run_cadence`) wraps generate+loop into a
 repeating cadence: bounded by `--cycles`, `--max-minutes`, or `--max-scans` (a
 cost budget = grid scans actually run), or run as a `--daemon` (graceful
-`--stop` via SIGTERM) for multi-day unattended runs. It never crosses the human
+`--stop` via SIGTERM) for multi-day unattended runs. A failing cycle is isolated
+(logged, the run continues; it stops after `--max-consecutive-errors` in a row),
+and `--daemon` writes a rotating log (`.cadence.log`). It never crosses the human
 gate — it only repeats `run_once` — and writes a run-level `cadence_digest`
 event to the ledger (what it tried and rejected). See
 `doc/requirements/agent-loop-design.md` for the state machine.
