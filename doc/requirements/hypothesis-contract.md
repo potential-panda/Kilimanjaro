@@ -156,7 +156,7 @@ If `family: custom`, `custom_family_justification` is required and must name the
 
 A feature is not assumed to be computed on the same market as the target.
 Where a lead-lag relationship exists between two markets (see
-`markets/waves/leadlag_*.csv`, built by `tools/lead_lag_wave.py`), the
+`cycle/02_markets/waves/leadlag_*.csv`, built by `tools/lead_lag_wave.py`), the
 follower market's own order-book/flow signals are largely a lagged copy of
 the leader's and are not independently informative — the informative
 signal is computed on the leader, predicting the follower's future return.
@@ -202,7 +202,7 @@ exists, not assume the target's own book is the right feature source.
 
 `target.primary_horizon_seconds` (and `scan_plan.primary_horizon_seconds`,
 which must match it) is not a free choice. Before scanning, check
-`markets/waves/<exchange>_<symbol>.csv` (built by `tools/volatility_wave.py`)
+`cycle/02_markets/waves/<exchange>_<symbol>.csv` (built by `tools/volatility_wave.py`)
 for the target market: a horizon where price rarely moves past the spread
 cannot be profitable regardless of what the signal predicts, and is not
 worth scanning. `economic_rationale` or `summary` should note which wave
@@ -225,8 +225,8 @@ A spec is invalid when:
 - data requirements cannot be matched to Makalu inventory;
 - a research-layer target is missing `param_id`;
 - a feature is sourced from a different market than the target and `cross_market_rationale` is empty;
-- `execution_assumptions.fees_bps` doesn't match `markets/registry.yaml`'s `fee_bps` for the target market. Found for real during task 11's bootstrap validation: every one of the first 5 hypotheses declared `fees_bps: 1.0` against `GMO BTC_JPY`/`ETH_JPY`, whose registry fee is actually `0` -- an arbitrary guess silently overriding the project's own authoritative source, which would have understated the cost-buffer margin in every one of those reports. The registry is authoritative; a spec that intentionally deviates from it needs to say why.
-- `execution_assumptions.slippage_bps` doesn't match `markets/registry.yaml`'s `default_slippage_bps`. That value (`0.5`) is from ~1 year of the user's own real trading -- a genuine empirical number, not a placeholder, and the same single-source-of-truth principle as `fee_bps` applies: specs declare it, they don't each independently guess it.
+- `execution_assumptions.fees_bps` doesn't match `cycle/02_markets/registry.yaml`'s `fee_bps` for the target market. Found for real during task 11's bootstrap validation: every one of the first 5 hypotheses declared `fees_bps: 1.0` against `GMO BTC_JPY`/`ETH_JPY`, whose registry fee is actually `0` -- an arbitrary guess silently overriding the project's own authoritative source, which would have understated the cost-buffer margin in every one of those reports. The registry is authoritative; a spec that intentionally deviates from it needs to say why.
+- `execution_assumptions.slippage_bps` doesn't match `cycle/02_markets/registry.yaml`'s `default_slippage_bps`. That value (`0.5`) is from ~1 year of the user's own real trading -- a genuine empirical number, not a placeholder, and the same single-source-of-truth principle as `fee_bps` applies: specs declare it, they don't each independently guess it.
 
 For research-layer targets, missing `param_id` is invalid. Missing `build_id` or `generated_at` sets `research_metadata.metadata_status: partial`, maps the lifecycle to `needs-tooling`, and blocks `scan-passed` / `backtest-approved` unless the narrow non-primary-target waiver in the Makalu integration contract applies.
 

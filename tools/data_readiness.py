@@ -160,10 +160,11 @@ def assess_data_readiness(
     for dataset_name, exchange, symbol in _dataset_market_pairs(h):
         if dataset_name in _PRECOMPUTED_FEATURE_DATASETS:
             # Kilimanjaro-owned, never in Makalu's catalog by design -- check
-            # its own markets/features/ tree instead of the Makalu inventory.
+            # its own cycle/02_markets/features/ tree instead of the Makalu inventory.
             feature_dir = (
                 _ROOT
-                / "markets"
+                / "cycle"
+                / "02_markets"
                 / "features"
                 / f"dataset={dataset_name}"
                 / f"exchange={exchange}"
@@ -176,7 +177,7 @@ def assess_data_readiness(
             if distinct_days < minimum_distinct_days:
                 needs_more_data_reasons.append(
                     f"{exchange}/{symbol}/{dataset_name}: only {distinct_days} distinct days available in "
-                    f"markets/features/, need at least {minimum_distinct_days}"
+                    f"cycle/02_markets/features/, need at least {minimum_distinct_days}"
                 )
             columns = None
             if date_dirs:

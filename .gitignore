@@ -6,7 +6,7 @@ __pycache__/
 
 # Regenerable analytical artifacts (run tools/volatility_wave.py,
 # tools/lead_lag_wave.py, tools/fill_probability.py, tools/regime_window.py
-# to rebuild -- see markets/README.md)
-markets/waves/*.csv
-markets/graphs/*.png
-markets/regimes/*.json
+# to rebuild -- see cycle/02_markets/README.md)
+cycle/02_markets/waves/*.csv
+cycle/02_markets/graphs/*.png
+cycle/02_markets/regimes/*.json

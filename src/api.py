@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Kilimanjaro research-loop HTTP API -- port 9777.
 
-Read-only visualization of results/grid_scan/, hypotheses/, and ledger/ -- the
+Read-only visualization of cycle/13_results/grid_scan/, cycle/11_hypotheses/,
+and cycle/14_ledger/ -- the
 same file layout convention as Makalu's src/api.py (web/ for the frontend,
 served as static files from this same process). Nothing here writes to any
 of those directories; this is a viewer, not a control surface -- mutating
@@ -27,10 +28,10 @@ from pathlib import Path
 from flask import Flask, abort, jsonify, send_from_directory
 
 _ROOT = Path(__file__).parent.parent
-_HYPOTHESES_DIR = _ROOT / "hypotheses"
-_LEDGER_PATH = _ROOT / "ledger" / "events.jsonl"
+_HYPOTHESES_DIR = _ROOT / "cycle" / "11_hypotheses"
+_LEDGER_PATH = _ROOT / "cycle" / "14_ledger" / "events.jsonl"
 _WEB_DIR = _ROOT / "web"
-_GRID_SCAN_DIR = _ROOT / "results" / "grid_scan"
+_GRID_SCAN_DIR = _ROOT / "cycle" / "13_results" / "grid_scan"
 _SCAN_KINDS = ("flip", "horizon", "expr")
 
 sys.path.insert(0, str(_ROOT / "src"))

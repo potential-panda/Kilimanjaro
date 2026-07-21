@@ -18,9 +18,9 @@ Robustness options (see doc/lead-lag-2026-investigation.md for why):
 Usage
 -----
     python tools/lead_lag_check.py --start 2025-07-01 --end 2026-06-29 \
-        --out results/lead_lag/daily_raw.csv
+        --out cycle/13_results/lead_lag/daily_raw.csv
     python tools/lead_lag_check.py --start 2025-07-01 --end 2026-06-29 \
-        --winsorize --out results/lead_lag/daily_winsorized.csv
+        --winsorize --out cycle/13_results/lead_lag/daily_winsorized.csv
 """
 
 from __future__ import annotations

@@ -297,7 +297,7 @@ def generate(
     feedback=True biases family selection toward what has survived (family_scores
     from the ledger); it degrades to equal round-robin when there is no history.
     """
-    scan_dirs = scan_dirs or [Path("specs")]
+    scan_dirs = scan_dirs or [Path("cycle/12_specs")]
     seen = existing_signatures(*scan_dirs)
     seq = next_seq(date_str, *scan_dirs)
     prio = family_scores(*scan_dirs) if feedback else None

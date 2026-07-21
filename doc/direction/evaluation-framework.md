@@ -81,7 +81,7 @@ A hypothesis spec resolves to:
 must be logged and treated as a meta-decision per `workflow-strategy.md`)
 - The primary horizon was declared before scanning, not chosen after seeing
   results — and must be justified by the target market's volatility-vs-spread
-  wave (`markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`),
+  wave (`cycle/02_markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`),
   not picked by convention. A horizon where price rarely clears the spread
   on the target market cannot be profitable regardless of what the signal
   predicts; see `hypothesis-taxonomy.md`'s 2026-06-18 addendum.
@@ -132,7 +132,7 @@ A single report per hypothesis id containing: the metrics above, the
 parameter/horizon grid (not just the best cell), the stability breakdown,
 and a one-line natural-language verdict citing which threshold(s) passed or
 failed. This report is what gets attached to the ledger entry — see
-`../../schemas/ledger_event.schema.json` for the event schema.
+`../../cycle/01_schemas/ledger_event.schema.json` for the event schema.
 
 ## 2. Backtest protocol (Himalaya)
 

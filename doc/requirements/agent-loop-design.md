@@ -108,7 +108,7 @@ Review packet generation follows `scan-passed`. Handoff YAML generation follows 
 
 ## Approval And Waiver Event Schema
 
-Approval and waiver records are JSON Lines events in `ledger/events.jsonl`:
+Approval and waiver records are JSON Lines events in `cycle/14_ledger/events.jsonl`:
 
 ```json
 {

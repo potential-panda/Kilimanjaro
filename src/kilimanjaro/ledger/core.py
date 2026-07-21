@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Append to and search Kilimanjaro's research ledger (ledger/events.jsonl).
+"""Append to and search Kilimanjaro's research ledger (cycle/14_ledger/events.jsonl).
 
 Per requirements/hypothesis-contract.md's "Duplicate Detection", finding
 prior work means searching both the ledger (status/decision history) and
@@ -22,17 +22,18 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 def _find_repo_root(start: Path) -> Path:
-    """Walk up to the repo root (the dir holding schemas/ + ledger/)."""
+    """Walk up to the repo root (the dir holding pyproject.toml + src/)."""
     for p in (start, *start.parents):
-        if (p / "schemas").is_dir() and (p / "ledger").is_dir():
+        if (p / "pyproject.toml").is_file() and (p / "src").is_dir():
             return p
     return start.parents[3]  # fallback: src/kilimanjaro/ledger/core.py -> root
 
 
 _ROOT = _find_repo_root(Path(__file__).resolve())
-_SCHEMAS_DIR = _ROOT / "schemas"
-_DEFAULT_LEDGER_PATH = _ROOT / "ledger" / "events.jsonl"
-_DEFAULT_HYPOTHESES_DIR = _ROOT / "hypotheses"
+_CYCLE = _ROOT / "cycle"
+_SCHEMAS_DIR = _CYCLE / "01_schemas"
+_DEFAULT_LEDGER_PATH = _CYCLE / "14_ledger" / "events.jsonl"
+_DEFAULT_HYPOTHESES_DIR = _CYCLE / "11_hypotheses"
 
 _REJECTION_STATUSES = {
     "invalid-spec",

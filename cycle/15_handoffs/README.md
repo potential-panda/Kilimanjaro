@@ -1,8 +1,8 @@
 # Backtest Handoffs
 
 Manual handoff packages for hypotheses that a human has approved for
-Himalaya backtesting. Format defined by `../requirements/requirements.md`
-(workflow stage 7) and `../requirements/data-contract.md`.
+Himalaya backtesting. Format defined by `../../doc/requirements/requirements.md`
+(workflow stage 7) and `../../doc/requirements/data-contract.md`.
 
 Naming:
 
@@ -33,13 +33,13 @@ combos, not env setup.
 
 ```bash
 # Show what would be written, touch nothing:
-python handoffs/build_backtest_env.py handoffs/hyp-20260713-002.yaml --dry-run
+python cycle/15_handoffs/build_backtest_env.py cycle/15_handoffs/hyp-20260713-002.yaml --dry-run
 
 # Write params_combo.json:
-python handoffs/build_backtest_env.py handoffs/hyp-20260713-002.yaml
+python cycle/15_handoffs/build_backtest_env.py cycle/15_handoffs/hyp-20260713-002.yaml
 
 # Write, then run the holdout window in Himalaya (--optimize combo):
-python handoffs/build_backtest_env.py handoffs/hyp-20260713-002.yaml \
+python cycle/15_handoffs/build_backtest_env.py cycle/15_handoffs/hyp-20260713-002.yaml \
     --run --window holdout
 ```
 

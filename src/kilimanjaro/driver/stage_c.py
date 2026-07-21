@@ -24,7 +24,7 @@ from pathlib import Path
 from kilimanjaro.driver import generate as gen
 from kilimanjaro.driver.loop import run_once
 
-_DEFAULT_RESULTS_ROOT = Path("results/grid_scan/expr")
+_DEFAULT_RESULTS_ROOT = Path("cycle/13_results/grid_scan/expr")
 
 
 @dataclass

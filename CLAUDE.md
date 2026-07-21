@@ -20,9 +20,9 @@ python src/cli.py populate chart-range-sar   # precompute SAR flip events
 python src/cli.py verify  chart-range-sar    # compare bars/SAR vs backtest InfluxDB BAR
 python src/cli.py scan                       # flip-anchored signal scan
 python src/cli.py verify-scan                # compare scan vs backtest ORDER + EVAL
-python src/cli.py generate --queue specs/queue --limit 5
+python src/cli.py generate --queue cycle/12_specs/queue --limit 5
                                              # propose new formula specs (stage B)
-python src/cli.py loop --queue specs/queue --start ... --end ...
+python src/cli.py loop --queue cycle/12_specs/queue --start ... --end ...
                                              # autonomous scanner loop (stages 1-4)
 ```
 
@@ -73,6 +73,15 @@ through `run_grid_split` and record one `scan_attached` ledger event per run
 (`--no-ledger` to skip, `--hypothesis-id` to re-attribute). Selection criterion
 is rank stability across the train/holdout split, never in-sample p-values.
 (The old `tools/grid_scan*.py` were consolidated into these.)
+
+## Repo layout
+
+Code/infra live at the root (`src/`, `tests/`, `tools/`, `web/`, `doc/`). All
+research-cycle **data** lives under `cycle/`, numbered in pipeline order —
+`0x` = foundation inputs (`01_schemas`, `02_markets`, `03_inventory`), `1x` =
+the loop (`11_hypotheses` → `12_specs` → `13_results` → `14_ledger` →
+`15_handoffs`). See `cycle/README.md`. When code needs one of these, build the
+path from the repo root (e.g. `_ROOT / "cycle" / "14_ledger" / "events.jsonl"`).
 
 ## Data paths
 

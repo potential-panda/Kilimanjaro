@@ -109,23 +109,26 @@ Everything runs through `python src/cli.py <command>`:
 
 Promotion (steps 5–7) stays human: the loop parks survivors at a `REVIEW_PACKET.md`
 stamped CALIBRATED / TREND-ONLY; a human records the `human_approval` and drafts a
-handoff (`handoffs/`). See `doc/requirements/agent-loop-design.md` for the state
+handoff (`cycle/15_handoffs/`). See `doc/requirements/agent-loop-design.md` for the state
 machine.
 
 ## Artifacts
 
-The v1 file layout (canonical formats in `requirements/data-contract.md`):
+All research-cycle data lives under `cycle/`, numbered in pipeline order (see
+`cycle/README.md`). The v1 file layout (canonical formats in
+`doc/requirements/data-contract.md`):
 
-- `hypotheses/` — hypothesis specs (`hyp-YYYYMMDD-NNN.yaml`)
-- `specs/` — the loop's working scan specs (expression formulas + sweeps)
-- `results/grid_scan/{flip,expr,horizon}/` — grid-scan outputs (`output.csv`, `output_stable.csv`, `params.json`, …)
-- `ledger/` — append-only research memory (`events.jsonl`)
-- `handoffs/` — human-approved backtest handoff packages (`hyp-YYYYMMDD-NNN.yaml`/`.md`)
-- `inventory/` — Makalu data inventory snapshots (`inventory-YYYYMMDDTHHMMSSZ.yaml`)
+- `cycle/11_hypotheses/` — hypothesis specs (`hyp-YYYYMMDD-NNN.yaml`)
+- `cycle/12_specs/` — the loop's working scan specs (expression formulas + sweeps)
+- `cycle/13_results/grid_scan/{flip,expr,horizon}/` — grid-scan outputs (`output.csv`, `output_stable.csv`, `params.json`, …)
+- `cycle/14_ledger/` — append-only research memory (`events.jsonl`)
+- `cycle/15_handoffs/` — human-approved backtest handoff packages (`hyp-YYYYMMDD-NNN.yaml`/`.md`)
+- `cycle/03_inventory/` — Makalu data inventory snapshots (`inventory-YYYYMMDDTHHMMSSZ.yaml`)
+- `cycle/01_schemas/` — JSON Schemas; `cycle/02_markets/` — market universe + wave data
 
 Each directory has its own `README.md` with the exact naming convention and
-a pointer to the authoritative schema in `requirements/`. Canonical formats
-and path patterns are defined once, in `requirements/data-contract.md`
+a pointer to the authoritative schema in `doc/requirements/`. Canonical formats
+and path patterns are defined once, in `doc/requirements/data-contract.md`
 ("Canonical v1 Artifact Formats") — the per-directory READMEs link there
 rather than restating it.
 
@@ -136,14 +139,14 @@ day, what horizon can even move price more than the spread? Testing a signal
 against a horizon that can't clear the spread can't be profitable regardless of
 what it predicts.
 
-- `markets/registry.yaml` — the fixed, deliberately small tradeable universe
+- `cycle/02_markets/registry.yaml` — the fixed, deliberately small tradeable universe
   (venue/instrument groups across COINCHECK, GMO, BITBANK), each confirmed to
   exist as Makalu bronze.
-- `markets/waves/`, `markets/graphs/` — precomputed daily volatility-vs-spread
+- `cycle/02_markets/waves/`, `cycle/02_markets/graphs/` — precomputed daily volatility-vs-spread
   "wave" data (probability of clearing 1–3× the spread at several horizons, per
   30-min JST bucket, from bronze `OrderBook`). A lead-lag wave (BINANCE isn't
   traded but leads GMO) and, on limit-only venues, a resting-limit
-  fill-probability proxy were computed the same way. See `markets/README.md`.
+  fill-probability proxy were computed the same way. See `cycle/02_markets/README.md`.
 
 ## Docs
 
@@ -173,7 +176,7 @@ decision, not a blocker.
 step) -- the same file layout convention as Makalu's own `src/api.py`/`web/`.
 Read-only, two views:
 
-- **Scans** (`#/scans`) -- every grid-scan run under `results/grid_scan/`
+- **Scans** (`#/scans`) -- every grid-scan run under `cycle/13_results/grid_scan/`
   (flip / horizon / expr), newest first, with verdict counts. A run's
   detail view renders each CSV (`output.csv`, `output_stable.csv`,
   `output_monthly.csv`, ...) as a table sortable by any column (click a

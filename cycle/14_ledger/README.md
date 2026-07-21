@@ -1,7 +1,7 @@
 # Research Ledger
 
 `events.jsonl` is Kilimanjaro's append-only research memory — the schema is
-defined in `../requirements/data-contract.md` ("Ledger Event Contract").
+defined in `../../doc/requirements/data-contract.md` ("Ledger Event Contract").
 
 Rules:
 
@@ -11,7 +11,7 @@ Rules:
   rejected and parked ones — this is what lets a later session avoid
   re-proposing a dead idea.
 - Search by family, mechanism keyword, dataset, symbol, or rejection reason
-  before creating a new hypothesis (see `../requirements/hypothesis-contract.md`,
+  before creating a new hypothesis (see `../../doc/requirements/hypothesis-contract.md`,
   "Duplicate Detection").
 - Under version-control conflict, preserve both valid event lines and order
   by `created_at`; duplicate `event_id`s are invalid.
@@ -40,7 +40,7 @@ python src/cli.py ledger append \
   --from-status scan-passed --to-status backtest-approved \
   --decision-reason promotion-approved
 
-# Search jointly across hypotheses/ (family, mechanism, datasets, symbols) and
+# Search jointly across cycle/11_hypotheses/ (family, mechanism, datasets, symbols) and
 # this ledger (decision reasons, status) -- ledger events alone don't carry
 # the descriptive fields, only the linked spec does.
 python src/cli.py ledger search --family order_book_imbalance --rejected-only

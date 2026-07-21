@@ -1,5 +1,6 @@
 """Smoke tests for src/api.py -- the read-only viewer over
-results/grid_scan/, specs/, and ledger/. Runs against the real, committed
+cycle/13_results/grid_scan/, cycle/11_hypotheses/, and cycle/14_ledger/.
+Runs against the real, committed
 data in this repo (not a scratch fixture) since the whole point is
 visualizing what's actually there; these tests confirm the routes return
 the expected shapes and that the file endpoint can't escape a scan folder.

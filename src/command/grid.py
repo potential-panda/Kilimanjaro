@@ -24,7 +24,7 @@ from kilimanjaro.driver.scan_runner import build_combos, run_grid_scan, run_spec
 from kilimanjaro.framework import MarketConfig, RollingDrawdownGate, default_split
 from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
 
-_RESULTS = Path("results/grid_scan")
+_RESULTS = Path("cycle/13_results/grid_scan")
 _FLIP_HYP = "hyp-20260703-002"  # schedule-adaptive flip-scan spec (box×step×sched)
 _OBI_HYP = {"eth": "hyp-20260713-001", "btc": "hyp-20260618-001"}
 

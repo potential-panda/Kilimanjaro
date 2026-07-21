@@ -14,8 +14,8 @@ def register(sub: argparse._SubParsersAction) -> None:
         "loop",
         help="Run the autonomous scanner loop over a queue of scan specs (stages 1-4)",
     )
-    p.add_argument("--queue", default="specs/queue",
-                   help="Directory of scan-spec YAMLs to process (default specs/queue)")
+    p.add_argument("--queue", default="cycle/12_specs/queue",
+                   help="Directory of scan-spec YAMLs to process (default cycle/12_specs/queue)")
     p.add_argument("--start", required=True, help="Loop-wide window start YYYY-MM-DD")
     p.add_argument("--end", required=True, help="Loop-wide window end YYYY-MM-DD")
     p.add_argument("--split", default=None,
@@ -23,10 +23,10 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--actor-id", default="scan-loop", help="Ledger actor_id for events")
     p.add_argument("--limit", type=int, default=None,
                    help="Process at most N new specs this pass")
-    p.add_argument("--results-root", default="results/grid_scan/expr",
+    p.add_argument("--results-root", default="cycle/13_results/grid_scan/expr",
                    help="Where scan output folders are written")
     p.add_argument("--ledger-path", default=None,
-                   help="Ledger events file (default: repo ledger/events.jsonl). "
+                   help="Ledger events file (default: repo cycle/14_ledger/events.jsonl). "
                         "Point elsewhere to isolate a test run.")
     p.add_argument("--dry-run", action="store_true",
                    help="Validate + dedup only; do not scan or write ledger events")

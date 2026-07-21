@@ -8,14 +8,14 @@ without new pipelines.
 
 ## Addendum: cross-market sourcing and horizon selection (2026-06-18)
 
-Added after the market-characterization layer (`markets/`) was built, based
+Added after the market-characterization layer (`cycle/02_markets/`) was built, based
 on direct user guidance — applies to every family below, not just #1 and #9:
 
 - **BINANCE is the default feature source for predicting any JP market with
   a confirmed lead-lag leader — always, not just "consider it."** Per direct
   user instruction (2026-06-18, repeated for emphasis): BINANCE leads GMO
   BTC_JPY/ETH_JPY/XRP_JPY 81-97% of the time across every 30-minute JST
-  bucket (`markets/waves/leadlag_BINANCE_GMO_*.csv`), so in theory and in
+  bucket (`cycle/02_markets/waves/leadlag_BINANCE_GMO_*.csv`), so in theory and in
   practice its own order-book/flow state is more informative than the
   follower's lagged copy of it. Compute the signal on BINANCE; measure the
   target return on the market actually traded (GMO). The only exceptions
@@ -27,7 +27,7 @@ on direct user guidance — applies to every family below, not just #1 and #9:
   (`cross_market_rationale`, now required to justify *not* using BINANCE,
   not just to justify using it).
 - **The tested horizon must be justified by the volatility-vs-spread wave**
-  (`markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`), not
+  (`cycle/02_markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`), not
   picked by convention. A horizon where price rarely clears the spread on
   the target market cannot be profitable regardless of what the signal
   predicts — e.g. 5s is too short for GMO BTC_JPY at most times of day; ~120s
@@ -201,7 +201,7 @@ Research-layer datasets (`TripleBarrierLabel`, `TripleBarrierLabel_tmp`,
 as "ephemeral and rebuildable, not canonical." Any scan or ledger entry that
 uses one of these as a target must record which build/regen of that dataset
 was used — see `evaluation-framework.md` and the ledger schema in
-`../../schemas/ledger_event.schema.json`.
+`../../cycle/01_schemas/ledger_event.schema.json`.
 
 ## Notes on scope
 

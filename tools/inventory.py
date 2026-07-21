@@ -38,7 +38,7 @@ import yaml
 _ROOT = Path(__file__).parent.parent
 _DEFAULT_MAKALU_ROOT = Path("/home/lulurun/workspace/Makalu")
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
-_DEFAULT_INVENTORY_DIR = _ROOT / "inventory"
+_DEFAULT_INVENTORY_DIR = _ROOT / "cycle" / "03_inventory"
 
 _ALL_LAYERS = ["bronze", "silver", "gold", "feature", "research"]
 _CANONICAL_LAYERS = {"bronze", "silver", "gold", "feature"}

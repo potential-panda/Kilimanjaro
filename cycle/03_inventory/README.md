@@ -1,7 +1,7 @@
 # Data Inventory Snapshots
 
 One YAML file per inventory refresh, in the format defined by
-`../requirements/makalu-integration-contract.md` ("Inventory Output
+`../../doc/requirements/makalu-integration-contract.md` ("Inventory Output
 Contract").
 
 Naming: `inventory-YYYYMMDDTHHMMSSZ.yaml` (UTC timestamp of the refresh).
@@ -29,4 +29,4 @@ needing partitions beyond exchange/symbol (`MarketPrice`/`VolSpread`'s
 `partition_columns`, not a hand-maintained list) skip the date-availability
 check and are marked `status: unknown` with a warning; a hypothesis that
 actually needs one of those resolves its specific partition value itself
-via the `SELECT DISTINCT` recipe in `../requirements/makalu-integration-contract.md`.
+via the `SELECT DISTINCT` recipe in `../../doc/requirements/makalu-integration-contract.md`.

@@ -15,13 +15,13 @@ def register(sub: argparse._SubParsersAction) -> None:
         "generate",
         help="Propose new formula scan specs into the loop queue (stage B)",
     )
-    p.add_argument("--queue", default="specs/queue",
-                   help="Where to write proposed specs (default specs/queue)")
+    p.add_argument("--queue", default="cycle/12_specs/queue",
+                   help="Where to write proposed specs (default cycle/12_specs/queue)")
     p.add_argument("--limit", type=int, default=5,
                    help="Max new specs to propose this call (default 5)")
     p.add_argument("--date", default=None,
                    help="Date stamp for hypothesis ids YYYYMMDD (default today)")
-    p.add_argument("--scan-dirs", nargs="*", default=["specs"],
+    p.add_argument("--scan-dirs", nargs="*", default=["cycle/12_specs"],
                    help="Dirs scanned for existing specs (dedup source)")
     p.add_argument("--dry-run", action="store_true",
                    help="Print what would be proposed; do not write files")
