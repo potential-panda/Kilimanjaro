@@ -117,8 +117,9 @@ machine.
 The v1 file layout (canonical formats in `requirements/data-contract.md`):
 
 - `specs/` — hypothesis specs (`hyp-YYYYMMDD-NNN.yaml`)
+- `scan-specs/` — the loop's working scan specs (expression formulas + sweeps)
+- `results/grid_scan/{flip,expr,horizon}/` — grid-scan outputs (`output.csv`, `output_stable.csv`, `params.json`, …)
 - `ledger/` — append-only research memory (`events.jsonl`)
-- `scan-reports/` — signal scan outputs (`scan-YYYYMMDD-NNN.json`)
 - `handoffs/` — human-approved backtest handoff packages (`hyp-YYYYMMDD-NNN.yaml`/`.md`)
 - `inventory/` — Makalu data inventory snapshots (`inventory-YYYYMMDDTHHMMSSZ.yaml`)
 

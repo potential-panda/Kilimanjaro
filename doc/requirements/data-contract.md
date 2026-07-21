@@ -27,7 +27,7 @@ Kilimanjaro v1 must use one canonical machine-readable source format per record 
 | inventory snapshot | YAML | `inventory/inventory-YYYYMMDDTHHMMSSZ.yaml` |
 | hypothesis spec | YAML | `specs/hyp-YYYYMMDD-NNN.yaml` |
 | ledger event stream | JSON Lines | `ledger/events.jsonl` |
-| scan report | JSON | `scan-reports/scan-YYYYMMDD-NNN.json` |
+| scan output | CSV + `params.json` | `results/grid_scan/{flip,expr,horizon}/<scan_id>/` |
 | human approval/waiver | JSON Lines event in ledger | `ledger/events.jsonl` |
 | handoff source | YAML | `handoffs/hyp-YYYYMMDD-NNN.yaml` |
 | human-readable handoff view | Markdown generated from YAML | `handoffs/hyp-YYYYMMDD-NNN.md` |
@@ -295,6 +295,13 @@ Allowed `event_type` values:
 - `taxonomy_change`
 
 ## Scan Report Output
+
+> **Superseded (2026-07).** The single-JSON scan-report format below was produced
+> by the retired `scanner.py`/`threshold_evaluator.py` pipeline. Grid scans now
+> write a folder per run under `results/grid_scan/<kind>/<scan_id>/`
+> (`output.csv`, `output_stable.csv`, `output_monthly.csv`, `params.json`) and a
+> `scan_attached` ledger event. The JSON schema below is kept only as the historical
+> contract for that older format.
 
 Each scan report must include:
 
