@@ -34,9 +34,12 @@ from qate.store.parquet_store import Layer, ParquetStore, SingleMarketStore, Tra
 from qate.trading.chart import RangeBarBuilder
 from qate.util.dt_range import DtRange
 
-_INFLUX_URL = "http://localhost:8086"
-_INFLUX_TOKEN = "panda-auth-token"
-_INFLUX_ORG = "panda-org"
+from kilimanjaro.framework.verify import (
+    compare_frames,
+    influx_client,
+    influx_range_jst,
+    load_influx,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -204,8 +207,6 @@ def verify(
     Returns a dict with keys: param_set_id, n_local, n_remote, n_matched,
     n_local_only, n_remote_only, fields (per-field stats dict).
     """
-    from influxdb_client import InfluxDBClient
-
     # ── 1. Local computation with warmup ─────────────────────────────────────
     parquet_store = ParquetStore(sys_env.PARQUET_ROOT_DIR)
     trade_store = TradeStore(str(parquet_store.layer_dir[Layer.BRONZE]), market)
@@ -262,21 +263,9 @@ def verify(
     box_int = round(box_size_rate * 100_000)
     step_int = round(step * 1_000)
     symbol_str = market.symbol.name
+    start_utc, end_utc = influx_range_jst(start_date, end_date)
 
-    # JST calendar dates → UTC RFC3339 window (JST = UTC+9)
-    _jst = datetime.timedelta(hours=9)
-    start_utc = (datetime.datetime.strptime(start_date, "%Y-%m-%d") - _jst).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-    end_utc = (
-        datetime.datetime.strptime(end_date, "%Y-%m-%d")
-        + datetime.timedelta(days=1)
-        - _jst
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    client = InfluxDBClient(
-        url=_INFLUX_URL, token=_INFLUX_TOKEN, org=_INFLUX_ORG, timeout=120_000
-    )
+    client = influx_client()
     qapi = client.query_api()
 
     # Auto-detect param_set_id: any matching box_int / step_int is fine because
@@ -304,81 +293,51 @@ from(bucket: "{bucket}")
         param_set_id = candidates[0]
         LOG.info(f"Auto-detected param_set_id: {param_set_id}")
 
-    # Fetch pivoted BAR data for the matching param
-    _fields = ["open", "high", "low", "close", "sar:s", "sar:ns", "sar:up", "ts"]
-    _filt = " or ".join(f'r["_field"] == "{f}"' for f in _fields)
-    bar_query = f"""
-from(bucket: "{bucket}")
-  |> range(start: {start_utc}, stop: {end_utc})
-  |> filter(fn: (r) => r["_measurement"] == "BAR")
-  |> filter(fn: (r) => r["EXCHANGE_NAME"] == "BINANCE")
-  |> filter(fn: (r) => r["SYMBOL"] == "{symbol_str}")
-  |> filter(fn: (r) => r["param_set_id"] == "{param_set_id}")
-  |> filter(fn: (r) => {_filt})
-  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
-"""
-    remote_raw = qapi.query_data_frame(bar_query)
-    client.close()
-
-    remote_df = (
-        pd.concat(remote_raw, ignore_index=True)
-        if isinstance(remote_raw, list)
-        else remote_raw
+    # Fetch pivoted BAR data for the matching param. BAR carries its own `ts`
+    # field (bar-close unix ts) — the join key — so don't derive ts from _time.
+    remote_df = load_influx(
+        qapi,
+        bucket=bucket,
+        measurement="BAR",
+        fields=["open", "high", "low", "close", "sar:s", "sar:ns", "sar:up", "ts"],
+        start=start_utc,
+        stop=end_utc,
+        tags={
+            "EXCHANGE_NAME": "BINANCE",
+            "SYMBOL": symbol_str,
+            "param_set_id": param_set_id,
+        },
+        sort=False,
+        add_ts=False,
     )
+    client.close()
     if remote_df.empty:
         raise ValueError(f"No BAR data in InfluxDB for param_set_id={param_set_id}")
-
+    remote_df["ts"] = remote_df["ts"].astype(float)
+    local_df["ts"] = local_df["ts"].astype(float)
     LOG.info(f"Remote: {len(remote_df)} bars from InfluxDB")
 
-    remote_df = remote_df.rename(
-        columns={"sar:s": "sar_s", "sar:ns": "sar_ns", "sar:up": "sar_up_bool"}
+    # ── 3. Align on bar-close ts (ms) and compare each field ─────────────────
+    cmp = compare_frames(
+        local_df,
+        remote_df,
+        on="ts",
+        fields=[
+            ("open", "open", "open"),
+            ("high", "high", "high"),
+            ("low", "low", "low"),
+            ("close", "close", "close"),
+            ("sar_s", "sar_s", "sar:s"),
+            ("sar_ns", "sar_ns", "sar:ns"),
+            ("sar_up", "sar_up", "sar:up"),
+        ],
+        tolerance=None,
+        round_ndigits=3,
     )
-    remote_df["sar_up"] = remote_df["sar_up_bool"].astype(float)
-    remote_df["ts"] = remote_df["ts"].astype(float)
+    cov = cmp["coverage"]
+    result = {"param_set_id": param_set_id, **cov, "fields": cmp["fields"]}
 
-    # ── 3. Join on ts (bar-close Unix timestamp, rounded to ms) ─────────────
-    local_df["_key"] = local_df["ts"].round(3)
-    remote_df["_key"] = remote_df["ts"].round(3)
-    merged = pd.merge(local_df, remote_df, on="_key", suffixes=("_L", "_R"))
-
-    n_local = len(local_df)
-    n_remote = len(remote_df)
-    n_matched = len(merged)
-
-    # ── 4. Per-field diff statistics ─────────────────────────────────────────
-    _pairs = [
-        ("open", "open_L", "open_R"),
-        ("high", "high_L", "high_R"),
-        ("low", "low_L", "low_R"),
-        ("close", "close_L", "close_R"),
-        ("sar_s", "sar_s_L", "sar_s_R"),
-        ("sar_ns", "sar_ns_L", "sar_ns_R"),
-        ("sar_up", "sar_up_L", "sar_up_R"),
-    ]
-    stats: dict[str, dict] = {}
-    for field, lc, rc in _pairs:
-        if lc not in merged.columns or rc not in merged.columns:
-            continue
-        diff = (merged[lc] - merged[rc]).abs()
-        stats[field] = {
-            "mean_diff": float(diff.mean()),
-            "std_diff": float(diff.std()),
-            "max_diff": float(diff.max()),
-            "n_exact": int((diff == 0.0).sum()),
-            "n_total": n_matched,
-        }
-
-    result = {
-        "param_set_id": param_set_id,
-        "n_local": n_local,
-        "n_remote": n_remote,
-        "n_matched": n_matched,
-        "n_local_only": n_local - n_matched,
-        "n_remote_only": n_remote - n_matched,
-        "fields": stats,
-    }
-
-    # ── 5. Summary print ─────────────────────────────────────────────────────
+    # ── 4. Summary print ─────────────────────────────────────────────────────
     print("\n=== ChartRangeSAR verify ===")
     print(f"  market    : {market.exchange_name.name}/{market.symbol.name}")
     print(
@@ -386,19 +345,21 @@ from(bucket: "{bucket}")
     )
     print(f"  period    : {start_date} .. {end_date}")
     print(f"  param_id  : {param_set_id}")
-    print(f"  bars      : local={n_local}  remote={n_remote}  matched={n_matched}")
     print(
-        f"              local_only={n_local - n_matched}  remote_only={n_remote - n_matched}"
+        f"  bars      : local={cov['n_local']}  remote={cov['n_remote']}"
+        f"  matched={cov['n_matched']}"
     )
-    if n_matched > 0:
-        header = f"\n  {'field':<10} {'mean_diff':>14} {'std_diff':>14} {'max_diff':>14} {'pct_exact':>10}"
+    print(
+        f"              local_only={cov['n_local_only']}  remote_only={cov['n_remote_only']}"
+    )
+    if cov["n_matched"] > 0:
+        header = f"\n  {'field':<10} {'mean_abs':>14} {'std':>14} {'max_abs':>14} {'pct_exact':>10}"
         print(header)
         print("  " + "-" * (len(header) - 3))
-        for field, s in stats.items():
-            pct = 100.0 * s["n_exact"] / s["n_total"] if s["n_total"] else 0.0
+        for field, s in cmp["fields"].items():
             print(
-                f"  {field:<10} {s['mean_diff']:>14.8f} {s['std_diff']:>14.8f}"
-                f" {s['max_diff']:>14.8f} {pct:>9.2f}%"
+                f"  {field:<10} {s['mean_abs']:>14.8f} {s['std']:>14.8f}"
+                f" {s['max_abs']:>14.8f} {s['pct_exact']:>9.2f}%"
             )
     print()
     return result

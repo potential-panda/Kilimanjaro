@@ -53,7 +53,8 @@ forever cadence wrapping generate+loop) is not built yet. See
 |--------|---------|
 | `src/kilimanjaro/dataset/range_sar_store.py` | populate + verify ChartRangeSAR parquet store |
 | `src/kilimanjaro/framework/` | scan framework: `run_grid_split` (train/holdout + rank stability — the default way to run any grid), Gate protocol + RollingDrawdownGate, block-bootstrap p-value |
-| `src/kilimanjaro/framework/backtest_verify.py` | `verify_flip_scan()` — the scan↔Himalaya-backtest fidelity check (ORDER + EVAL); the framework's verification facility, backs `cli.py verify-scan` |
+| `src/kilimanjaro/framework/verify.py` | general parquet↔InfluxDB compare engine: `compare_frames` (exact or fuzzy align → per-field avg/std/p50/p90/max/pct_exact + coverage) + `load_influx`; unit-tested, shared by both verifiers |
+| `src/kilimanjaro/framework/backtest_verify.py` | `verify_flip_scan()` — scan↔backtest fidelity via `compare_frames` (ORDER + EVAL), **plus** the scan's Sharpe/Calmar/Martin (`framework/performance`); backs `cli.py verify-scan` |
 | `src/kilimanjaro/driver/` | the research-loop driver (not core). Stage A: `loop.run_once`/`process_spec` (validate→dedup→scan→verdict→ledger→review-packet); canonical `scan_runner.build_combos`. Stage B: `generate.propose_specs` (formula families × data-viable markets, deduped by signature). |
 | `src/kilimanjaro/signal/expression.py` | `ExpressionSignal`: signals as AST-validated formulas over the feature frame |
 | `src/kilimanjaro/data/feature_frame.py` | multi-market 1s feature frame (mid/spread, OBI, TradeAggression) |
