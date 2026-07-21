@@ -11,7 +11,6 @@ The number's tens digit is the phase:
 | dir | what |
 |-----|------|
 | `01_schemas/`   | JSON Schemas the specs, ledger events, and reports validate against |
-| `02_markets/`   | market universe + precomputed volatility/spread/lead-lag "wave" data (regenerable; git-ignored) |
 | `03_inventory/` | Makalu data-availability snapshots that gate what can be tested |
 
 **`1x` — the loop pipeline, in order:**

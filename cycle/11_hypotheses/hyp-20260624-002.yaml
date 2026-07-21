@@ -83,8 +83,8 @@ hypothesis:
     timestamp_cutoff_rule: "target window starts strictly after signal timestamp"
   execution_assumptions:
     order_type: market
-    fees_bps: 0  # markets/registry.yaml: GMO ETH_JPY fee_bps=0 -- authoritative, not a guess
-    slippage_bps: 0.5  # markets/registry.yaml: default_slippage_bps, from ~1 year of real trading -- authoritative, not a guess
+    fees_bps: 0  # GMO ETH_JPY fee_bps=0 -- authoritative, not a guess
+    slippage_bps: 0.5  # default_slippage_bps, from ~1 year of real trading -- authoritative, not a guess
     latency_ms: 100
     liquidity_capacity_assumption: "single-unit notional, no capacity scaling in v1 scan"
   falsification_tests:

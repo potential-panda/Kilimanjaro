@@ -14,7 +14,7 @@ hypothesis:
     lower cost hurdle changes the verdict.
   expected_edge_mechanism: 'Same mechanism as hyp-20260618-001. Measured directly for this exact market
     and window (2026-05-25..31, the only window GMO XRP_SPOT has bronze data for): BINANCE leads on 87.5-100%
-    of days (markets/registry.yaml''s listed -0.01% fee_bps for this market is a maker rebate -- v1 scanner
+    of days (the listed -0.01% fee_bps for this market is a maker rebate -- v1 scanner
     assumes the limit order fills at the quoted price; real fill risk is a documented, deliberately deferred
     gap, not silently assumed away).'
   economic_rationale: Same mechanism as hyp-20260618-001.

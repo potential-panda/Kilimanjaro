@@ -124,7 +124,7 @@ All research-cycle data lives under `cycle/`, numbered in pipeline order (see
 - `cycle/14_ledger/` — append-only research memory (`events.jsonl`)
 - `cycle/15_handoffs/` — human-approved backtest handoff packages (`hyp-YYYYMMDD-NNN.yaml`/`.md`)
 - `cycle/03_inventory/` — Makalu data inventory snapshots (`inventory-YYYYMMDDTHHMMSSZ.yaml`)
-- `cycle/01_schemas/` — JSON Schemas; `cycle/02_markets/` — market universe + wave data
+- `cycle/01_schemas/` — JSON Schemas (hypothesis spec + ledger event)
 
 Each directory has its own `README.md` with the exact naming convention and
 a pointer to the authoritative schema in `doc/requirements/`. Canonical formats
@@ -139,14 +139,19 @@ day, what horizon can even move price more than the spread? Testing a signal
 against a horizon that can't clear the spread can't be profitable regardless of
 what it predicts.
 
-- `cycle/02_markets/registry.yaml` — the fixed, deliberately small tradeable universe
-  (venue/instrument groups across COINCHECK, GMO, BITBANK), each confirmed to
-  exist as Makalu bronze.
-- `cycle/02_markets/waves/`, `cycle/02_markets/graphs/` — precomputed daily volatility-vs-spread
-  "wave" data (probability of clearing 1–3× the spread at several horizons, per
-  30-min JST bucket, from bronze `OrderBook`). A lead-lag wave (BINANCE isn't
-  traded but leads GMO) and, on limit-only venues, a resting-limit
-  fill-probability proxy were computed the same way. See `cycle/02_markets/README.md`.
+The tradeable universe is defined in code: `PAIRS` in
+`src/kilimanjaro/driver/generate.py` (a deliberately small set of BINANCE→GMO /
+BITBANK pairs), and each generated spec declares its own `markets`/`target`.
+Proposals are **data-gated** — a (family, market) is only emitted if the signal
+source actually has the feature and the target has `MarketPrice`, checked against
+Makalu bronze via `available_features()`; execution sizes are read from the data,
+never guessed.
+
+The volatility-vs-spread "wave" characterization (probability of clearing 1–3×
+the spread at several horizons, plus a BINANCE→GMO lead-lag wave and, on
+limit-only venues, a resting-limit fill proxy) is **not a standing artifact** —
+regenerate it on demand from bronze `OrderBook` with
+`tools/{volatility_wave,lead_lag_wave,fill_probability,regime_window}.py`.
 
 ## Docs
 
