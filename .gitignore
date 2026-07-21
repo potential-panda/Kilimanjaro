@@ -6,3 +6,8 @@ __pycache__/
 
 # cadence daemon runtime
 .cadence.pid
+
+# Regenerable scan diagnostics — OBI-age histograms (~12MB each). The scan's
+# actual results (output*.csv, params.json, review packets) stay tracked; these
+# large per-combo diagnostics regenerate on the next `grid obi` run.
+cycle/13_results/**/age_hist/
