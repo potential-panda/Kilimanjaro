@@ -11,20 +11,21 @@ Naming:
 `NNN` is a zero-padded sequence number, unique within the date. A spec's
 `hypothesis.id` field must match its filename.
 
-Specs are the unit of work for the rest of the loop: nothing scans without a
-valid spec here, and every spec gets a ledger entry in `../ledger/`
-regardless of outcome.
+This directory is the **hypothesis registry** — the durable memory of every idea
+tried, including rejected and parked ones. The ledger (`../ledger/`) joins to it
+by `hypothesis_id` for duplicate-detection search and for the viewer's Hypotheses
+tab, so entries stay even after an idea is retired: that is what lets a later
+session avoid re-proposing a dead idea. The `status:` field inside a file is its
+*initial* status; the **current** status is whatever the ledger last recorded.
 
-Validate a spec before it's considered real:
+Two spec formats, two purposes:
 
-```bash
-python tools/validate_spec.py specs/hyp-20260618-001.yaml
-```
-
-This checks structural shape/enums against
-`../schemas/hypothesis_spec.schema.json` and the cross-field rules from
-`../requirements/hypothesis-contract.md`'s "Validation Rules" (missing
-mechanism, duplicate search not performed, research-layer target without
-version metadata, etc.). It does **not** check the feature expression
-against the live SQL safety allowlist (task 6) or against Makalu's actual
-data inventory (task 4) — those land once those tasks are implemented.
+- **`specs/`** (here) — hypothesis-contract specs: the human-readable registry
+  above. Validate against `../schemas/hypothesis_spec.schema.json` and the
+  cross-field rules in `hypothesis-contract.md` ("Validation Rules": missing
+  mechanism, duplicate search not performed, research-layer target without
+  version metadata, …).
+- **`../scan-specs/`** — the loop's working *scan* specs (expression formulas +
+  sweep dimensions) that `cli.py grid expr` / `cli.py loop` / the Stage-C factory
+  consume. Simpler format; validated by
+  `driver/validate.validate_scan_spec` (structural shape + AST-safe expression).
