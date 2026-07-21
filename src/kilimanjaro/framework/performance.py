@@ -131,7 +131,7 @@ def daily_equity(net_bps: np.ndarray, ts_seconds: np.ndarray) -> pd.Series:
     days filled forward (flat) so drawdown durations are measured in real days.
     """
     s = pd.Series(np.asarray(net_bps, dtype=float), copy=False)
-    days = ((np.asarray(ts_seconds, dtype="int64") + _JST_OFFSET_S) // 86400)
+    days = (np.asarray(ts_seconds, dtype="int64") + _JST_OFFSET_S) // 86400
     daily = s.groupby(days).sum()
     daily.index = pd.to_datetime(daily.index * 86400, unit="s")
     full = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
@@ -280,7 +280,9 @@ def compute_path_metrics_jpy(
             starts = [0] + starts
         if under[-1]:
             ends = ends + [len(dd) - 1]
-        durs = [(ts[min(e, len(ts) - 1)] - ts[s]) / 86400.0 for s, e in zip(starts, ends)]
+        durs = [
+            (ts[min(e, len(ts) - 1)] - ts[s]) / 86400.0 for s, e in zip(starts, ends)
+        ]
         dd_max_days = float(max(durs)) if durs else 0.0
 
     # daily Sharpe (JST day buckets of per-fill PnL)
@@ -288,7 +290,9 @@ def compute_path_metrics_jpy(
     daily = pd.Series(pnl).groupby(day).sum()
     dstd = float(daily.std(ddof=1)) if len(daily) > 1 else 0.0
     sharpe = (
-        float(daily.mean() / dstd * np.sqrt(periods_per_year)) if dstd > 0 else float("nan")
+        float(daily.mean() / dstd * np.sqrt(periods_per_year))
+        if dstd > 0
+        else float("nan")
     )
 
     return {

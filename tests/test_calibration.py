@@ -28,13 +28,22 @@ class TestCalibrationRegistry(unittest.TestCase):
         self.assertEqual(C.spec_mechanism(flip), "flip+between_signal")
         # a spec without `expressions` is the flip grid
         self.assertEqual(C.spec_mechanism({"target": {}}), "flip+between_signal")
-        fh = {"markets": {"a": {}}, "expressions": [{"expr": "x"}]}  # default fixed_horizon
+        fh = {
+            "markets": {"a": {}},
+            "expressions": [{"expr": "x"}],
+        }  # default fixed_horizon
         self.assertEqual(C.spec_mechanism(fh), "expression+fixed_horizon")
-        ep = {"markets": {"a": {}}, "expressions": [{"expr": "x"}], "return_calc": "episode"}
+        ep = {
+            "markets": {"a": {}},
+            "expressions": [{"expr": "x"}],
+            "return_calc": "episode",
+        }
         self.assertEqual(C.spec_mechanism(ep), "expression+episode")
 
     def test_mechanism_name(self):
-        self.assertEqual(C.mechanism_name("expression", "episode"), "expression+episode")
+        self.assertEqual(
+            C.mechanism_name("expression", "episode"), "expression+episode"
+        )
 
 
 if __name__ == "__main__":

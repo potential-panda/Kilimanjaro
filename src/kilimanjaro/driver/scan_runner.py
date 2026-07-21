@@ -27,7 +27,6 @@ from pathlib import Path
 
 from kilimanjaro.framework import (
     MarketConfig,
-    ScheduleFilter,
     default_split,
     run_grid_split,
     write_csv,
@@ -39,22 +38,51 @@ from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 from kilimanjaro.signal.expression import ExpressionSignal
 
 CSV_FIELDS = [
-    "expr", "threshold", "min_age", "max_age", "invert", "horizon", "max_hold_s",
-    "train_n", "train_avg_gross", "train_avg_net", "train_hit_rate", "train_ic",
-    "train_avg_hold_s", "holdout_avg_hold_s",
-    "train_t_stat", "train_p_value_bootstrap", "train_total_net_bps", "train_rank_pct",
-    "holdout_n", "holdout_avg_gross", "holdout_avg_net", "holdout_hit_rate", "holdout_ic",
-    "holdout_t_stat", "holdout_p_value_bootstrap", "holdout_total_net_bps", "holdout_rank_pct",
-    "train_pos_month_share", "holdout_pos_month_share", "train_plateau",
-    "verdict", "stable", "mt_significant", "n_combos_tested",
-    "train_status", "holdout_status",
+    "expr",
+    "threshold",
+    "min_age",
+    "max_age",
+    "invert",
+    "horizon",
+    "max_hold_s",
+    "train_n",
+    "train_avg_gross",
+    "train_avg_net",
+    "train_hit_rate",
+    "train_ic",
+    "train_avg_hold_s",
+    "holdout_avg_hold_s",
+    "train_t_stat",
+    "train_p_value_bootstrap",
+    "train_total_net_bps",
+    "train_rank_pct",
+    "holdout_n",
+    "holdout_avg_gross",
+    "holdout_avg_net",
+    "holdout_hit_rate",
+    "holdout_ic",
+    "holdout_t_stat",
+    "holdout_p_value_bootstrap",
+    "holdout_total_net_bps",
+    "holdout_rank_pct",
+    "train_pos_month_share",
+    "holdout_pos_month_share",
+    "train_plateau",
+    "verdict",
+    "stable",
+    "mt_significant",
+    "n_combos_tested",
+    "train_status",
+    "holdout_status",
 ]
 
 
 def _return_calcs(spec: dict) -> list:
     kind = spec.get("return_calc", "fixed_horizon")
     if kind == "episode":
-        return [EpisodeReturn(max_hold_seconds=h) for h in spec.get("max_holds", [None])]
+        return [
+            EpisodeReturn(max_hold_seconds=h) for h in spec.get("max_holds", [None])
+        ]
     if kind == "fixed_horizon":
         return [FixedHorizonReturn(horizon_seconds=h) for h in spec["horizons"]]
     raise ValueError(f"unknown return_calc {kind!r} (want fixed_horizon or episode)")
@@ -71,10 +99,14 @@ def build_combos(spec: dict) -> list[tuple]:
     for e in spec["expressions"]:
         for invert in e.get("invert", [False]):
             for threshold in thresholds:
-                for (min_age, max_age) in age_windows:
+                for min_age, max_age in age_windows:
                     sig = ExpressionSignal.create(
-                        markets=markets, expr=e["expr"], threshold=threshold,
-                        min_age=min_age, max_age=max_age, invert=invert,
+                        markets=markets,
+                        expr=e["expr"],
+                        threshold=threshold,
+                        min_age=min_age,
+                        max_age=max_age,
+                        invert=invert,
                         label=e.get("label"),
                     )
                     for rc in return_calcs:
@@ -131,16 +163,36 @@ def run_grid_scan(
     out_dir.mkdir(parents=True, exist_ok=True)  # early: age-hist hooks write here
 
     res = run_grid_split(
-        combos, target, start, split, end,
-        costs_bps=costs_bps, schedule=schedule, gates=gates,
-        rank_metric=rank_metric, top_quantile=top_quantile, min_n=min_n,
-        on_data_loaded=on_data_loaded, on_result=on_result,
+        combos,
+        target,
+        start,
+        split,
+        end,
+        costs_bps=costs_bps,
+        schedule=schedule,
+        gates=gates,
+        rank_metric=rank_metric,
+        top_quantile=top_quantile,
+        min_n=min_n,
+        on_data_loaded=on_data_loaded,
+        on_result=on_result,
     )
 
-    (out_dir / "params.json").write_text(json.dumps({
-        "scan_id": scan_id, "start": start, "end": end, "split": split,
-        "windows": res["windows"], **(param_meta or {}), **res["params"],
-    }, indent=2, default=str))
+    (out_dir / "params.json").write_text(
+        json.dumps(
+            {
+                "scan_id": scan_id,
+                "start": start,
+                "end": end,
+                "split": split,
+                "windows": res["windows"],
+                **(param_meta or {}),
+                **res["params"],
+            },
+            indent=2,
+            default=str,
+        )
+    )
 
     tf = row_transform or _round
     rows = [tf(r) for r in res["rows"]]
@@ -176,10 +228,19 @@ def run_spec(
         else None
     )
     return run_grid_scan(
-        build_combos(spec), target, start, end,
-        results_root=results_root, scan_name=scan_name, csv_fields=CSV_FIELDS,
-        split=split, param_meta={"spec": spec}, schedule=schedule,
+        build_combos(spec),
+        target,
+        start,
+        end,
+        results_root=results_root,
+        scan_name=scan_name,
+        csv_fields=CSV_FIELDS,
+        split=split,
+        param_meta={"spec": spec},
+        schedule=schedule,
         costs_bps=spec.get("costs_bps"),
-        rank_metric=rank_metric, top_quantile=top_quantile, min_n=min_n,
+        rank_metric=rank_metric,
+        top_quantile=top_quantile,
+        min_n=min_n,
         on_result=on_result,
     )

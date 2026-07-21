@@ -20,12 +20,15 @@ DEFAULT_LEDGER_PATH = _REPO_ROOT / "cycle" / "14_ledger" / "events.jsonl"
 def scan_fingerprint(spec: dict, start: str, end: str) -> str:
     """Stable id for (spec content, window). Same spec + window -> same id, so a
     re-queued identical scan is detected and skipped."""
-    payload = json.dumps({"spec": spec, "start": start, "end": end},
-                         sort_keys=True, default=str)
+    payload = json.dumps(
+        {"spec": spec, "start": start, "end": end}, sort_keys=True, default=str
+    )
     return "sf-" + hashlib.sha1(payload.encode()).hexdigest()[:16]
 
 
-def already_processed(fingerprint: str, ledger_path: Path = DEFAULT_LEDGER_PATH) -> bool:
+def already_processed(
+    fingerprint: str, ledger_path: Path = DEFAULT_LEDGER_PATH
+) -> bool:
     """True if any recorded event carries this scan_fingerprint."""
     for e in load_events(ledger_path):
         if (e.get("details") or {}).get("scan_fingerprint") == fingerprint:
@@ -35,7 +38,9 @@ def already_processed(fingerprint: str, ledger_path: Path = DEFAULT_LEDGER_PATH)
 
 def current_status(hypothesis_id: str, ledger_path: Path = DEFAULT_LEDGER_PATH) -> str:
     """Latest to_status recorded for this hypothesis, else 'draft'."""
-    events = [e for e in load_events(ledger_path) if e["hypothesis_id"] == hypothesis_id]
+    events = [
+        e for e in load_events(ledger_path) if e["hypothesis_id"] == hypothesis_id
+    ]
     for e in sorted(events, key=lambda e: e["created_at"], reverse=True):
         if e.get("to_status"):
             return e["to_status"]
@@ -76,6 +81,11 @@ def record_scan_attached(
     ledger_path: Path = DEFAULT_LEDGER_PATH,
 ) -> dict:
     return record_grid_scan(
-        hypothesis_id=hypothesis_id, actor_id=actor_id, scan_id=scan_id,
-        out_dir=out_dir, market=market, res=res, ledger_path=ledger_path,
+        hypothesis_id=hypothesis_id,
+        actor_id=actor_id,
+        scan_id=scan_id,
+        out_dir=out_dir,
+        market=market,
+        res=res,
+        ledger_path=ledger_path,
     )

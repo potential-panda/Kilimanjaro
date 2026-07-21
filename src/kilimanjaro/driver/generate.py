@@ -61,13 +61,18 @@ def _imbalance(a):
 
 
 def _obi(a):
-    return [(f"obi_k{d}_{hl}s_z", f"zscore({a}_obi_ema_k{d}_{hl}s, 1800)")
-            for d in (1, 5) for hl in (30, 120)]
+    return [
+        (f"obi_k{d}_{hl}s_z", f"zscore({a}_obi_ema_k{d}_{hl}s, 1800)")
+        for d in (1, 5)
+        for hl in (30, 120)
+    ]
 
 
 def _reversion(a):
-    return [(f"revert_{w}s_z", f"zscore({a}_mid / ema({a}_mid, {w}) - 1, 1800)")
-            for w in (300, 900)]
+    return [
+        (f"revert_{w}s_z", f"zscore({a}_mid / ema({a}_mid, {w}) - 1, 1800)")
+        for w in (300, 900)
+    ]
 
 
 def _basis(a, b):
@@ -86,8 +91,11 @@ FAMILIES = [
 
 def _market_features(exchange: str, symbol: str, data_root: Path) -> dict:
     av = available_features(exchange, symbol, data_root)
-    sizes = [k.split("execution_size=")[1].rstrip(")")
-             for k in av if k.startswith("mid") and "execution_size=" in k]
+    sizes = [
+        k.split("execution_size=")[1].rstrip(")")
+        for k in av
+        if k.startswith("mid") and "execution_size=" in k
+    ]
     return {
         "has_mid": bool(sizes),
         "sizes": sizes,
@@ -101,11 +109,13 @@ def _pick_size(sizes: list[str], largest: bool) -> str:
 
 
 def _viable(fam: dict, lf: dict, tf: dict) -> bool:
-    if not tf["has_mid"]:              # need target MarketPrice for returns
+    if not tf["has_mid"]:  # need target MarketPrice for returns
         return False
     if fam["cross"]:
         return lf["has_mid"]
-    return {"mid": lf["has_mid"], "ta": lf["has_ta"], "obi": lf["has_obi"]}[fam["needs"]]
+    return {"mid": lf["has_mid"], "ta": lf["has_ta"], "obi": lf["has_obi"]}[
+        fam["needs"]
+    ]
 
 
 def _spec_for(fam: dict, pair: tuple, lf: dict, tf: dict) -> dict:
@@ -125,8 +135,10 @@ def _spec_for(fam: dict, pair: tuple, lf: dict, tf: dict) -> dict:
         "markets": markets,
         "target": {"exchange": tex, "symbol": tsym, "execution_size": targ_size},
         "return_calc": DEFAULT_SWEEP["return_calc"],
-        "expressions": [{"label": lbl, "expr": expr, "invert": DEFAULT_SWEEP["invert"]}
-                        for lbl, expr in exprs_raw],
+        "expressions": [
+            {"label": lbl, "expr": expr, "invert": DEFAULT_SWEEP["invert"]}
+            for lbl, expr in exprs_raw
+        ],
         "thresholds": DEFAULT_SWEEP["thresholds"],
         "age_windows": DEFAULT_SWEEP["age_windows"],
         "horizons": DEFAULT_SWEEP["horizons"],
@@ -135,11 +147,20 @@ def _spec_for(fam: dict, pair: tuple, lf: dict, tf: dict) -> dict:
 
 def signature(spec: dict) -> str:
     """Window/sweep-independent id for a formula idea, for dedup."""
-    markets = sorted((m["exchange"], m["symbol"]) for m in spec.get("markets", {}).values())
+    markets = sorted(
+        (m["exchange"], m["symbol"]) for m in spec.get("markets", {}).values()
+    )
     t = spec.get("target", {})
     exprs = sorted(e["expr"] for e in spec.get("expressions", []))
-    return json.dumps({"rc": spec.get("return_calc", "fixed_horizon"), "m": markets,
-                       "t": [t.get("exchange"), t.get("symbol")], "e": exprs}, sort_keys=True)
+    return json.dumps(
+        {
+            "rc": spec.get("return_calc", "fixed_horizon"),
+            "m": markets,
+            "t": [t.get("exchange"), t.get("symbol")],
+            "e": exprs,
+        },
+        sort_keys=True,
+    )
 
 
 def existing_signatures(*dirs: Path) -> set[str]:
@@ -167,7 +188,9 @@ def next_seq(date_str: str, *scan_dirs: Path) -> int:
     return max(used) + 1
 
 
-def _priority_order(families: list[dict], family_priority: dict[str, float] | None) -> list[int]:
+def _priority_order(
+    families: list[dict], family_priority: dict[str, float] | None
+) -> list[int]:
     """Family indices ordered by feedback priority (desc), stable for ties.
 
     None -> identity (equal round-robin). Families that have produced survivors
@@ -179,7 +202,9 @@ def _priority_order(families: list[dict], family_priority: dict[str, float] | No
     return order
 
 
-def family_scores(*scan_dirs: Path, ledger_path: Path | None = None) -> dict[str, float]:
+def family_scores(
+    *scan_dirs: Path, ledger_path: Path | None = None
+) -> dict[str, float]:
     """Per-family count of hypotheses that reached scan-passed or better.
 
     Joins the ledger (outcomes, by hypothesis_id) to the specs on disk (which
@@ -196,7 +221,11 @@ def family_scores(*scan_dirs: Path, ledger_path: Path | None = None) -> dict[str
                 spec = yaml.safe_load(path.read_text())
             except Exception:  # noqa: BLE001
                 continue
-            if isinstance(spec, dict) and spec.get("family") and spec.get("hypothesis_id"):
+            if (
+                isinstance(spec, dict)
+                and spec.get("family")
+                and spec.get("hypothesis_id")
+            ):
                 hyp_family[spec["hypothesis_id"]] = spec["family"]
 
     good = {"scan-passed", "backtest-approved", "promoted", "live"}
@@ -276,7 +305,9 @@ def write_specs(specs: list[dict], queue_dir: Path) -> list[Path]:
     paths = []
     for spec in specs:
         t = spec["target"]
-        name = f"{spec['hypothesis_id']}_{spec.get('family', 'expr')}_{t['symbol']}.yaml"
+        name = (
+            f"{spec['hypothesis_id']}_{spec.get('family', 'expr')}_{t['symbol']}.yaml"
+        )
         path = queue_dir / name
         path.write_text(yaml.safe_dump(spec, sort_keys=False))
         paths.append(path)
@@ -302,6 +333,11 @@ def generate(
     seq = next_seq(date_str, *scan_dirs)
     prio = family_scores(*scan_dirs) if feedback else None
     specs = propose_specs(
-        limit, date_str, seen=seen, seq_start=seq, data_root=data_root, family_priority=prio
+        limit,
+        date_str,
+        seen=seen,
+        seq_start=seq,
+        data_root=data_root,
+        family_priority=prio,
     )
     return write_specs(specs, queue_dir)

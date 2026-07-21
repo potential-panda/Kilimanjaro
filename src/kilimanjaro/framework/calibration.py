@@ -58,7 +58,9 @@ _REGISTRY: dict[str, Calibration] = {
 }
 
 # Unknown mechanisms are trend-only by default — trust must be earned explicitly.
-_UNKNOWN = Calibration("unknown", TREND_ONLY, "Mechanism not in the calibration registry.")
+_UNKNOWN = Calibration(
+    "unknown", TREND_ONLY, "Mechanism not in the calibration registry."
+)
 
 
 def mechanism_name(signal_family: str, return_calc: str) -> str:

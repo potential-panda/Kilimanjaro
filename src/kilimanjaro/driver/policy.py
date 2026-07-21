@@ -17,31 +17,39 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Outcome:
     passed: bool
-    status: str            # "scan-passed" | "scan-failed"
+    status: str  # "scan-passed" | "scan-failed"
     headline: str
-    n_stable: int          # rank-stable combos
-    n_survivors: int       # confirmed survivors (rank-stable AND FDR-significant)
+    n_stable: int  # rank-stable combos
+    n_survivors: int  # confirmed survivors (rank-stable AND FDR-significant)
     n_combos: int
     verdicts: dict
-    best: dict | None      # best confirmed survivor (or None)
+    best: dict | None  # best confirmed survivor (or None)
 
 
 def _best(rows: list[dict]) -> dict:
-    return max(rows, key=lambda r: (r.get("holdout_rank_pct") or 0))
+    return max(rows, key=lambda r: r.get("holdout_rank_pct") or 0)
 
 
-def _headline(res: dict, survivors: list[dict], n_stable: int, best: dict | None) -> str:
+def _headline(
+    res: dict, survivors: list[dict], n_stable: int, best: dict | None
+) -> str:
     n = res["params"]["n_combos"]
     if best is None:
         counts = res.get("verdict_counts", {})
         extra = ", ".join(
             f"{counts[v]} {v}" for v in ("decayed", "regime_dependent") if counts.get(v)
         )
-        dropped = (f"; {n_stable} rank-stable dropped by FDR" if n_stable else "")
+        dropped = f"; {n_stable} rank-stable dropped by FDR" if n_stable else ""
         return f"0/{n} confirmed survivors — no candidates{dropped}" + (
-            f" ({extra})" if extra else "")
-    keys = [k for k in best if not k.startswith(("train_", "holdout_"))
-            and k not in ("stable", "mt_significant", "verdict", "n_combos_tested", "window")]
+            f" ({extra})" if extra else ""
+        )
+    keys = [
+        k
+        for k in best
+        if not k.startswith(("train_", "holdout_"))
+        and k
+        not in ("stable", "mt_significant", "verdict", "n_combos_tested", "window")
+    ]
     desc = " ".join(f"{k}={best[k]}" for k in sorted(keys) if best.get(k) is not None)
     return (
         f"{len(survivors)}/{n} confirmed (rank-stable + FDR); best: {desc}"

@@ -94,13 +94,21 @@ def run_cadence(
         )
         # Stage A: one robust pass over the queue.
         summary = run_once(
-            queue_dir, start, end,
-            actor_id=actor_id, split=split, results_root=results_root, dry_run=dry_run,
+            queue_dir,
+            start,
+            end,
+            actor_id=actor_id,
+            split=split,
+            results_root=results_root,
+            dry_run=dry_run,
         )
 
         cr = CycleResult(
-            cycle=n, generated=len(new_paths), scanned=summary.get("n_specs", 0),
-            counts=summary.get("counts", {}), survivors=summary.get("passed", []),
+            cycle=n,
+            generated=len(new_paths),
+            scanned=summary.get("n_specs", 0),
+            counts=summary.get("counts", {}),
+            survivors=summary.get("passed", []),
         )
         digest.cycles = n
         digest.generated += cr.generated

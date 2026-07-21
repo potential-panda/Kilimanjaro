@@ -50,8 +50,12 @@ def process_spec(
     e = spec.get("end", end)
     hyp = spec.get("hypothesis_id")
     fp = ledger_io.scan_fingerprint(spec, s, e)
-    base = {"hypothesis_id": hyp, "scan_name": scan_name, "fingerprint": fp,
-            "window": [s, e]}
+    base = {
+        "hypothesis_id": hyp,
+        "scan_name": scan_name,
+        "fingerprint": fp,
+        "window": [s, e],
+    }
 
     if ledger_io.already_processed(fp, lp):
         return {**base, "status": "skipped-duplicate"}
@@ -59,9 +63,13 @@ def process_spec(
     errors = validate_scan_spec(spec)
     if errors:
         if hyp and not dry_run:
-            ledger_io.record_status(hyp, "invalid-spec", actor_id,
-                                    details={"scan_fingerprint": fp, "errors": errors},
-                                    ledger_path=lp)
+            ledger_io.record_status(
+                hyp,
+                "invalid-spec",
+                actor_id,
+                details={"scan_fingerprint": fp, "errors": errors},
+                ledger_path=lp,
+            )
         return {**base, "status": "invalid-spec", "errors": errors}
 
     if dry_run:
@@ -69,27 +77,47 @@ def process_spec(
 
     try:
         # draft -> scan-ready (validated + not a duplicate)
-        ledger_io.record_status(hyp, "scan-ready", actor_id,
-                                details={"scan_fingerprint": fp, "window": [s, e],
-                                         "spec_name": scan_name}, ledger_path=lp)
-        res, out_dir, scan_id = run_spec(spec, s, e, results_root,
-                                         split=split, scan_name=scan_name)
+        ledger_io.record_status(
+            hyp,
+            "scan-ready",
+            actor_id,
+            details={"scan_fingerprint": fp, "window": [s, e], "spec_name": scan_name},
+            ledger_path=lp,
+        )
+        res, out_dir, scan_id = run_spec(
+            spec, s, e, results_root, split=split, scan_name=scan_name
+        )
         t = spec["target"]
         market = f"{t['exchange']}/{t['symbol']}"
-        ledger_io.record_scan_attached(hyp, actor_id, scan_id, out_dir, market, res,
-                                       ledger_path=lp)
+        ledger_io.record_scan_attached(
+            hyp, actor_id, scan_id, out_dir, market, res, ledger_path=lp
+        )
         outcome = evaluate(res)
-        ledger_io.record_status(hyp, outcome.status, actor_id, from_status="scan-ready",
-                                details={"scan_fingerprint": fp, "scan_id": scan_id,
-                                         "scan_folder": str(out_dir),
-                                         "headline": outcome.headline}, ledger_path=lp)
+        ledger_io.record_status(
+            hyp,
+            outcome.status,
+            actor_id,
+            from_status="scan-ready",
+            details={
+                "scan_fingerprint": fp,
+                "scan_id": scan_id,
+                "scan_folder": str(out_dir),
+                "headline": outcome.headline,
+            },
+            ledger_path=lp,
+        )
         packet = None
         if outcome.passed:
             packet = write_review_packet(spec, res, outcome, out_dir, s, e, fp)
-        return {**base, "status": outcome.status, "headline": outcome.headline,
-                "n_stable": outcome.n_stable, "n_survivors": outcome.n_survivors,
-                "scan_folder": str(out_dir),
-                "review_packet": str(packet) if packet else None}
+        return {
+            **base,
+            "status": outcome.status,
+            "headline": outcome.headline,
+            "n_stable": outcome.n_stable,
+            "n_survivors": outcome.n_survivors,
+            "scan_folder": str(out_dir),
+            "review_packet": str(packet) if packet else None,
+        }
     except Exception as ex:  # noqa: BLE001 — one bad spec must not stop the loop
         LOG.exception("scan failed for %s (%s)", scan_name, hyp)
         # No terminal status recorded -> retryable when the cause (e.g. missing
@@ -121,18 +149,36 @@ def run_once(
         try:
             spec = yaml.safe_load(path.read_text())
         except Exception as ex:  # noqa: BLE001
-            results.append({"spec_file": str(path), "status": "error",
-                            "error": f"unreadable yaml: {ex}"})
+            results.append(
+                {
+                    "spec_file": str(path),
+                    "status": "error",
+                    "error": f"unreadable yaml: {ex}",
+                }
+            )
             continue
         scan_name = path.stem
-        r = process_spec(spec, start, end, scan_name=scan_name, actor_id=actor_id,
-                         split=split, results_root=results_root, dry_run=dry_run,
-                         ledger_path=ledger_path)
+        r = process_spec(
+            spec,
+            start,
+            end,
+            scan_name=scan_name,
+            actor_id=actor_id,
+            split=split,
+            results_root=results_root,
+            dry_run=dry_run,
+            ledger_path=ledger_path,
+        )
         r["spec_file"] = str(path)
         if r["status"] not in ("skipped-duplicate", "dry-run"):
             n_run += 1
         results.append(r)
-        LOG.info("[%s] %s — %s", r["status"], scan_name, r.get("headline", r.get("error", "")))
+        LOG.info(
+            "[%s] %s — %s",
+            r["status"],
+            scan_name,
+            r.get("headline", r.get("error", "")),
+        )
         if on_result:
             on_result(r)
 
@@ -143,9 +189,17 @@ def run_once(
         "queue_dir": str(queue_dir),
         "window": [start, end],
         "n_specs": len(specs),
-        "counts": {s: _count(s) for s in (
-            "scan-passed", "scan-failed", "invalid-spec",
-            "skipped-duplicate", "dry-run", "error")},
+        "counts": {
+            s: _count(s)
+            for s in (
+                "scan-passed",
+                "scan-failed",
+                "invalid-spec",
+                "skipped-duplicate",
+                "dry-run",
+                "error",
+            )
+        },
         "passed": [r for r in results if r["status"] == "scan-passed"],
         "results": results,
     }

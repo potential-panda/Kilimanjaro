@@ -21,6 +21,7 @@ import yaml
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
+
 def _find_repo_root(start: Path) -> Path:
     """Walk up to the repo root (the dir holding pyproject.toml + src/)."""
     for p in (start, *start.parents):

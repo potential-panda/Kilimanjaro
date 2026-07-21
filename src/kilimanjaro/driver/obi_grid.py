@@ -23,34 +23,96 @@ HORIZONS = [10, 30, 60, 120, 300, 600]
 
 # (min_age, max_age) windows in seconds; None = unbounded on that side.
 AGE_WINDOWS: list[tuple[int | None, int | None]] = [
-    (None, None), (0, 60), (0, 180), (10, 120), (10, 300),
-    (30, 120), (30, 180), (30, 300), (60, 180), (60, 300),
+    (None, None),
+    (0, 60),
+    (0, 180),
+    (10, 120),
+    (10, 300),
+    (30, 120),
+    (30, 180),
+    (30, 300),
+    (60, 180),
+    (60, 300),
 ]
 
 MARKET_CONFIGS: dict[str, dict] = {
-    "eth": {"signal_exchange": "BINANCE", "signal_symbol": "ETH_USDT",
-            "target_exchange": "GMO", "target_symbol": "ETH_JPY", "execution_size": "0.3"},
-    "eth_bitbank": {"signal_exchange": "BITBANK", "signal_symbol": "ETH_SPOT",
-                    "target_exchange": "GMO", "target_symbol": "ETH_JPY", "execution_size": "0.3"},
-    "xrp": {"signal_exchange": "BINANCE", "signal_symbol": "XRP_USDT",
-            "target_exchange": "GMO", "target_symbol": "XRP_JPY", "execution_size": "150"},
-    "btc": {"signal_exchange": "BINANCE", "signal_symbol": "BTC_USDT",
-            "target_exchange": "GMO", "target_symbol": "BTC_JPY", "execution_size": "0.01"},
+    "eth": {
+        "signal_exchange": "BINANCE",
+        "signal_symbol": "ETH_USDT",
+        "target_exchange": "GMO",
+        "target_symbol": "ETH_JPY",
+        "execution_size": "0.3",
+    },
+    "eth_bitbank": {
+        "signal_exchange": "BITBANK",
+        "signal_symbol": "ETH_SPOT",
+        "target_exchange": "GMO",
+        "target_symbol": "ETH_JPY",
+        "execution_size": "0.3",
+    },
+    "xrp": {
+        "signal_exchange": "BINANCE",
+        "signal_symbol": "XRP_USDT",
+        "target_exchange": "GMO",
+        "target_symbol": "XRP_JPY",
+        "execution_size": "150",
+    },
+    "btc": {
+        "signal_exchange": "BINANCE",
+        "signal_symbol": "BTC_USDT",
+        "target_exchange": "GMO",
+        "target_symbol": "BTC_JPY",
+        "execution_size": "0.01",
+    },
 }
 
 CSV_FIELDS = [
-    "depth", "halflife", "min_age", "max_age", "threshold", "horizon",
-    "train_n", "train_avg_gross", "train_avg_net", "train_hit_rate", "train_ic",
-    "train_t_stat", "train_p_value_bootstrap", "train_total_net_bps", "train_rank_pct",
-    "holdout_n", "holdout_avg_gross", "holdout_avg_net", "holdout_hit_rate", "holdout_ic",
-    "holdout_t_stat", "holdout_p_value_bootstrap", "holdout_total_net_bps", "holdout_rank_pct",
-    "train_pos_month_share", "holdout_pos_month_share", "train_plateau",
-    "verdict", "stable", "n_combos_tested", "train_status", "holdout_status",
+    "depth",
+    "halflife",
+    "min_age",
+    "max_age",
+    "threshold",
+    "horizon",
+    "train_n",
+    "train_avg_gross",
+    "train_avg_net",
+    "train_hit_rate",
+    "train_ic",
+    "train_t_stat",
+    "train_p_value_bootstrap",
+    "train_total_net_bps",
+    "train_rank_pct",
+    "holdout_n",
+    "holdout_avg_gross",
+    "holdout_avg_net",
+    "holdout_hit_rate",
+    "holdout_ic",
+    "holdout_t_stat",
+    "holdout_p_value_bootstrap",
+    "holdout_total_net_bps",
+    "holdout_rank_pct",
+    "train_pos_month_share",
+    "holdout_pos_month_share",
+    "train_plateau",
+    "verdict",
+    "stable",
+    "n_combos_tested",
+    "train_status",
+    "holdout_status",
 ]
 
 AGE_STAT_FIELDS = [
-    "depth", "halflife", "threshold", "n_episodes", "ep_per_day",
-    "age_mean", "age_p25", "age_p50", "age_p75", "age_p90", "age_max",
+    "depth",
+    "halflife",
+    "threshold",
+    "n_episodes",
+    "ep_per_day",
+    "age_mean",
+    "age_p25",
+    "age_p50",
+    "age_p75",
+    "age_p90",
+    "age_max",
 ]
 
 _HL_LABEL = {None: "raw", 10: "10s", 30: "30s", 60: "60s", 120: "120s", 300: "300s"}
@@ -66,13 +128,21 @@ def build_combos(cfg: dict) -> list[tuple]:
     (depth, halflife) selects the column (obi_k{d} / obi_ema_k{d}_{hl}s); the
     label carries them back into the output rows via parse_obi_column.
     """
-    sig_market = {"a": {"exchange": cfg["signal_exchange"],
-                        "symbol": cfg["signal_symbol"], "execution_size": None}}
+    sig_market = {
+        "a": {
+            "exchange": cfg["signal_exchange"],
+            "symbol": cfg["signal_symbol"],
+            "execution_size": None,
+        }
+    }
     return [
         (
             ExpressionSignal.create(
-                markets=sig_market, expr=obi_column(depth, halflife, "a"),
-                threshold=threshold, min_age=min_age, max_age=max_age,
+                markets=sig_market,
+                expr=obi_column(depth, halflife, "a"),
+                threshold=threshold,
+                min_age=min_age,
+                max_age=max_age,
                 label=obi_column(depth, halflife),  # base name, parseable
             ),
             FixedHorizonReturn(horizon_seconds=horizon),
@@ -120,24 +190,40 @@ def make_age_hist_hook(out_dir: Path, train_days: int, age_stats: list[dict]):
             ages = threshold_age(obi, thr)
             active = ages[ages >= 0].reset_index(drop=True)
             if len(active) == 0:
-                age_stats.append({"depth": depth, "halflife": hl_label, "threshold": thr,
-                                  "n_episodes": 0, "ep_per_day": 0.0, "age_mean": None,
-                                  "age_p25": None, "age_p50": None, "age_p75": None,
-                                  "age_p90": None, "age_max": None})
+                age_stats.append(
+                    {
+                        "depth": depth,
+                        "halflife": hl_label,
+                        "threshold": thr,
+                        "n_episodes": 0,
+                        "ep_per_day": 0.0,
+                        "age_mean": None,
+                        "age_p25": None,
+                        "age_p50": None,
+                        "age_p75": None,
+                        "age_p90": None,
+                        "age_max": None,
+                    }
+                )
                 continue
-            active.to_csv(hist_dir / f"{depth}_{hl_label}_{thr}.csv",
-                          index=False, header=["age"])
-            age_stats.append({
-                "depth": depth, "halflife": hl_label, "threshold": thr,
-                "n_episodes": int((ages == 0).sum()),
-                "ep_per_day": round(int((ages == 0).sum()) / train_days, 2),
-                "age_mean": round(float(active.mean()), 1),
-                "age_p25": round(float(active.quantile(0.25)), 1),
-                "age_p50": round(float(active.quantile(0.50)), 1),
-                "age_p75": round(float(active.quantile(0.75)), 1),
-                "age_p90": round(float(active.quantile(0.90)), 1),
-                "age_max": int(active.max()),
-            })
+            active.to_csv(
+                hist_dir / f"{depth}_{hl_label}_{thr}.csv", index=False, header=["age"]
+            )
+            age_stats.append(
+                {
+                    "depth": depth,
+                    "halflife": hl_label,
+                    "threshold": thr,
+                    "n_episodes": int((ages == 0).sum()),
+                    "ep_per_day": round(int((ages == 0).sum()) / train_days, 2),
+                    "age_mean": round(float(active.mean()), 1),
+                    "age_p25": round(float(active.quantile(0.25)), 1),
+                    "age_p50": round(float(active.quantile(0.50)), 1),
+                    "age_p75": round(float(active.quantile(0.75)), 1),
+                    "age_p90": round(float(active.quantile(0.90)), 1),
+                    "age_max": int(active.max()),
+                }
+            )
 
     return hook
 

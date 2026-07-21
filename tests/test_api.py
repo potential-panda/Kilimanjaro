@@ -28,8 +28,10 @@ class TestApi(unittest.TestCase):
         for key in ("kind", "scan_id", "n_combos", "n_stable", "verdicts", "mtime"):
             self.assertIn(key, s)
         # newest first
-        self.assertEqual([x["mtime"] for x in scans],
-                         sorted((x["mtime"] for x in scans), reverse=True))
+        self.assertEqual(
+            [x["mtime"] for x in scans],
+            sorted((x["mtime"] for x in scans), reverse=True),
+        )
 
     def test_scan_detail_and_csv(self):
         scans = self.client.get("/api/scans").get_json()
@@ -39,7 +41,8 @@ class TestApi(unittest.TestCase):
         self.assertEqual(d["params"].get("scan_id"), s["scan_id"])
 
         f = self.client.get(
-            f"/api/scans/{s['kind']}/{s['scan_id']}/file/output.csv").get_json()
+            f"/api/scans/{s['kind']}/{s['scan_id']}/file/output.csv"
+        ).get_json()
         self.assertIn("verdict", f["columns"])
         self.assertEqual(len(f["rows"]), s["n_combos"])
         self.assertTrue(all(len(row) == len(f["columns"]) for row in f["rows"][:5]))
@@ -47,8 +50,12 @@ class TestApi(unittest.TestCase):
     def test_scan_file_traversal_guarded(self):
         scans = self.client.get("/api/scans").get_json()
         s = scans[0]
-        for bad in ("../params.json", "..%2f..%2fledger%2fevents.jsonl",
-                    "output.csv/../params.json", "params.json"):
+        for bad in (
+            "../params.json",
+            "..%2f..%2fledger%2fevents.jsonl",
+            "output.csv/../params.json",
+            "params.json",
+        ):
             r = self.client.get(f"/api/scans/{s['kind']}/{s['scan_id']}/file/{bad}")
             self.assertEqual(r.status_code, 404, bad)
         r = self.client.get("/api/scans/nope/x/file/output.csv")
