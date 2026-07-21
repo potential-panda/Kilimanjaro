@@ -1,15 +1,14 @@
-"""Backtest fidelity check — compare a scan against the Himalaya/InfluxDB backtest.
+"""The Himalaya backtest as a data source — verify against it.
 
-This is the framework's scan↔backtest verification facility: the last honest
-gut-check before trusting a mechanism, and the anchor for `doc/calibration.md`'s
-calibration registry. It runs a scan's own entry/exit prices and PnL against the
-backtest's recorded ORDER (EXEC_PRICE) and EVAL (pnl_change0) streams and reports
-where they agree and where they diverge.
+Unlike the parquet dataset modules, the backtest is produced by Himalaya, not
+from here, so this module only **verifies** (no populate). `verify()` is the
+scan↔backtest fidelity check — the last honest gut-check before trusting a
+mechanism, and the anchor for `doc/calibration.md`'s calibration registry.
 
-`verify_flip_scan()` is the first (currently only) verifier — flip-anchored SAR +
-between-signal returns, the one CALIBRATED mechanism. As other mechanisms get
-calibrated, their verifiers join this module (e.g. an expression/fixed-horizon
-verifier) so backtest verification stays one framework concern, not per-scan code.
+It compares a flip-anchored SAR scan's entry fills and per-trade PnL against the
+backtest's recorded ORDER (EXEC_PRICE) / EVAL (pnl_change0) streams via the
+general engine (`framework.verify.compare_frames`), then reports the scan's own
+risk-adjusted performance (Sharpe/Calmar/Martin, `framework.performance`).
 """
 
 from __future__ import annotations
@@ -95,7 +94,7 @@ def _apply_schedule_filters(
     block_weekend_hours,
     exclude_jst_dates,
 ):
-    """Local helper for verify_flip_scan(): adds JST columns and applies date/schedule filters."""
+    """Local helper for verify(): adds JST columns and applies date/schedule filters."""
     _JST = 9 * 3600
     has_exit = flips_df["exit_ts"].notna()
     all_dates = set(_DEFAULT_BLOCK_JST_DATES)
@@ -141,7 +140,7 @@ def _apply_schedule_filters(
     return flips_df, n_date_blocked, n_weekday_blocked, n_sat_blocked
 
 
-def verify_flip_scan(
+def verify(
     flip_exchange,
     flip_symbol,
     target_exchange,

@@ -1,9 +1,8 @@
 """`cli.py verify-scan` — the scan↔backtest fidelity check.
 
-Backs onto the framework's backtest-verification facility
-(`kilimanjaro.framework.backtest_verify`). Running scans themselves is
-`cli.py grid {flip,expr,obi}` — there is no single-config scan command; a scan
-is always a grid run.
+Backs onto the backtest data source (`kilimanjaro.dataset.backtest.verify`).
+Running scans themselves is `cli.py grid {flip,expr,obi}` — there is no
+single-config scan command; a scan is always a grid run.
 """
 
 import argparse
@@ -79,17 +78,17 @@ def register(sub: argparse._SubParsersAction) -> None:
 def _run_verify(args: argparse.Namespace) -> int:
     from pathlib import Path
 
-    from kilimanjaro.framework.backtest_verify import verify_flip_scan
+    from kilimanjaro.dataset import backtest
 
     box_int = int(round(args.box_size_rate * 100_000))
     step_int = int(round(args.sar_step * 1_000))
     sym = args.target_symbol.replace("/", "_")
     out_path = (
         Path("cycle/13_results")
-        / f"verify_flip_scan_{sym}_{box_int}_{step_int}_{args.start}_{args.end}.txt"
+        / f"verify_scan_{sym}_{box_int}_{step_int}_{args.start}_{args.end}.txt"
     )
 
-    verify_flip_scan(
+    backtest.verify(
         flip_exchange=args.flip_exchange,
         flip_symbol=args.flip_symbol,
         target_exchange=args.target_exchange,

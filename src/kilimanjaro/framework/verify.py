@@ -13,9 +13,10 @@ verifiers never were.
 - `load_influx(...)` / `influx_range_jst(...)` build and run the standard
   pivoted flux query both backtest streams (BAR / ORDER / EVAL) use.
 
-Callers (`dataset.range_sar_store.verify`, `framework.backtest_verify`) supply
-the store loader, the field mapping, and the tolerance; verify-scan additionally
-layers Sharpe/Calmar/Martin (see `framework.performance`) on the matched PnL.
+Callers (`dataset.range_sar_store.verify`, `dataset.backtest.verify`) supply the
+store loader, the field mapping, and the tolerance; the backtest verifier
+additionally layers Sharpe/Calmar/Martin (see `framework.performance`) on the
+matched PnL.
 """
 
 from __future__ import annotations
