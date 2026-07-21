@@ -4,7 +4,7 @@ Canonical home for the run/write pipeline shared by every scan flavour.
 `run_grid_scan` is the generic core; `run_spec` is the expression-spec flavour
 on top of it. The flip and OBI flavours live in driver/flip_grid.py and
 driver/obi_grid.py, and cli.py `grid {flip,expr,obi}` is the thin CLI over all
-three. The Stage-A loop calls run_spec directly.
+three. The scanner loop calls run_spec directly.
 
 A scan-spec is the YAML consumed by the expression funnel:
 

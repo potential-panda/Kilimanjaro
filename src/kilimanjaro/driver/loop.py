@@ -1,10 +1,10 @@
 """The scanner loop: sequence many specs through scan -> verdict -> ledger,
 unattended and restart-safe.
 
-process_spec() runs the full stages 1-4 pipeline for one spec. run_once()
+process_spec() runs the full steps 1-4 pipeline for one spec. run_once()
 walks a queue directory and processes each pending spec, isolating failures so
-one bad spec never stops the loop. Stage C wraps run_once() in a forever cadence;
-Stage A is one robust pass over the queue.
+one bad spec never stops the loop. The cadence wraps run_once() in a forever loop;
+run_once is one robust pass over the queue.
 
 Dedup and durability come from the ledger (see ledger_io): a spec whose
 fingerprint is already recorded is skipped, so re-running the loop is idempotent.
@@ -40,7 +40,7 @@ def process_spec(
     dry_run: bool = False,
     ledger_path: Path | None = None,
 ) -> dict:
-    """Run stages 1-4 for one spec. Returns a result dict with a 'status' key:
+    """Run steps 1-4 for one spec. Returns a result dict with a 'status' key:
     skipped-duplicate | invalid-spec | dry-run | scan-passed | scan-failed | error.
     Never raises for spec-level problems; only programmer errors propagate.
     """

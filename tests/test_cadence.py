@@ -1,4 +1,4 @@
-"""Stage C cadence: bounded (cycles / max_scans / stop signal), accumulates,
+"""The cadence: bounded (cycles / max_scans / stop signal), accumulates,
 records a run-level cadence_digest, never promotes. Mocks gen + run_once."""
 
 import sys
@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.driver import stage_c  # noqa: E402
+from kilimanjaro.driver import cadence  # noqa: E402
 from kilimanjaro.ledger.core import load_events  # noqa: E402
 
 _SUMMARY = {
@@ -22,21 +22,21 @@ _SUMMARY = {
 def _mock(generate_return=("a.yaml", "b.yaml"), summary=_SUMMARY):
     """(gen.generate, run_once) patched to fixed returns."""
     return (
-        patch("kilimanjaro.driver.stage_c.gen.generate", return_value=list(generate_return)),
-        patch("kilimanjaro.driver.stage_c.run_once", return_value=summary),
+        patch("kilimanjaro.driver.cadence.gen.generate", return_value=list(generate_return)),
+        patch("kilimanjaro.driver.cadence.run_once", return_value=summary),
     )
 
 
 class TestStageC(unittest.TestCase):
     def test_refuses_unbounded_run(self):
         with self.assertRaises(ValueError):
-            stage_c.run_cadence("/tmp/q", "2026-01-01", "2026-06-30")  # no bound at all
+            cadence.run_cadence("/tmp/q", "2026-01-01", "2026-06-30")  # no bound at all
 
     def test_runs_bounded_cycles_and_accumulates(self):
         gp, rp = _mock()
         with tempfile.TemporaryDirectory() as d, gp as g, rp as r:
             seen = []
-            digest = stage_c.run_cadence(
+            digest = cadence.run_cadence(
                 Path(d) / "q", "2026-01-01", "2026-06-30",
                 cycles=3, gen_per_cycle=2, on_cycle=seen.append, record_digest=False,
             )
@@ -54,14 +54,14 @@ class TestStageC(unittest.TestCase):
     def test_dry_run_skips_generation_and_ledger(self):
         gp, rp = _mock(summary={"n_specs": 0, "counts": {}, "passed": []})
         with tempfile.TemporaryDirectory() as d, gp as g, rp as r:
-            stage_c.run_cadence(Path(d) / "q", "2026-01-01", "2026-06-30", cycles=1, dry_run=True)
+            cadence.run_cadence(Path(d) / "q", "2026-01-01", "2026-06-30", cycles=1, dry_run=True)
         g.assert_not_called()  # dry-run generates nothing
         r.assert_called_once()
 
     def test_gen_per_cycle_is_passed_through(self):
         gp, rp = _mock(generate_return=[], summary={"n_specs": 0, "counts": {}, "passed": []})
         with tempfile.TemporaryDirectory() as d, gp as g, rp:
-            stage_c.run_cadence(
+            cadence.run_cadence(
                 Path(d) / "q", "2026-01-01", "2026-06-30",
                 cycles=1, gen_per_cycle=7, record_digest=False,
             )
@@ -71,7 +71,7 @@ class TestStageC(unittest.TestCase):
         # 3 grid scans / cycle; budget 5 → stops after 2 cycles (6 ≥ 5).
         gp, rp = _mock()
         with tempfile.TemporaryDirectory() as d, gp, rp as r:
-            digest = stage_c.run_cadence(
+            digest = cadence.run_cadence(
                 Path(d) / "q", "2026-01-01", "2026-06-30",
                 max_scans=5, record_digest=False,
             )
@@ -85,7 +85,7 @@ class TestStageC(unittest.TestCase):
         flag = {"v": False}
         gp, rp = _mock()
         with tempfile.TemporaryDirectory() as d, gp, rp as r:
-            digest = stage_c.run_cadence(
+            digest = cadence.run_cadence(
                 Path(d) / "q", "2026-01-01", "2026-06-30",
                 stop_requested=lambda: flag["v"],
                 on_cycle=lambda cr: flag.__setitem__("v", True),
@@ -99,7 +99,7 @@ class TestStageC(unittest.TestCase):
         gp, rp = _mock()
         with tempfile.TemporaryDirectory() as d, gp, rp:
             ledger = Path(d) / "events.jsonl"
-            digest = stage_c.run_cadence(
+            digest = cadence.run_cadence(
                 Path(d) / "q", "2026-01-01", "2026-06-30",
                 cycles=2, ledger_path=ledger,
             )

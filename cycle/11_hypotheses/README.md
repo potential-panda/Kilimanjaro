@@ -26,6 +26,6 @@ Two spec formats, two purposes:
   mechanism, duplicate search not performed, research-layer target without
   version metadata, …).
 - **`../12_specs/`** — the loop's working *scan* specs (expression formulas +
-  sweep dimensions) that `cli.py grid expr` / `cli.py loop` / the Stage-C factory
+  sweep dimensions) that `cli.py grid expr` / `cli.py loop` / the factory cadence
   consume. Simpler format; validated by
   `driver/validate.validate_scan_spec` (structural shape + AST-safe expression).

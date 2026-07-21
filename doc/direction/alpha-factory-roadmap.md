@@ -28,7 +28,7 @@ until these mechanisms earn the same trust. Highest leverage item.
 
 - [x] Establish the ground-truth path — **finding:** orion only backtests
       SAR-flip strategies (v1..v9), so there is NO Himalaya counterpart for
-      expression mechanisms. Full calibration is **blocked on a Stage-5
+      expression mechanisms. Full calibration is **blocked on a step-5
       signal-driven orion strategy** (human-gated). Their execution model is
       inherited-and-verified from flip; only entry/exit-timing is unverified.
 - [x] Machine-readable calibration registry — `framework/calibration.py`
@@ -36,15 +36,15 @@ until these mechanisms earn the same trust. Highest leverage item.
       every survivor **CALIBRATED** vs **⚠️ TREND-ONLY** with a
       do-not-promote-on-scan-numbers warning. Tested. **The loop can no longer
       quietly over-trust an unverified mechanism.**
-- [ ] (blocked, Stage 5) Build a signal-driven orion strategy so expression +
+- [ ] (blocked, step 5) Build a signal-driven orion strategy so expression +
       fixed-horizon / episode can be Himalaya-checked; then calibrate each (a few
       param sets, varied entry conditions) and flip the registry to `calibrated`.
 - [ ] Interim (no Himalaya) confidence: internal cross-validation between
       fixed-horizon and episode on the same signals (do they agree on ranking?).
 
 **Done when:** every mechanism the generator can emit is either calibrated
-(recorded) or quarantined trend-only, and Stage-A reads that status. ← **the
-quarantine half is now done; the calibrate half waits on the Stage-5 strategy.**
+(recorded) or quarantined trend-only, and the loop reads that status. ← **the
+quarantine half is now done; the calibrate half waits on the step-5 strategy.**
 
 ## 2. Test hygiene + regression/invariant guards
 
@@ -65,7 +65,7 @@ failures**.
       policy already in `test_reward` + `test_return_calc` (bid/ask).
 - [ ] Runtime invariant guards the loop can assert (causality, no look-ahead,
       dedup fingerprint, cost sanity) — some exist (causality is test-enforced,
-      fingerprint dedup in ledger_io); fold the rest into Stage C (#4).
+      fingerprint dedup in ledger_io); fold the rest into the cadence (#4).
 
 **Done when:** `pytest` is green (**done: 135 passed, 0 errors**), and the caught
 bugs cannot regress silently. Runtime guards roll into #4.
@@ -89,17 +89,17 @@ long-running process.
 **Done when:** no library module reaches cross-repo/`tools/` via `sys.path`
 (**done**, except the one intentional orion shim). Tests green.
 
-## 4. Build Stage C — the forever cadence, with guardrails
+## 4. The cadence — forever loop, with guardrails
 
-**Why:** `loop.py` walks a queue once; there is no continuous scheduler. Stage C
+**Why:** `loop.py` walks a queue once; there is no continuous scheduler. The cadence
 wraps generate+loop into a repeating cadence.
 
-- [x] Cadence runner — `driver/stage_c.run_cadence` + `cli.py factory`:
+- [x] Cadence runner — `driver/cadence.run_cadence` + `cli.py factory`:
       generate → loop → sleep → repeat, **bounded by design** (refuses to start
       without `cycles` or `max_minutes`); `gen_per_cycle` caps new ideas/cycle.
 - [x] Idempotency + dedup — inherited (generate signatures + ledger fingerprint);
-      Stage C just repeats the deduped pass, so nothing is re-queued/re-scanned.
-- [x] Hard human gate — Stage C only repeats `run_once`, which parks survivors at
+      The cadence just repeats the deduped pass, so nothing is re-queued/re-scanned.
+- [x] Hard human gate — the cadence only repeats `run_once`, which parks survivors at
       the review packet and never promotes. Tested (survivors accumulate in the
       digest, promotion never happens).
 - [x] Observability — per-cycle callback + accumulated Digest (cycles, generated,
@@ -125,7 +125,7 @@ ambition.
 - [x] Feedback loop — `generate.family_scores` joins the ledger (outcomes) to the
       specs on disk (family) and counts survivors per family; `propose_specs`
       orders families by that score (`_priority_order`), so the generator favors
-      what has actually survived. Wired into `generate(feedback=True)` (Stage C
+      what has actually survived. Wired into `generate(feedback=True)` (the cadence
       gets it automatically); degrades to equal round-robin with no history.
 - [ ] Mutation / crossover (GP-style) over the expression AST, dedup-guarded —
       the deeper "search, not enumeration" step; still to build.
@@ -145,6 +145,6 @@ AST-mutation search is the remaining depth.
   can honestly reject. The moat is saying *no* cheaply and honestly.
 - **Calibrate per mechanism, not per formula** (`doc/calibration.md`). Trust is
   earned once per mechanism and inherited by every formula on it.
-- **Humans keep promotions.** Stages 5–7 are deliberate human acts; agents attach
+- **Humans keep promotions.** steps 5–7 are deliberate human acts; agents attach
   evidence to the ledger, never flip status.
 - **Speed lowers the psychological cost of rejecting ideas** — keep the scan fast.

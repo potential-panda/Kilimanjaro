@@ -4,5 +4,5 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# Stage-C daemon runtime
-.stage-c.pid
+# cadence daemon runtime
+.cadence.pid

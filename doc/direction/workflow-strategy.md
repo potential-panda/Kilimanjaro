@@ -107,7 +107,7 @@ Everything before the first gate (inventory, generation, spec, scan, ledger
 write) is agent-autonomous and human-reviewable after the fact, not
 before — that's what makes the scanner loop fast enough to run repeatedly.
 "Reviewable after the fact" is backed by a concrete audit cadence, not just
-availability: see the Stage-C guardrails in `alpha-factory-roadmap.md` —
+availability: see the cadence guardrails in `alpha-factory-roadmap.md` —
 without a defined sampling rate, an unsupervised scanner bug or stale-label
 issue could poison the ledger indefinitely before anyone notices.
 

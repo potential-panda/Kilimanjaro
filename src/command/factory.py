@@ -1,6 +1,6 @@
-"""`cli.py factory` — Stage C: generate+scan cadence (never promotes).
+"""`cli.py factory` — the cadence: repeat generate+scan (never promotes).
 
-Repeats Stage B (generate) + Stage A (loop), parking survivors at their review
+Repeats the generator + the scanner loop, parking survivors at their review
 packets for human review, and writes a run-level `cadence_digest` to the ledger.
 
 A bounded run stops on `--cycles`, `--max-minutes`, or `--max-scans` (a cost
@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def register(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("factory", help="Stage C: generate+scan cadence (never promotes)")
+    p = sub.add_parser("factory", help="Cadence: repeat generate+scan (never promotes)")
     p.add_argument("--start", help="Scan window start YYYY-MM-DD")
     p.add_argument("--end", help="Scan window end YYYY-MM-DD")
     p.add_argument("--queue", default="cycle/12_specs/queue", help="Spec queue directory")
@@ -34,7 +34,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--daemon", action="store_true",
                    help="Run unattended until stopped (--stop); handles SIGTERM/SIGINT gracefully")
     p.add_argument("--stop", action="store_true", help="Signal a running daemon to stop, then exit")
-    p.add_argument("--pid-file", default=".stage-c.pid", help="Daemon PID file (default .stage-c.pid)")
+    p.add_argument("--pid-file", default=".cadence.pid", help="Daemon PID file (default .cadence.pid)")
     p.set_defaults(func=_run_factory)
 
 
@@ -59,7 +59,7 @@ def _stop_daemon(pid_file: Path) -> int:
         return 1
     try:
         os.kill(pid, signal.SIGTERM)
-        print(f"Sent SIGTERM to Stage-C daemon (pid {pid}); it stops after the current cycle.")
+        print(f"Sent SIGTERM to cadence daemon (pid {pid}); it stops after the current cycle.")
         return 0
     except ProcessLookupError:
         print(f"No process {pid} — removing stale PID file.")
@@ -68,7 +68,7 @@ def _stop_daemon(pid_file: Path) -> int:
 
 
 def _run_factory(args: argparse.Namespace) -> int:
-    from kilimanjaro.driver import stage_c
+    from kilimanjaro.driver import cadence
 
     pid_file = Path(args.pid_file)
     if args.stop:
@@ -85,7 +85,7 @@ def _run_factory(args: argparse.Namespace) -> int:
             try:
                 old = int(pid_file.read_text().strip())
                 os.kill(old, 0)  # exists?
-                print(f"A Stage-C daemon already appears to be running (pid {old}). "
+                print(f"A cadence daemon already appears to be running (pid {old}). "
                       f"Stop it first (--stop) or remove {pid_file}.")
                 return 2
             except (ValueError, ProcessLookupError):
@@ -102,11 +102,11 @@ def _run_factory(args: argparse.Namespace) -> int:
 
         stop_requested = _stop_requested
         pid_file.write_text(str(os.getpid()))
-        print(f"Stage-C daemon started (pid {os.getpid()}, pid file {pid_file}). "
+        print(f"cadence daemon started (pid {os.getpid()}, pid file {pid_file}). "
               "Stop with: cli.py factory --stop", flush=True)
 
     try:
-        digest = stage_c.run_cadence(
+        digest = cadence.run_cadence(
             args.queue, args.start, args.end,
             cycles=args.cycles, max_minutes=args.max_minutes, max_scans=args.max_scans,
             gen_per_cycle=args.gen_per_cycle, interval_seconds=args.interval_seconds,
@@ -120,7 +120,7 @@ def _run_factory(args: argparse.Namespace) -> int:
         if args.daemon:
             pid_file.unlink(missing_ok=True)
 
-    print(f"\nStage C done ({digest.stop_reason}): {digest.cycles} cycles, "
+    print(f"\nCadence done ({digest.stop_reason}): {digest.cycles} cycles, "
           f"{digest.generated} generated, {digest.scanned} scanned, "
           f"{digest.scans_run} grid scans run.")
     print(f"Verdicts: { {k: v for k, v in digest.counts.items() if v} }")

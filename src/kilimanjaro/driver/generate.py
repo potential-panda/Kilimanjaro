@@ -1,8 +1,8 @@
-"""Stage B: the formula generator that keeps the loop's queue full.
+"""The formula generator that keeps the loop's queue full.
 
 Enumerates economic formula *families* over the available markets, gated by what
 data actually exists, deduplicated against every scan spec already proposed, and
-emits new scan specs (with fresh hypothesis ids) into the queue. The Stage-A
+emits new scan specs (with fresh hypothesis ids) into the queue. The scanner loop
 driver then scans them. Together they never run dry.
 
 Design choices:

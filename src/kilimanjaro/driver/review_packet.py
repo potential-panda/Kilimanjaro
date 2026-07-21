@@ -132,7 +132,7 @@ def write_review_packet(
             "- **Do NOT promote on the scan's absolute PnL/Sharpe.** They are not "
             "Himalaya-verified for this mechanism — treat direction, magnitude-order "
             "and param-ranking as indicative only. Himalaya calibration here is "
-            "blocked on a Stage-5 signal strategy (orion has only SAR-flip)."
+            "blocked on a step-5 signal strategy (orion has only SAR-flip)."
         )
 
     md = f"""# Review packet — {hyp} (scan-passed)
@@ -179,7 +179,7 @@ This is a scan survivor, NOT an approval — promotion is your call.
 
 Reminder: execution is bid/ask (spread paid) + flat latency cost on every
 mechanism. Trust in the *net numbers* is gated by the Calibration section above,
-not by the return calc — a trend-only mechanism needs Himalaya (or its Stage-5
+not by the return calc — a trend-only mechanism needs Himalaya (or its step-5
 strategy) before its absolute PnL/Sharpe can be believed.
 """
     path = out_dir / "REVIEW_PACKET.md"

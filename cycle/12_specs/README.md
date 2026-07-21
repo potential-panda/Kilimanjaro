@@ -3,7 +3,7 @@
 Run configs for `cli.py grid expr` — each names its hypothesis
 (`../11_hypotheses/hyp-*.yaml`) so the run lands in the ledger. These are scan
 *configurations*, not hypothesis specs; the hypothesis registry lives in
-`../11_hypotheses/`. The Stage-A loop's working queue is `queue/`.
+`../11_hypotheses/`. The scanner loop's working queue is `queue/`.
 
 ```bash
 python src/cli.py grid expr --spec cycle/12_specs/momentum_eth.yaml \

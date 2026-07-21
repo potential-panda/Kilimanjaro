@@ -100,10 +100,10 @@ Everything runs through `python src/cli.py <command>`:
 
 | command | what it does |
 |--|--|
-| `generate` | Stage B — propose new formula specs into the queue (deduped, data-gated) |
+| `generate` | the generator — propose new formula specs into the queue (deduped, data-gated) |
 | `grid {flip,expr,obi}` | run a parameter-grid scan (train/holdout split + rank stability) |
-| `loop` | Stage A — one pass over the spec queue (validate → dedup → scan → verdict → ledger → review packet) |
-| `factory` | Stage C — bounded generate+scan cadence (never promotes) |
+| `loop` | the scanner loop — one pass over the spec queue (validate → dedup → scan → verdict → ledger → review packet) |
+| `factory` | the cadence — bounded or daemon generate+scan, never promotes |
 | `ledger {append,search}` | the append-only research memory |
 | `verify-scan` | scan↔Himalaya-backtest fidelity check (ORDER + EVAL) |
 | `populate` / `verify` | populate a dataset; verify a dataset vs backtest InfluxDB |

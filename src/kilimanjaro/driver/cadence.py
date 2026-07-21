@@ -1,10 +1,10 @@
-"""Stage C: the forever cadence — wrap Stage B (generate) + Stage A (loop).
+"""The cadence — wrap the generator + the scanner loop into a forever loop.
 
-Each cycle tops up the queue with freshly generated specs (Stage B) and then
-makes one robust pass over it (Stage A: validate → dedup → scan → verdict →
-ledger → review packet). It **never crosses the human gate**: run_once parks
-survivors at the review packet and never promotes — Stage C only repeats that,
-it does not change the rule.
+Each cycle tops up the queue with freshly generated specs (the generator) and
+then makes one robust pass over it (the scanner loop: validate → dedup → scan →
+verdict → ledger → review packet). It **never crosses the human gate**: run_once
+parks survivors at the review packet and never promotes — the cadence only
+repeats that, it does not change the rule.
 
 Guardrails, by design:
 - A run MUST be bounded — by `cycles`, `max_minutes`, a `max_scans` cost budget,
@@ -79,7 +79,7 @@ def run_cadence(
     split: str | None = None,
     results_root: Path | None = None,
     scan_dirs: list[Path] | None = None,
-    actor_id: str = "stage-c",
+    actor_id: str = "cadence",
     dry_run: bool = False,
     stop_requested=None,
     ledger_path: Path | None = None,
@@ -101,7 +101,7 @@ def run_cadence(
         and stop_requested is None
     ):
         raise ValueError(
-            "Stage C must be bounded — pass cycles, max_minutes, max_scans, or a "
+            "The cadence must be bounded — pass cycles, max_minutes, max_scans, or a "
             "stop_requested signal (refusing to start an unbounded loop)."
         )
     queue_dir = Path(queue_dir)
@@ -129,13 +129,13 @@ def run_cadence(
         n += 1
         date_str = datetime.date.today().strftime("%Y%m%d")
 
-        # Stage B: top up the queue (dedup-guarded inside generate).
+        # Generate: top up the queue (dedup-guarded inside generate).
         new_paths = (
             []
             if dry_run
             else gen.generate(queue_dir, gen_per_cycle, date_str, scan_dirs=scan_dirs)
         )
-        # Stage A: one robust pass over the queue.
+        # Scan: one robust pass over the queue.
         summary = run_once(
             queue_dir,
             start,

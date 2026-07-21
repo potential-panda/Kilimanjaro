@@ -93,7 +93,7 @@ def record_scan_attached(
 
 
 def new_run_id(at: datetime.datetime | None = None) -> str:
-    """Run-level id for a Stage-C cadence run: run-YYYYMMDDTHHMMSSZ (UTC)."""
+    """Run-level id for a cadence run: run-YYYYMMDDTHHMMSSZ (UTC)."""
     at = at or datetime.datetime.now(datetime.timezone.utc)
     return at.strftime("run-%Y%m%dT%H%M%SZ")
 
@@ -104,7 +104,7 @@ def record_cadence_digest(
     details: dict,
     ledger_path: Path = DEFAULT_LEDGER_PATH,
 ) -> dict:
-    """Append a run-level `cadence_digest` event — what a Stage-C run tried and
+    """Append a run-level `cadence_digest` event — what a cadence run tried and
     rejected (cycles, generated, scanned, verdict mix, survivors). Not tied to a
     single hypothesis; the ledger's durable record of an unattended run."""
     return append_event(

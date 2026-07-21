@@ -1,4 +1,4 @@
-"""`cli.py loop` — the autonomous scanner driver (stages 1-4).
+"""`cli.py loop` — the autonomous scanner driver (steps 1-4).
 
 Walks a queue of scan specs and runs each through validate -> dedup -> scan ->
 verdict -> ledger, drafting a review packet for survivors. Idempotent: specs
@@ -12,7 +12,7 @@ from pathlib import Path
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "loop",
-        help="Run the autonomous scanner loop over a queue of scan specs (stages 1-4)",
+        help="Run the autonomous scanner loop over a queue of scan specs (steps 1-4)",
     )
     p.add_argument("--queue", default="cycle/12_specs/queue",
                    help="Directory of scan-spec YAMLs to process (default cycle/12_specs/queue)")

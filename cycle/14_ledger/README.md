@@ -17,7 +17,7 @@ Rules:
   by `created_at`; duplicate `event_id`s are invalid.
 
 Events are written automatically by the grid scans (`cli.py grid {flip,obi,expr}`)
-and the Stage-A loop / Stage-C cadence: every run appends one `scan_attached`
+and the scanner loop / cadence: every run appends one `scan_attached`
 event to its hypothesis — default per market/spec, override with
 `--hypothesis-id`, escape hatch `--no-ledger` for throwaway exploration —
 carrying the scan folder, train/holdout windows, number of combos tested, and

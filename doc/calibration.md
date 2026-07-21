@@ -96,7 +96,7 @@ gate can never mistake an unverified judge for a verified one. Current status:
 **Ground-truth blocker (2026-07):** Himalaya only backtests SAR-flip strategies —
 every orion variant (v1..v9, v601...) is parabolic-SAR. So expression mechanisms
 **cannot be Himalaya-calibrated until a signal-driven strategy exists in orion**
-(Stage 5, human-gated). Their *execution model* (bid/ask first-tick fills + flat
+(step 5, human-gated). Their *execution model* (bid/ask first-tick fills + flat
 latency cost + orion schedule) is inherited from the flip calibration and verified;
-what stays unverified is entry/exit-timing fidelity. Until that Stage-5 strategy
+what stays unverified is entry/exit-timing fidelity. Until that step-5 strategy
 exists, expression scans are trend-only by design, and the registry says so.

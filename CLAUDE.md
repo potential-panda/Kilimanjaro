@@ -23,7 +23,7 @@ python src/cli.py verify-scan                # compare scan vs backtest ORDER + 
 python src/cli.py generate --queue cycle/12_specs/queue --limit 5
                                              # propose new formula specs (stage B)
 python src/cli.py loop --queue cycle/12_specs/queue --start ... --end ...
-                                             # autonomous scanner loop (stages 1-4)
+                                             # autonomous scanner loop (steps 1-4)
 ```
 
 Subcommand modules live in `src/command/` (populate.py, verify.py,
@@ -33,18 +33,18 @@ verify_scan.py, grid.py, loop.py, generate.py). There is no single-config
 The **driver** of the 1-7 research loop lives in `src/kilimanjaro/driver/` (the
 driver of the framework, not part of framework/core):
 
-- `generate` (**Stage B**) enumerates economic formula families (momentum,
+- `generate` enumerates economic formula families (momentum,
   order-flow, OBI, reversion, cross-market basis) over the markets that actually
   have data, dedups against every scan-spec on disk by formula signature, and
   writes new specs (fresh hypothesis ids) into the queue. Data-gated; execution
   sizes read from the data, never guessed.
-- `loop` (**Stage A**) walks the queue and runs each spec through validate →
+- `loop` walks the queue and runs each spec through validate →
   dedup → scan → verdict → ledger, drafting a `REVIEW_PACKET.md` for rank-stable
   survivors and parking them at the human gate (never auto-promotes). Idempotent
   — a spec whose (content, window) fingerprint is already in the ledger is skipped.
 
-Stages 5-7 (build qate strategy, Himalaya, prod) stay human-gated. **Stage C**
-(`cli.py factory` / `driver/stage_c.run_cadence`) wraps generate+loop into a
+steps 5-7 (build qate strategy, Himalaya, prod) stay human-gated. The **cadence**
+(`cli.py factory` / `driver/cadence.run_cadence`) wraps generate+loop into a
 repeating cadence: bounded by `--cycles`, `--max-minutes`, or `--max-scans` (a
 cost budget = grid scans actually run), or run as a `--daemon` (graceful
 `--stop` via SIGTERM) for multi-day unattended runs. It never crosses the human
@@ -60,7 +60,7 @@ event to the ledger (what it tried and rejected). See
 | `src/kilimanjaro/dataset/backtest.py` | the Himalaya backtest as a data source — `verify()` only (no populate): scan↔backtest fidelity via `compare_frames` (ORDER + EVAL), **plus** the scan's Sharpe/Calmar/Martin; backs `cli.py verify-scan` |
 | `src/kilimanjaro/framework/` | scan framework: `run_grid_split` (train/holdout + rank stability — the default way to run any grid), Gate protocol + RollingDrawdownGate, block-bootstrap p-value |
 | `src/kilimanjaro/framework/verify.py` | general parquet↔InfluxDB compare engine: `compare_frames` (exact or fuzzy align → per-field avg/std/p50/p90/max/pct_exact + coverage) + `load_influx`; unit-tested, shared by both verifiers |
-| `src/kilimanjaro/driver/` | the research-loop driver (not core). Stage A: `loop.run_once`/`process_spec` (validate→dedup→scan→verdict→ledger→review-packet); canonical `scan_runner.build_combos`. Stage B: `generate.propose_specs` (formula families × data-viable markets, deduped by signature). |
+| `src/kilimanjaro/driver/` | the research-loop driver (not core). The scanner loop: `loop.run_once`/`process_spec` (validate→dedup→scan→verdict→ledger→review-packet); canonical `scan_runner.build_combos`. The generator: `generate.propose_specs` (formula families × data-viable markets, deduped by signature). |
 | `src/kilimanjaro/signal/expression.py` | `ExpressionSignal`: signals as AST-validated formulas over the feature frame |
 | `src/kilimanjaro/data/feature_frame.py` | multi-market 1s feature frame (mid/spread, OBI, TradeAggression) |
 | `src/kilimanjaro/data/price_cache.py` | per-window target-price cache — full-year flip grid runs in ~40s (was ~35min); keep return calcs on this, never per-combo parquet scans |

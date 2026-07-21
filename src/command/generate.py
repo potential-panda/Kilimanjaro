@@ -1,4 +1,4 @@
-"""`cli.py generate` — Stage B: propose new formula specs into the loop queue.
+"""`cli.py generate` — the generator: propose new formula specs into the loop queue.
 
 Enumerates economic formula families over available markets, dedupes against
 every scan-spec already on disk, and writes new specs (with fresh hypothesis ids)

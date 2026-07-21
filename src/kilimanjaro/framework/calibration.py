@@ -2,14 +2,14 @@
 
 A *mechanism* = entry style + return calc + execution model (doc/calibration.md).
 Scan↔Himalaya trust is earned once per mechanism and inherited by every formula
-on it. This module turns that status into data so Stage-A can refuse to present a
+on it. This module turns that status into data so the loop can refuse to present a
 survivor on a *trend-only* mechanism as promotion-ready — the human gate is told,
 in the review packet and the ledger, when the scan numbers are not yet
 Himalaya-verified.
 
 Ground-truth note (2026-07): Himalaya only backtests SAR-flip strategies (every
 orion variant is parabolic-SAR). So expression mechanisms cannot be directly
-Himalaya-calibrated until a signal-driven strategy exists in orion (Stage 5,
+Himalaya-calibrated until a signal-driven strategy exists in orion (step 5,
 human-gated). Their execution model (bid/ask first-tick fills + flat latency cost
 + orion schedule) is *inherited* from the flip calibration; what remains unverified
 is entry/exit-timing fidelity. Until then they are trend-only.
@@ -47,13 +47,13 @@ _REGISTRY: dict[str, Calibration] = {
         TREND_ONLY,
         "No orion counterpart strategy to Himalaya-check (all orion variants are "
         "SAR-flip). Execution model inherited from the flip calibration; "
-        "entry/exit-timing fidelity unverified. Blocked on a Stage-5 signal strategy.",
+        "entry/exit-timing fidelity unverified. Blocked on a step-5 signal strategy.",
     ),
     "expression+episode": Calibration(
         "expression+episode",
         TREND_ONLY,
         "Same as fixed_horizon: no orion counterpart; execution inherited, "
-        "entry/exit-timing unverified. Trend-only until a Stage-5 strategy exists.",
+        "entry/exit-timing unverified. Trend-only until a step-5 strategy exists.",
     ),
 }
 

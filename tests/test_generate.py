@@ -1,4 +1,4 @@
-"""Stage B generator: proposes valid, deduped, data-viable formula specs.
+"""The generator: proposes valid, deduped, data-viable formula specs.
 available_features is mocked so tests stay data-free."""
 
 import sys
