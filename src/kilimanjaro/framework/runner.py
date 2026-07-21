@@ -20,7 +20,7 @@ Usage
     target = MarketConfig("GMO", "ETH_JPY", "0.3")
     rows = run_grid(combos, target, "2026-05-01", "2026-06-30", costs_bps=1.0)
 
-Pipeline per combo (same order flip_sar.scan has always used):
+Pipeline per combo (the canonical scan order):
     signals → ReturnCalc.compute → ScheduleFilter → Gates → dropna → stats
 """
 

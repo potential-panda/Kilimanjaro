@@ -18,7 +18,7 @@ covers normal commit/push, not those.
 ```
 python src/cli.py populate chart-range-sar   # precompute SAR flip events
 python src/cli.py verify  chart-range-sar    # compare bars/SAR vs backtest InfluxDB BAR
-python src/cli.py scan                       # flip-anchored signal scan
+python src/cli.py grid flip --market btc ...  # flip-anchored signal scan (always a grid)
 python src/cli.py verify-scan                # compare scan vs backtest ORDER + EVAL
 python src/cli.py generate --queue cycle/12_specs/queue --limit 5
                                              # propose new formula specs (stage B)
@@ -26,8 +26,9 @@ python src/cli.py loop --queue cycle/12_specs/queue --start ... --end ...
                                              # autonomous scanner loop (stages 1-4)
 ```
 
-Subcommand modules live in `src/command/` (populate.py, verify.py, scan.py,
-loop.py, generate.py).
+Subcommand modules live in `src/command/` (populate.py, verify.py,
+verify_scan.py, grid.py, loop.py, generate.py). There is no single-config
+`scan` command — a scan is always a grid run (`grid flip/expr/obi`).
 
 The **driver** of the 1-7 research loop lives in `src/kilimanjaro/driver/` (the
 driver of the framework, not part of framework/core):
@@ -51,8 +52,8 @@ forever cadence wrapping generate+loop) is not built yet. See
 | module | purpose |
 |--------|---------|
 | `src/kilimanjaro/dataset/range_sar_store.py` | populate + verify ChartRangeSAR parquet store |
-| `src/kilimanjaro/scan/flip_sar.py` | `scan()` and `verify()` for flip-anchored SAR signals |
 | `src/kilimanjaro/framework/` | scan framework: `run_grid_split` (train/holdout + rank stability — the default way to run any grid), Gate protocol + RollingDrawdownGate, block-bootstrap p-value |
+| `src/kilimanjaro/framework/backtest_verify.py` | `verify_flip_scan()` — the scan↔Himalaya-backtest fidelity check (ORDER + EVAL); the framework's verification facility, backs `cli.py verify-scan` |
 | `src/kilimanjaro/driver/` | the research-loop driver (not core). Stage A: `loop.run_once`/`process_spec` (validate→dedup→scan→verdict→ledger→review-packet); canonical `scan_runner.build_combos`. Stage B: `generate.propose_specs` (formula families × data-viable markets, deduped by signature). |
 | `src/kilimanjaro/signal/expression.py` | `ExpressionSignal`: signals as AST-validated formulas over the feature frame |
 | `src/kilimanjaro/data/feature_frame.py` | multi-market 1s feature frame (mid/spread, OBI, TradeAggression) |

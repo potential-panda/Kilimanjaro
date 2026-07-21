@@ -1,19 +1,15 @@
-"""Flip-anchored SAR scanner — thin wrapper over the framework.
+"""Backtest fidelity check — compare a scan against the Himalaya/InfluxDB backtest.
 
-Public API (unchanged):
-    scan(...)          → report dict
-    print_summary(report)
-    verify(...)        → verification dict (against InfluxDB backtest)
-    run_flip_scan      alias for scan
+This is the framework's scan↔backtest verification facility: the last honest
+gut-check before trusting a mechanism, and the anchor for `doc/calibration.md`'s
+calibration registry. It runs a scan's own entry/exit prices and PnL against the
+backtest's recorded ORDER (EXEC_PRICE) and EVAL (pnl_change0) streams and reports
+where they agree and where they diverge.
 
-Internal logic delegated to:
-    kilimanjaro.signal.sar_flip.SARFlipSignal
-    kilimanjaro.return_calc.between_signal.BetweenSignalReturn
-    kilimanjaro.framework.schedule.ScheduleFilter
-    kilimanjaro.framework.stats.compute_stats
-
-Note: verify() remains self-contained (InfluxDB comparison logic) and does not
-use the framework — it is reproduced below unchanged.
+`verify_flip_scan()` is the first (currently only) verifier — flip-anchored SAR +
+between-signal returns, the one CALIBRATED mechanism. As other mechanisms get
+calibrated, their verifiers join this module (e.g. an expression/fixed-horizon
+verifier) so backtest verification stays one framework concern, not per-scan code.
 """
 
 from __future__ import annotations
@@ -25,24 +21,11 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from kilimanjaro.framework.gate import RollingDrawdownGate
-from kilimanjaro.framework.protocol import MarketConfig
-from kilimanjaro.framework.schedule import ScheduleFilter
-from kilimanjaro.framework.stats import compute_stats
-from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
-from kilimanjaro.signal.sar_flip import SARFlipSignal
-
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
-_DEFAULT_COSTS_BPS = 1.0
-_DEFAULT_ROLLING_DD_WINDOW_SECONDS = 21600.0
-_DEFAULT_ROLLING_DD_THRESHOLD_BPS = 800.0
-_DEFAULT_ROLLING_DD_COOLDOWN_SECONDS = 21600.0
 
 _INFLUX_URL = "http://localhost:8086"
 _INFLUX_TOKEN = "panda-auth-token"
 _INFLUX_ORG = "panda-org"
-
-_ALL_SAT = list(range(24))
 
 # BINANCE ETH raw-data outage (missing days) — blocked in every flip scan.
 DEFAULT_BLOCK_JST_DATES: list[str] = [
@@ -59,347 +42,8 @@ _DEFAULT_BLOCK_JST_DATES = DEFAULT_BLOCK_JST_DATES  # backward-compat alias
 
 _GMO_MAINTENANCE_SAT_HOURS: list[int] = [9, 10, 11]
 
-SCHEDULES: dict[str, dict] = {
-    "nofilter": {"block_weekday_hours": [], "block_weekend_hours": []},
-    "xrp_active": {
-        "block_weekday_hours": [22, 23, 0, 1, 2, 3, 4, 5, 6],
-        "block_weekend_hours": _ALL_SAT,
-    },
-    "xrp_inactive": {
-        "block_weekday_hours": [
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-        ],
-        "block_weekend_hours": [],
-    },
-    "default_active": {
-        "block_weekday_hours": [22, 23, 0, 1, 2, 3, 4, 5],
-        "block_weekend_hours": _ALL_SAT,
-    },
-    "default_inactive": {
-        "block_weekday_hours": [
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-        ],
-        "block_weekend_hours": [],
-    },
-}
 
-
-# ── scan() ────────────────────────────────────────────────────────────────────
-
-
-def scan(
-    flip_exchange: str,
-    flip_symbol: str,
-    target_exchange: str,
-    target_symbol: str,
-    start_date: str,
-    end_date: str,
-    box_size_rate: float = 0.0025,
-    sar_step: float = 0.02,
-    execution_size: str = "150",
-    costs_bps: float = _DEFAULT_COSTS_BPS,
-    block_weekday_hours: list[int] | None = None,
-    block_weekend_hours: list[int] | None = None,
-    exclude_jst_dates: list[str] | None = None,
-    rolling_dd_window_seconds: float | None = None,
-    rolling_dd_threshold_bps: float | None = None,
-    rolling_dd_cooldown_seconds: float | None = None,
-    data_root: Path = _DEFAULT_DATA_ROOT,
-    features_root: Path | None = None,
-) -> dict:
-    """Run a flip-anchored SAR scan.
-
-    Returns a report dict with per-flip statistics before and after costs,
-    for the between-flip return definition (hold until next SAR cross).
-    """
-    sig = SARFlipSignal(
-        flip_exchange=flip_exchange,
-        flip_symbol=flip_symbol,
-        box_size_rate=box_size_rate,
-        sar_step=sar_step,
-    )
-    rc = BetweenSignalReturn()
-    target = MarketConfig(target_exchange, target_symbol, execution_size)
-
-    all_dates = list(_DEFAULT_BLOCK_JST_DATES)
-    if exclude_jst_dates:
-        all_dates = list(set(all_dates) | set(exclude_jst_dates))
-
-    schedule = ScheduleFilter(
-        block_weekday_hours=block_weekday_hours or [],
-        block_weekend_hours=block_weekend_hours or [],
-        block_jst_dates=all_dates,
-        block_gmo_maintenance=(target_exchange.upper() == "GMO"),
-        has_exit_col="exit_ts",
-    )
-
-    # Load and generate signals (with features_root override if given)
-    if features_root is not None:
-        from kilimanjaro.data.sar_loader import load_sar_flips
-
-        raw = load_sar_flips(
-            exchange=flip_exchange,
-            symbol=flip_symbol,
-            start_date=start_date,
-            end_date=end_date,
-            box_size_rate=box_size_rate,
-            sar_step=sar_step,
-            features_root=features_root,
-        )
-        signals = sig.generate(raw)
-    else:
-        raw = sig.load_data(start_date, end_date, data_root)
-        signals = sig.generate(raw)
-
-    if signals.empty:
-        raise ValueError(
-            f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}"
-        )
-
-    trades = rc.compute(signals, target, start_date, end_date, data_root)
-
-    if trades.empty:
-        raise ValueError(
-            f"no flip data for {flip_exchange}/{flip_symbol} in {start_date}..{end_date}"
-        )
-
-    trades, schedule_counts = schedule.apply(trades)
-    n_date_blocked = schedule_counts["n_date_blocked"]
-    n_weekday_blocked = schedule_counts["n_weekday_blocked"]
-    n_sat_blocked = schedule_counts["n_sat_blocked"]
-
-    gate = RollingDrawdownGate(
-        window_seconds=rolling_dd_window_seconds
-        if rolling_dd_window_seconds is not None
-        else _DEFAULT_ROLLING_DD_WINDOW_SECONDS,
-        threshold_bps=rolling_dd_threshold_bps
-        if rolling_dd_threshold_bps is not None
-        else _DEFAULT_ROLLING_DD_THRESHOLD_BPS,
-        cooldown_seconds=rolling_dd_cooldown_seconds
-        if rolling_dd_cooldown_seconds is not None
-        else _DEFAULT_ROLLING_DD_COOLDOWN_SECONDS,
-    )
-    trades, dd_info = gate.apply(trades)
-    n_rolling_dd_blocked = dd_info["n_dd_blocked"]
-    dd_triggers = dd_info["dd_triggers"]
-
-    n_flips = len(trades)
-    n_days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
-
-    bf_valid = trades.dropna(subset=["return_bps"]).copy()
-
-    stats = compute_stats(
-        bf_valid["return_bps"],
-        costs_bps,
-        holding_seconds=bf_valid["holding_seconds"],
-    )
-
-    between_flip = {
-        "n": stats["n"],
-        "avg_holding_seconds": stats["avg_hold_s"],
-        "median_holding_seconds": stats["median_hold_s"],
-        "avg_signed_return_bps": stats["avg_gross"],
-        "avg_net_return_bps": stats["avg_net"],
-        "hit_rate": stats["hit_rate"],
-        "hit_rate_net": stats["hit_rate_net"],
-        "median_signed_return_bps": stats["median_gross"],
-        "p25_bps": stats["p25_bps"],
-        "p75_bps": stats["p75_bps"],
-        "std_bps": stats["std_bps"],
-        "t_stat": stats["t_stat"],
-        "p_value_1sided": stats["p_value_1sided"],
-        "sharpe_per_trade": stats["sharpe_per_trade"],
-        "skewness": stats["skewness"],
-        "total_net_bps": stats["total_net_bps"],
-    }
-
-    bf_valid["month"] = pd.to_datetime(
-        bf_valid["exit_ts"], unit="s", utc=True
-    ).dt.strftime("%Y-%m")
-    monthly = []
-    for month, g in bf_valid.groupby("month"):
-        monthly.append(
-            {
-                "month": month,
-                "n_flips": len(g),
-                "avg_signed_return_bps": float(g["return_bps"].mean()),
-                "avg_net_return_bps": float(g["return_bps"].mean() - costs_bps),
-                "hit_rate": float((g["return_bps"] > 0).mean()),
-            }
-        )
-
-    by_hour = []
-    for hour, g in bf_valid.groupby("jst_hour"):
-        by_hour.append(
-            {
-                "jst_hour": int(hour),
-                "n_flips": len(g),
-                "avg_signed_return_bps": float(g["return_bps"].mean()),
-                "avg_net_return_bps": float(g["return_bps"].mean() - costs_bps),
-                "hit_rate": float((g["return_bps"] > 0).mean()),
-            }
-        )
-
-    return {
-        "signal_style": "skew",
-        "flip_exchange": flip_exchange,
-        "flip_symbol": flip_symbol,
-        "target_exchange": target_exchange,
-        "target_symbol": target_symbol,
-        "start_date": start_date,
-        "end_date": end_date,
-        "costs_bps": costs_bps,
-        "n_flips": n_flips,
-        "flips_per_day": round(n_flips / n_days, 2) if n_days > 0 else 0.0,
-        "box_size_rate": box_size_rate,
-        "sar_step": sar_step,
-        "execution_size": execution_size,
-        "risk_gates": {
-            "block_weekday_hours": block_weekday_hours or [],
-            "block_weekend_hours": block_weekend_hours or [],
-            "exclude_jst_dates": exclude_jst_dates or [],
-            "rolling_dd_window_seconds": rolling_dd_window_seconds,
-            "rolling_dd_threshold_bps": rolling_dd_threshold_bps,
-            "n_weekday_blocked": n_weekday_blocked,
-            "n_sat_blocked": n_sat_blocked,
-            "n_date_blocked": n_date_blocked,
-            "n_rolling_dd_blocked": n_rolling_dd_blocked,
-            "dd_triggers": dd_triggers,
-        },
-        "between_flip": between_flip,
-        "by_month": monthly,
-        "by_jst_hour": by_hour,
-    }
-
-
-# backward-compat alias
-run_flip_scan = scan
-
-
-# ── print_summary() ───────────────────────────────────────────────────────────
-
-
-def print_summary(report: dict) -> None:
-    costs = report["costs_bps"]
-    print(f"\n{'=' * 60}")
-    print(f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(
-        f"FLIP SCAN: {report['flip_exchange']}/{report['flip_symbol']}"
-        f" → {report['target_exchange']}/{report['target_symbol']}"
-    )
-    print(
-        f"Window: {report['start_date']} .. {report['end_date']}"
-        f"  box_size_rate={report['box_size_rate']}  execution_size={report['execution_size']}"
-    )
-    rg = report["risk_gates"]
-    parts = []
-    if rg.get("block_weekday_hours"):
-        parts.append(f"block_weekday={rg['block_weekday_hours']}")
-    if rg.get("block_weekend_hours"):
-        parts.append(f"block_weekend={rg['block_weekend_hours']}")
-    if rg.get("exclude_jst_dates"):
-        parts.append(f"exclude_jst_dates={rg['exclude_jst_dates']}")
-    if rg.get("rolling_dd_threshold_bps"):
-        parts.append(
-            f"rolling_dd<={rg['rolling_dd_threshold_bps']}bps/{rg['rolling_dd_window_seconds']}s"
-        )
-    if parts:
-        print(f"Gates: {' / '.join(parts)}")
-        total_blocked = (
-            rg.get("n_weekday_blocked", 0)
-            + rg.get("n_sat_blocked", 0)
-            + rg.get("n_date_blocked", 0)
-            + rg.get("n_rolling_dd_blocked", 0)
-        )
-        print(
-            f"  Blocked: {rg.get('n_weekday_blocked', 0)} weekday"
-            f" + {rg.get('n_sat_blocked', 0)} weekend/sat"
-            f" + {rg.get('n_date_blocked', 0)} date"
-            f" + {rg.get('n_rolling_dd_blocked', 0)} rolling_dd"
-            f" = {total_blocked} blocked"
-        )
-    print(f"N flips: {report['n_flips']}  ({report['flips_per_day']:.1f}/day)")
-    print(f"Round-trip cost assumption: {costs} bps")
-
-    bf = report["between_flip"]
-    print("\n--- Between-flip returns (hold until next SAR cross) ---")
-    print(
-        f"  Avg holding:   {bf['avg_holding_seconds']:.0f}s  (median {bf['median_holding_seconds']:.0f}s)"
-    )
-    print(f"  Avg gross:     {bf['avg_signed_return_bps']:+.2f} bps")
-    print(
-        f"  Avg net:       {bf['avg_net_return_bps']:+.2f} bps  (after {costs} bps cost)"
-    )
-    print(
-        f"  Hit rate:      {bf['hit_rate']:.1%} gross  /  {bf['hit_rate_net']:.1%} net"
-    )
-    print(
-        f"  p25/med/p75:   {bf['p25_bps']:+.1f} / {bf['median_signed_return_bps']:+.1f} / {bf['p75_bps']:+.1f} bps"
-    )
-
-    print(f"\n--- Monthly breakdown (between-flip, net of {costs} bps) ---")
-    print(
-        f"{'Month':>8}  {'N flips':>8}  {'Avg gross':>10}  {'Avg net':>10}  {'Hit%':>7}"
-    )
-    for m in report["by_month"]:
-        print(
-            f"{m['month']:>8}  {m['n_flips']:>8}  {m['avg_signed_return_bps']:>+9.2f}"
-            f"  {m['avg_net_return_bps']:>+9.2f}  {m['hit_rate']:>6.1%}"
-        )
-
-    triggers = rg.get("dd_triggers", [])
-    if triggers:
-        _JST = 9 * 3600
-        print(f"\n--- Rolling DD gate triggers ({len(triggers)}) ---")
-        print(
-            f"  {'Close (JST)':>19}  {'Reopen (JST)':>19}  {'WinSum bps':>11}  {'Blocked':>7}"
-        )
-        for t in triggers:
-            close_jst = datetime.datetime.utcfromtimestamp(
-                t["close_ts"] + _JST
-            ).strftime("%Y-%m-%d %H:%M")
-            reopen_jst = datetime.datetime.utcfromtimestamp(
-                t["reopen_ts"] + _JST
-            ).strftime("%Y-%m-%d %H:%M")
-            print(
-                f"  {close_jst:>19}  {reopen_jst:>19}  {t['window_sum_bps']:>+10.1f}  {t['n_blocked']:>7}"
-            )
-    print()
-
-
-# ── verify() — unchanged from original ────────────────────────────────────────
-# Kept self-contained: uses local helpers below rather than the framework,
-# because it does InfluxDB comparison and custom matching logic that doesn't
-# benefit from the scan framework refactor.
+# ── flip-scan helpers ─────────────────────────────────────────────────────────
 
 
 def _features_root() -> Path:
@@ -442,7 +86,7 @@ def _apply_schedule_filters(
     block_weekend_hours,
     exclude_jst_dates,
 ):
-    """Local helper for verify(): adds JST columns and applies date/schedule filters."""
+    """Local helper for verify_flip_scan(): adds JST columns and applies date/schedule filters."""
     _JST = 9 * 3600
     has_exit = flips_df["exit_ts"].notna()
     all_dates = set(_DEFAULT_BLOCK_JST_DATES)
@@ -508,7 +152,7 @@ def _query_df(qapi, flux):
     return raw
 
 
-def verify(
+def verify_flip_scan(
     flip_exchange,
     flip_symbol,
     target_exchange,
@@ -833,7 +477,7 @@ from(bucket: "{bucket}")
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        _print_verify_report(
+        _print_flip_verify_report(
             flip_exchange,
             flip_symbol,
             target_exchange,
@@ -857,7 +501,7 @@ from(bucket: "{bucket}")
     return {"order": order_result, "pnl": pnl_result}
 
 
-def _print_verify_report(
+def _print_flip_verify_report(
     flip_exchange,
     flip_symbol,
     target_exchange,

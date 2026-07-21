@@ -1,3 +1,4 @@
+from kilimanjaro.framework.backtest_verify import verify_flip_scan
 from kilimanjaro.framework.evaluate import default_split, run_grid_split, split_windows
 from kilimanjaro.framework.gate import Gate, RollingDrawdownGate
 from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
@@ -21,4 +22,5 @@ __all__ = [
     "ScheduleFilter",
     "write_csv",
     "write_scan_folder",
+    "verify_flip_scan",
 ]

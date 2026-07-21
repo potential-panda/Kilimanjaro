@@ -105,7 +105,8 @@ Everything runs through `python src/cli.py <command>`:
 | `loop` | Stage A — one pass over the spec queue (validate → dedup → scan → verdict → ledger → review packet) |
 | `factory` | Stage C — bounded generate+scan cadence (never promotes) |
 | `ledger {append,search}` | the append-only research memory |
-| `scan` / `verify` / `verify-scan` / `populate` | flip-anchored scan; dataset populate/verify |
+| `verify-scan` | scan↔Himalaya-backtest fidelity check (ORDER + EVAL) |
+| `populate` / `verify` | populate a dataset; verify a dataset vs backtest InfluxDB |
 
 Promotion (steps 5–7) stays human: the loop parks survivors at a `REVIEW_PACKET.md`
 stamped CALIBRATED / TREND-ONLY; a human records the `human_approval` and drafts a

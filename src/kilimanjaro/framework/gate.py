@@ -3,7 +3,7 @@
 Unlike ScheduleFilter (vectorized, row-independent), a Gate walks the trade
 sequence in order and its keep/block decision for one trade depends on the
 trades before it. Gates run in run_grid() after the schedule filter and
-before stats — the same order flip_sar.scan() has always used.
+before stats — the canonical scan order.
 
 A Gate's apply() must be pure (no instance state mutated), so one instance
 can be shared across all combos of a grid.
@@ -36,7 +36,7 @@ class Gate(Protocol):
 
 @dataclass(frozen=True)
 class RollingDrawdownGate:
-    """Rolling drawdown gate (extracted verbatim from flip_sar).
+    """Rolling drawdown gate (the original flip-scan gate, now shared).
 
     Closes the gate when cumulative return_bps within the trailing
     window_seconds falls below -threshold_bps. While closed, trades are

@@ -27,14 +27,23 @@ logging.basicConfig(
 
 
 def main() -> int:
-    from command import factory, generate, grid, ledger, loop, populate, scan, verify
+    from command import (
+        factory,
+        generate,
+        grid,
+        ledger,
+        loop,
+        populate,
+        verify,
+        verify_scan,
+    )
 
     parser = argparse.ArgumentParser(prog="cli", description="Kilimanjaro research CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
     populate.register(sub)
     verify.register(sub)
-    scan.register(sub)
+    verify_scan.register(sub)
     grid.register(sub)
     loop.register(sub)
     generate.register(sub)
