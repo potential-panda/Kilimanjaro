@@ -155,8 +155,8 @@ If `family: custom`, `custom_family_justification` is required and must name the
 ## Cross-Market Signal Sourcing
 
 A feature is not assumed to be computed on the same market as the target.
-Where a lead-lag relationship exists between two markets (see
-`cycle/02_markets/waves/leadlag_*.csv`, built by `tools/lead_lag_wave.py`), the
+Where a lead-lag relationship exists between two markets (see the lead-lag
+wave built by `tools/lead_lag_wave.py`), the
 follower market's own order-book/flow signals are largely a lagged copy of
 the leader's and are not independently informative — the informative
 signal is computed on the leader, predicting the follower's future return.
@@ -201,9 +201,9 @@ exists, not assume the target's own book is the right feature source.
 ## Horizon Selection Must Be Justified By The Volatility Wave
 
 `target.primary_horizon_seconds` (and `scan_plan.primary_horizon_seconds`,
-which must match it) is not a free choice. Before scanning, check
-`cycle/02_markets/waves/<exchange>_<symbol>.csv` (built by `tools/volatility_wave.py`)
-for the target market: a horizon where price rarely moves past the spread
+which must match it) is not a free choice. Before scanning, check the target
+market's volatility-vs-spread wave (built by `tools/volatility_wave.py`): a
+horizon where price rarely moves past the spread
 cannot be profitable regardless of what the signal predicts, and is not
 worth scanning. `economic_rationale` or `summary` should note which wave
 bucket/horizon combination motivated the choice, especially when the

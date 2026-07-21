@@ -19,7 +19,7 @@ hypothesis:
     ask than the bid) indicates liquidity providers pricing in directional
     risk before a move, on the leading market (BINANCE). GMO BTC_JPY has
     not yet caught up (BINANCE leads 49-82% of the time depending on time of day, per
-    markets/waves/leadlag_BINANCE_GMO_BTC.csv), so this asymmetry is
+    the BINANCE→GMO lead-lag wave), so this asymmetry is
     informative for GMO's near-future return.
   economic_rationale: "Liquidity providers adjust resting size asymmetrically when they perceive adverse-selection risk on one side before price actually moves."
   duplicate_search:

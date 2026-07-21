@@ -35,18 +35,16 @@ import sys
 from datetime import date
 from pathlib import Path
 
-import pyarrow.parquet as pq
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 import inventory as _inventory  # noqa: E402
 
-_ROOT = Path(__file__).parent.parent
 _SUPPORTED_TARGET_TYPES = {"next_return", "spread_adjusted_return"}
 _SUPPORTED_DATASET = "OrderBook"  # v1 scanner.py only reads bronze OrderBook
-# Kilimanjaro-owned precomputed feature datasets scanner.py also accepts as
-# a feature source (never as a target) -- kept in sync with scanner.py's
-# own _PRECOMPUTED_FEATURE_DATASETS set.
+# Precomputed feature datasets accepted as a feature source (never as a
+# target). Populated into Makalu's feature layer, so availability is checked
+# against the Makalu inventory like any other dataset -- no local tree.
 _PRECOMPUTED_FEATURE_DATASETS = {"ChartRangeSAR"}
 
 
@@ -158,44 +156,6 @@ def assess_data_readiness(
 
     datasets_checked = []
     for dataset_name, exchange, symbol in _dataset_market_pairs(h):
-        if dataset_name in _PRECOMPUTED_FEATURE_DATASETS:
-            # Kilimanjaro-owned, never in Makalu's catalog by design -- check
-            # its own cycle/02_markets/features/ tree instead of the Makalu inventory.
-            feature_dir = (
-                _ROOT
-                / "cycle"
-                / "02_markets"
-                / "features"
-                / f"dataset={dataset_name}"
-                / f"exchange={exchange}"
-                / f"symbol={symbol}"
-            )
-            date_dirs = (
-                sorted(feature_dir.glob("date=*")) if feature_dir.is_dir() else []
-            )
-            distinct_days = len(date_dirs)
-            if distinct_days < minimum_distinct_days:
-                needs_more_data_reasons.append(
-                    f"{exchange}/{symbol}/{dataset_name}: only {distinct_days} distinct days available in "
-                    f"cycle/02_markets/features/, need at least {minimum_distinct_days}"
-                )
-            columns = None
-            if date_dirs:
-                sample = next(date_dirs[-1].glob("*.parquet"), None)
-                if sample is not None:
-                    columns = list(pq.ParquetFile(sample).schema_arrow.names)
-            datasets_checked.append(
-                {
-                    "dataset": dataset_name,
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "in_catalog": "kilimanjaro_local",
-                    "distinct_days": distinct_days,
-                    "columns": columns,
-                }
-            )
-            continue
-
         catalog_entry = catalog.get(dataset_name)
         if catalog_entry is None:
             needs_tooling_reasons.append(

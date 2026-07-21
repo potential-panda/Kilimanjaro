@@ -81,7 +81,7 @@ A hypothesis spec resolves to:
 must be logged and treated as a meta-decision per `workflow-strategy.md`)
 - The primary horizon was declared before scanning, not chosen after seeing
   results — and must be justified by the target market's volatility-vs-spread
-  wave (`cycle/02_markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`),
+  wave (`tools/volatility_wave.py`),
   not picked by convention. A horizon where price rarely clears the spread
   on the target market cannot be profitable regardless of what the signal
   predicts; see `hypothesis-taxonomy.md`'s 2026-06-18 addendum.

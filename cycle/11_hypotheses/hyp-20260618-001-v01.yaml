@@ -17,7 +17,7 @@ hypothesis:
   expected_edge_mechanism: >
     Identical mechanism to hyp-20260618-001: BINANCE leads GMO ETH_JPY
     (lead-lag wave currently only validated for BTC in
-    markets/waves/leadlag_BINANCE_GMO_BTC.csv; ETH/XRP pairs are supported
+    the BINANCE→GMO lead-lag wave; ETH/XRP pairs are supported
     by the same Makalu LeadLag pipeline per tools/lead_lag_wave.py's
     _SUPPORTED_PAIRS, but this run does not separately recompute the ETH
     lead-lag wave -- assumed to hold given the same BINANCE/GMO market

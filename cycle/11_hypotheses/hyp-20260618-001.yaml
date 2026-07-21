@@ -15,7 +15,7 @@ hypothesis:
     long enough to clear GMO's spread.
   expected_edge_mechanism: >
     BINANCE leads GMO BTC_JPY 49-82% of the time depending on time of day across every 30-minute JST
-    bucket (markets/waves/leadlag_BINANCE_GMO_BTC.csv). GMO's own order book
+    bucket (the BINANCE→GMO lead-lag wave). GMO's own order book
     imbalance is largely a lagged copy of BINANCE's, not an independent
     signal, so the informative imbalance is computed on BINANCE; it predicts
     GMO's future return because GMO has not yet caught up to BINANCE's price

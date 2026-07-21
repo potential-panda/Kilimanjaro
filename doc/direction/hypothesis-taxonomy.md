@@ -8,14 +8,15 @@ without new pipelines.
 
 ## Addendum: cross-market sourcing and horizon selection (2026-06-18)
 
-Added after the market-characterization layer (`cycle/02_markets/`) was built, based
+Added after the market-characterization layer (the volatility/lead-lag wave
+tooling in `tools/`) was built, based
 on direct user guidance — applies to every family below, not just #1 and #9:
 
 - **BINANCE is the default feature source for predicting any JP market with
   a confirmed lead-lag leader — always, not just "consider it."** Per direct
   user instruction (2026-06-18, repeated for emphasis): BINANCE leads GMO
   BTC_JPY/ETH_JPY/XRP_JPY 81-97% of the time across every 30-minute JST
-  bucket (`cycle/02_markets/waves/leadlag_BINANCE_GMO_*.csv`), so in theory and in
+  bucket (the BINANCE→GMO lead-lag wave, `tools/lead_lag_wave.py`), so in theory and in
   practice its own order-book/flow state is more informative than the
   follower's lagged copy of it. Compute the signal on BINANCE; measure the
   target return on the market actually traded (GMO). The only exceptions
@@ -27,7 +28,7 @@ on direct user guidance — applies to every family below, not just #1 and #9:
   (`cross_market_rationale`, now required to justify *not* using BINANCE,
   not just to justify using it).
 - **The tested horizon must be justified by the volatility-vs-spread wave**
-  (`cycle/02_markets/waves/<exchange>_<symbol>.csv`, `tools/volatility_wave.py`), not
+  (`tools/volatility_wave.py`), not
   picked by convention. A horizon where price rarely clears the spread on
   the target market cannot be profitable regardless of what the signal
   predicts — e.g. 5s is too short for GMO BTC_JPY at most times of day; ~120s

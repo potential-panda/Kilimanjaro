@@ -20,7 +20,7 @@ hypothesis:
     i.e. the side more likely to be consumed next. When microprice deviates
     from plain mid on BINANCE, that deviation reflects near-term order-flow
     pressure not yet reflected in GMO's price, since BINANCE leads GMO
-    BTC_JPY 49-82% of the time depending on time of day (markets/waves/leadlag_BINANCE_GMO_BTC.csv).
+    BTC_JPY 49-82% of the time depending on time of day (the BINANCE→GMO lead-lag wave).
   economic_rationale: "Microprice is a standard, less noisy fair-value proxy than mid; its deviation from mid should be a cleaner directional signal than raw imbalance."
   duplicate_search:
     searched_at: "2026-06-19T00:00:00Z"

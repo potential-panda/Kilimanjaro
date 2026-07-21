@@ -55,7 +55,7 @@ hypothesis:
       any) are bounded and strictly backward-looking
   cross_market_rationale: 'Same rationale as hyp-20260618-001: feature is computed on BINANCE, target
     return is on the GMO leveraged JPY pair, because BINANCE leads GMO 49-82% of the time depending on time of day on this asset
-    family (markets/waves/leadlag_BINANCE_GMO_BTC.csv methodology; this run''s market_context.lead_lag
+    family (the BINANCE→GMO lead-lag wave methodology; this run''s market_context.lead_lag
     measures it directly for the exact scanned window).'
   target:
     type: next_return

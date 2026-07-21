@@ -64,7 +64,7 @@ ratio is not constant: at some hours (e.g. low-activity early morning) even a
 300s horizon may not clear the spread; at high-activity hours a 30s horizon
 may easily clear it.
 
-The existing `cycle/02_markets/waves/` files already capture this. The wave is the
+The volatility-vs-spread wave (`tools/volatility_wave.py`) captures this. The wave is the
 **knowledge** — it is learned from recent historical data, not adapted
 real-time. Real-time adaptation introduces look-ahead and instability; the
 wave is a stable prior refreshed periodically (e.g., weekly from the last 30
@@ -101,10 +101,10 @@ wave still matters as a **regime conditioning variable**: if a skew signal
 fires during a low-vol/wide-spread bucket, the expected edge may be lower.
 
 ### Horizon dataset population
-Populate the dataset from the existing wave files as a one-time job, then
-refresh on a schedule (e.g. weekly). Source: `cycle/02_markets/waves/<exchange>_<symbol>.csv`
-and `tools/volatility_wave.py`. Output: a new Makalu dataset or a local file
-in `cycle/02_markets/horizons/<exchange>_<symbol>_horizon.csv` with schema:
+Populate the dataset from freshly built wave files as a one-time job, then
+refresh on a schedule (e.g. weekly). Source: the volatility-vs-spread wave from
+`tools/volatility_wave.py`. Output: a new Makalu dataset or a local
+`<exchange>_<symbol>_horizon.csv` with schema:
 
 ```
 jst_hour_bucket, min_viable_horizon_seconds, vol_at_min_h_bps, spread_bps, cost_bps
@@ -159,7 +159,7 @@ The scanner should flag isolated winners explicitly in its output.
 
 ## 5. Next steps (as of 2026-07-01)
 
-1. Populate `cycle/02_markets/horizons/` from existing wave files for GMO BTC/ETH/XRP.
+1. Populate a horizons dataset from freshly built wave files for GMO BTC/ETH/XRP.
 2. Add `signal_style: precision | skew` to the hypothesis spec schema.
 3. Extend the scanner to branch on style and use the horizon dataset for
    precision-mode scans.

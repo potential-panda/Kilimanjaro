@@ -19,7 +19,7 @@ hypothesis:
     yet propagated to GMO. The most recent realized 1-tick return on
     BINANCE is therefore informative about GMO's near-future return,
     because BINANCE leads GMO BTC_JPY 49-82% of the time depending on time of day
-    (markets/waves/leadlag_BINANCE_GMO_BTC.csv) and the lag has not fully
+    (the BINANCE→GMO lead-lag wave) and the lag has not fully
     closed within the 120s horizon.
   economic_rationale: "GMO market makers reprice with a lag after observing (or being arbitraged against) BINANCE price moves."
   duplicate_search:
