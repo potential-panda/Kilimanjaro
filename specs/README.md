@@ -1,31 +1,11 @@
-# Hypothesis Specs
+# Expression scan configs
 
-One YAML file per hypothesis, in the format defined by
-`../requirements/hypothesis-contract.md`.
+Run configs for `cli.py grid expr` — each names its hypothesis
+(`../hypotheses/hyp-*.yaml`) so the run lands in the ledger. These are scan
+*configurations*, not hypothesis specs; the hypothesis registry lives in
+`../hypotheses/`. The Stage-A loop's working queue is `queue/`.
 
-Naming:
-
-- parent hypothesis: `hyp-YYYYMMDD-NNN.yaml`
-- variant: `hyp-YYYYMMDD-NNN-vNN.yaml`
-
-`NNN` is a zero-padded sequence number, unique within the date. A spec's
-`hypothesis.id` field must match its filename.
-
-This directory is the **hypothesis registry** — the durable memory of every idea
-tried, including rejected and parked ones. The ledger (`../ledger/`) joins to it
-by `hypothesis_id` for duplicate-detection search and for the viewer's Hypotheses
-tab, so entries stay even after an idea is retired: that is what lets a later
-session avoid re-proposing a dead idea. The `status:` field inside a file is its
-*initial* status; the **current** status is whatever the ledger last recorded.
-
-Two spec formats, two purposes:
-
-- **`specs/`** (here) — hypothesis-contract specs: the human-readable registry
-  above. Validate against `../schemas/hypothesis_spec.schema.json` and the
-  cross-field rules in `hypothesis-contract.md` ("Validation Rules": missing
-  mechanism, duplicate search not performed, research-layer target without
-  version metadata, …).
-- **`../scan-specs/`** — the loop's working *scan* specs (expression formulas +
-  sweep dimensions) that `cli.py grid expr` / `cli.py loop` / the Stage-C factory
-  consume. Simpler format; validated by
-  `driver/validate.validate_scan_spec` (structural shape + AST-safe expression).
+```bash
+python src/cli.py grid expr --spec specs/momentum_eth.yaml \
+    --start 2025-07-01 --end 2026-06-30 --split 2026-03-01
+```

@@ -40,7 +40,7 @@ python src/cli.py ledger append \
   --from-status scan-passed --to-status backtest-approved \
   --decision-reason promotion-approved
 
-# Search jointly across specs/ (family, mechanism, datasets, symbols) and
+# Search jointly across hypotheses/ (family, mechanism, datasets, symbols) and
 # this ledger (decision reasons, status) -- ledger events alone don't carry
 # the descriptive fields, only the linked spec does.
 python src/cli.py ledger search --family order_book_imbalance --rejected-only

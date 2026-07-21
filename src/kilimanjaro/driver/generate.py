@@ -1,8 +1,8 @@
 """Stage B: the formula generator that keeps the loop's queue full.
 
 Enumerates economic formula *families* over the available markets, gated by what
-data actually exists, deduplicated against every scan-spec already proposed, and
-emits new scan-specs (with fresh hypothesis ids) into the queue. The Stage-A
+data actually exists, deduplicated against every scan spec already proposed, and
+emits new scan specs (with fresh hypothesis ids) into the queue. The Stage-A
 driver then scans them. Together they never run dry.
 
 Design choices:
@@ -221,7 +221,7 @@ def propose_specs(
     families: list[dict] = FAMILIES,
     family_priority: dict[str, float] | None = None,
 ) -> list[dict]:
-    """Return up to `limit` new, deduped, data-viable scan-specs with hyp ids.
+    """Return up to `limit` new, deduped, data-viable scan specs with hyp ids.
 
     `family_priority` (e.g. from family_scores) biases which families lead —
     feedback toward what has survived. None keeps the equal round-robin.
@@ -297,7 +297,7 @@ def generate(
     feedback=True biases family selection toward what has survived (family_scores
     from the ledger); it degrades to equal round-robin when there is no history.
     """
-    scan_dirs = scan_dirs or [Path("scan-specs")]
+    scan_dirs = scan_dirs or [Path("specs")]
     seen = existing_signatures(*scan_dirs)
     seq = next_seq(date_str, *scan_dirs)
     prio = family_scores(*scan_dirs) if feedback else None

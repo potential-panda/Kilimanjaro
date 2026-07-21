@@ -10,7 +10,7 @@ from kilimanjaro.ledger.core import (
     append_event,
     current_status,
     load_events,
-    load_specs,
+    load_hypotheses,
     next_event_id,
     search,
 )
@@ -20,7 +20,7 @@ __all__ = [
     "append_event",
     "current_status",
     "load_events",
-    "load_specs",
+    "load_hypotheses",
     "next_event_id",
     "search",
     "record_grid_scan",

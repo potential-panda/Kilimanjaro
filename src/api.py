@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Kilimanjaro research-loop HTTP API -- port 9777.
 
-Read-only visualization of results/grid_scan/, specs/, and ledger/ -- the
+Read-only visualization of results/grid_scan/, hypotheses/, and ledger/ -- the
 same file layout convention as Makalu's src/api.py (web/ for the frontend,
 served as static files from this same process). Nothing here writes to any
 of those directories; this is a viewer, not a control surface -- mutating
@@ -27,14 +27,14 @@ from pathlib import Path
 from flask import Flask, abort, jsonify, send_from_directory
 
 _ROOT = Path(__file__).parent.parent
-_SPECS_DIR = _ROOT / "specs"
+_HYPOTHESES_DIR = _ROOT / "hypotheses"
 _LEDGER_PATH = _ROOT / "ledger" / "events.jsonl"
 _WEB_DIR = _ROOT / "web"
 _GRID_SCAN_DIR = _ROOT / "results" / "grid_scan"
 _SCAN_KINDS = ("flip", "horizon", "expr")
 
 sys.path.insert(0, str(_ROOT / "src"))
-from kilimanjaro.ledger.core import _latest_status, load_events, load_specs  # noqa: E402
+from kilimanjaro.ledger.core import _latest_status, load_events, load_hypotheses  # noqa: E402
 
 app = Flask(__name__, static_folder=str(_WEB_DIR))
 
@@ -192,7 +192,7 @@ def _hypothesis_summary(hyp_id: str, spec: dict, events: list[dict]) -> dict:
 
 @app.route("/api/hypotheses")
 def api_hypotheses():
-    specs = load_specs(_SPECS_DIR)
+    specs = load_hypotheses(_HYPOTHESES_DIR)
     events_by_hyp = _events_by_hypothesis()
     out = [
         _hypothesis_summary(hyp_id, spec, events_by_hyp.get(hyp_id, []))
@@ -204,7 +204,7 @@ def api_hypotheses():
 
 @app.route("/api/hypotheses/<hyp_id>")
 def api_hypothesis_detail(hyp_id: str):
-    specs = load_specs(_SPECS_DIR)
+    specs = load_hypotheses(_HYPOTHESES_DIR)
     spec = specs.get(hyp_id)
     if spec is None:
         abort(404)

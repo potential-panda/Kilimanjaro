@@ -25,7 +25,7 @@ Kilimanjaro v1 must use one canonical machine-readable source format per record 
 | Artifact | Canonical Format | Path Pattern |
 |---|---|---|
 | inventory snapshot | YAML | `inventory/inventory-YYYYMMDDTHHMMSSZ.yaml` |
-| hypothesis spec | YAML | `specs/hyp-YYYYMMDD-NNN.yaml` |
+| hypothesis spec | YAML | `hypotheses/hyp-YYYYMMDD-NNN.yaml` |
 | ledger event stream | JSON Lines | `ledger/events.jsonl` |
 | scan output | CSV + `params.json` | `results/grid_scan/{flip,expr,horizon}/<scan_id>/` |
 | human approval/waiver | JSON Lines event in ledger | `ledger/events.jsonl` |

@@ -13,15 +13,15 @@ from pathlib import Path
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "generate",
-        help="Propose new formula scan-specs into the loop queue (stage B)",
+        help="Propose new formula scan specs into the loop queue (stage B)",
     )
-    p.add_argument("--queue", default="scan-specs/queue",
-                   help="Where to write proposed specs (default scan-specs/queue)")
+    p.add_argument("--queue", default="specs/queue",
+                   help="Where to write proposed specs (default specs/queue)")
     p.add_argument("--limit", type=int, default=5,
                    help="Max new specs to propose this call (default 5)")
     p.add_argument("--date", default=None,
                    help="Date stamp for hypothesis ids YYYYMMDD (default today)")
-    p.add_argument("--scan-dirs", nargs="*", default=["scan-specs"],
+    p.add_argument("--scan-dirs", nargs="*", default=["specs"],
                    help="Dirs scanned for existing specs (dedup source)")
     p.add_argument("--dry-run", action="store_true",
                    help="Print what would be proposed; do not write files")

@@ -14,7 +14,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("factory", help="Stage C: bounded generate+scan cadence (never promotes)")
     p.add_argument("--start", required=True, help="Scan window start YYYY-MM-DD")
     p.add_argument("--end", required=True, help="Scan window end YYYY-MM-DD")
-    p.add_argument("--queue", default="scan-specs/queue", help="Spec queue directory")
+    p.add_argument("--queue", default="specs/queue", help="Spec queue directory")
     p.add_argument("--cycles", type=int, default=None, help="Number of generate+scan cycles (a bound)")
     p.add_argument("--max-minutes", type=float, default=None, help="Wall-clock budget (a bound)")
     p.add_argument("--gen-per-cycle", type=int, default=5, help="New specs generated per cycle")

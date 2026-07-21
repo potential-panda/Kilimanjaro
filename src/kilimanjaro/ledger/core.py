@@ -32,7 +32,7 @@ def _find_repo_root(start: Path) -> Path:
 _ROOT = _find_repo_root(Path(__file__).resolve())
 _SCHEMAS_DIR = _ROOT / "schemas"
 _DEFAULT_LEDGER_PATH = _ROOT / "ledger" / "events.jsonl"
-_DEFAULT_SPECS_DIR = _ROOT / "specs"
+_DEFAULT_HYPOTHESES_DIR = _ROOT / "hypotheses"
 
 _REJECTION_STATUSES = {
     "invalid-spec",
@@ -144,9 +144,9 @@ def append_event(
     return event
 
 
-def load_specs(specs_dir: Path = _DEFAULT_SPECS_DIR) -> dict[str, dict]:
+def load_hypotheses(hypotheses_dir: Path = _DEFAULT_HYPOTHESES_DIR) -> dict[str, dict]:
     specs = {}
-    for path in sorted(specs_dir.glob("hyp-*.yaml")):
+    for path in sorted(hypotheses_dir.glob("hyp-*.yaml")):
         spec = yaml.safe_load(path.read_text())
         h = spec.get("hypothesis", {})
         if h.get("id"):
@@ -186,11 +186,11 @@ def search(
     decision_reason: str | None = None,
     status: str | None = None,
     rejected_only: bool = False,
-    specs_dir: Path = _DEFAULT_SPECS_DIR,
+    hypotheses_dir: Path = _DEFAULT_HYPOTHESES_DIR,
     ledger_path: Path = _DEFAULT_LEDGER_PATH,
 ) -> list[dict]:
-    """Search specs+ledger jointly. Returns a list of match summaries."""
-    specs = load_specs(specs_dir)
+    """Search hypotheses+ledger jointly. Returns a list of match summaries."""
+    specs = load_hypotheses(hypotheses_dir)
     events = load_events(ledger_path)
     events_by_hyp: dict[str, list[dict]] = {}
     for e in events:
