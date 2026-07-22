@@ -1,0 +1,103 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260722-012
+  parent_id: null
+  title: Price momentum on BITBANK/ETH_SPOT
+  status: scan-failed
+  family: custom
+  family_label: Price momentum
+  created_at: '2026-07-22T08:29:09Z'
+  owner: agent
+  expected_edge_mechanism: momentum signal from BINANCE/ETH_USDT predicting BITBANK/ETH_SPOT
+  duplicate_search:
+    searched_at: '2026-07-22T08:29:09Z'
+    query_terms:
+    - momentum
+    - ETH_SPOT
+    - mom_30s_z
+    - mom_120s_z
+    - mom_300s_z
+    - 'signature:{"e": ["zscore(ret(a_mid, 120), 1800)", "zscore(ret(a_mid, 30), 1800)",
+      "zscore(ret(a_mid, 300), 1800)"], "m": [["BINANCE", "ETH_USDT"]], "rc": "fixed_horizon",
+      "t": ["BITBANK", "ETH_SPOT"]}'
+    possible_duplicates: []
+    conclusion: new
+  data_requirements:
+    markets:
+    - exchange: BINANCE
+      symbol: ETH_USDT
+    datasets:
+    - layer: silver
+      dataset: MarketPrice
+    minimum_distinct_days: 200
+    unavailable_data_policy: needs-more-data
+    research_metadata:
+      generated_by: driver.generate
+      scan_window:
+      - '2025-07-01'
+      - '2026-06-30'
+  feature:
+    sql_expression: 'mom_30s_z: zscore(ret(a_mid, 30), 1800); mom_120s_z: zscore(ret(a_mid,
+      120), 1800); mom_300s_z: zscore(ret(a_mid, 300), 1800)'
+    source_datasets:
+    - layer: silver
+      dataset: MarketPrice
+      exchange: BINANCE
+      symbol: ETH_USDT
+      alias: a
+    primary_timestamp_column: ts
+    point_in_time_rule: All ops causal (test-enforced, kilimanjaro/op/series.py);
+      frame values ffilled at-or-before ts.
+  target:
+    type: next_return
+    primary_horizon_seconds: 120
+    comparison_horizons_seconds:
+    - 30
+    - 120
+    - 300
+    source_dataset:
+      layer: silver
+      dataset: MarketPrice
+      exchange: BITBANK
+      symbol: ETH_SPOT
+    timestamp_cutoff_rule: target window starts strictly after the signal timestamp
+  execution_assumptions:
+    order_type: market
+    fees_bps: 0
+    slippage_bps: 1.0
+    liquidity_capacity_assumption: execution size 0.1
+  falsification_tests:
+  - name: rank-instability-across-split
+    expected_failure_meaning: top-decile train combos fall out of the holdout top
+      decile — selection noise, not signal
+  - name: multiple-testing-fdr
+    expected_failure_meaning: no combo survives Benjamini-Hochberg across the grid
+      — the best result is what a grid of this size yields by chance
+  - name: cost-buffer
+    expected_failure_meaning: edge does not clear the round-trip cost floor (bid/ask
+      execution plus 1.0 bps latency slippage) — gross-only edge
+  scan_plan:
+    primary_horizon_seconds: 120
+    threshold_grid:
+    - 1.5
+    - 2.5
+    significance_method: block_bootstrap_by_day
+    selection_rule: rank stability across a train/holdout split, then Benjamini-Hochberg
+      across the grid
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: qate.trading.strategy variant, threshold
+      entry, fixed_horizon exit
+    himalaya_config_notes: only if a rank-stable combo survives with meaningful absolute
+      holdout strength
+  decisions:
+  - at: '2026-07-22T08:29:09Z'
+    actor: agent
+    decision: scan-ready
+  - at: '2026-07-22T08:40:31Z'
+    actor: agent
+    decision: scan-failed
+    reason: 0/72 confirmed survivors — no candidates
+  cross_market_rationale: The feature is computed on BINANCE/ETH_USDT and predicts
+    BITBANK/ETH_SPOT. The premise is that the venues price the same underlying, so
+    a dislocation in their ratio mean-reverts; the leading venue's move is informative
+    because it is the more liquid price discovery site, not merely correlated.

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 import yaml
@@ -340,4 +341,29 @@ def generate(
         data_root=data_root,
         family_priority=prio,
     )
-    return write_specs(specs, queue_dir)
+    paths = write_specs(specs, queue_dir)
+    write_registry_entries(specs)
+    return paths
+
+
+def write_registry_entries(specs: list[dict]) -> list[Path]:
+    """Write a companion hypothesis-registry entry for each proposed spec.
+
+    The registry (cycle/11_hypotheses) is the outer collection that
+    `ledger.search` and the viewer's Hypotheses tab iterate over, so a spec
+    without an entry is invisible to both. Best-effort: a registry problem must
+    never lose a spec that was already written to the queue.
+    """
+    from kilimanjaro.driver import registry
+
+    written = []
+    for spec in specs:
+        try:
+            entry = registry.build_entry(spec, signature=signature(spec))
+            written.append(registry.write_entry(entry))
+        except Exception as exc:  # noqa: BLE001 - queue write already succeeded
+            print(
+                f"warning: no registry entry for {spec.get('hypothesis_id')}: {exc}",
+                file=sys.stderr,
+            )
+    return written
