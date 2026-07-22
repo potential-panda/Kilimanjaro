@@ -1,0 +1,35 @@
+hypothesis_id: hyp-20260722-011
+family: reversion
+mechanism: reversion signal from BINANCE/XRP_USDT predicting GMO/XRP_JPY
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: XRP_USDT
+    execution_size: '150'
+target:
+  exchange: GMO
+  symbol: XRP_JPY
+  execution_size: '300'
+return_calc: fixed_horizon
+expressions:
+- label: revert_300s_z
+  expr: zscore(a_mid / ema(a_mid, 300) - 1, 1800)
+  invert: &id001
+  - false
+  - true
+- label: revert_900s_z
+  expr: zscore(a_mid / ema(a_mid, 900) - 1, 1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

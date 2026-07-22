@@ -1,0 +1,38 @@
+hypothesis_id: hyp-20260722-004
+family: momentum
+mechanism: momentum signal from BINANCE/BTC_USDT predicting GMO/BTC_JPY
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+target:
+  exchange: GMO
+  symbol: BTC_JPY
+  execution_size: '0.01'
+return_calc: fixed_horizon
+expressions:
+- label: mom_30s_z
+  expr: zscore(ret(a_mid, 30), 1800)
+  invert: &id001
+  - false
+  - true
+- label: mom_120s_z
+  expr: zscore(ret(a_mid, 120), 1800)
+  invert: *id001
+- label: mom_300s_z
+  expr: zscore(ret(a_mid, 300), 1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

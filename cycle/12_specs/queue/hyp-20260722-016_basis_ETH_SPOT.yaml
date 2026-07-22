@@ -1,0 +1,39 @@
+hypothesis_id: hyp-20260722-016
+family: basis
+mechanism: basis signal from BINANCE/ETH_USDT predicting BITBANK/ETH_SPOT
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: ETH_USDT
+    execution_size: '0.1'
+  b:
+    exchange: BITBANK
+    symbol: ETH_SPOT
+    execution_size: '0.1'
+target:
+  exchange: BITBANK
+  symbol: ETH_SPOT
+  execution_size: '0.1'
+return_calc: fixed_horizon
+expressions:
+- label: basis_900_z
+  expr: zscore(a_mid / b_mid, 900)
+  invert: &id001
+  - false
+  - true
+- label: basis_3600_z
+  expr: zscore(a_mid / b_mid, 3600)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

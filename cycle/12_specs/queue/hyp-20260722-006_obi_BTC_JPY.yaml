@@ -1,0 +1,41 @@
+hypothesis_id: hyp-20260722-006
+family: obi
+mechanism: obi signal from BINANCE/BTC_USDT predicting GMO/BTC_JPY
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+target:
+  exchange: GMO
+  symbol: BTC_JPY
+  execution_size: '0.01'
+return_calc: fixed_horizon
+expressions:
+- label: obi_k1_30s_z
+  expr: zscore(a_obi_ema_k1_30s, 1800)
+  invert: &id001
+  - false
+  - true
+- label: obi_k1_120s_z
+  expr: zscore(a_obi_ema_k1_120s, 1800)
+  invert: *id001
+- label: obi_k5_30s_z
+  expr: zscore(a_obi_ema_k5_30s, 1800)
+  invert: *id001
+- label: obi_k5_120s_z
+  expr: zscore(a_obi_ema_k5_120s, 1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300
