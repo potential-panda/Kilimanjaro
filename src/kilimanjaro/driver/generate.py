@@ -342,11 +342,20 @@ def generate(
         family_priority=prio,
     )
     paths = write_specs(specs, queue_dir)
-    write_registry_entries(specs)
+    write_registry_entries(specs, registry_dir_for(queue_dir))
     return paths
 
 
-def write_registry_entries(specs: list[dict]) -> list[Path]:
+def registry_dir_for(queue_dir: Path) -> Path:
+    """The hypothesis registry that belongs to a specs dir — its `11_hypotheses`
+    sibling. Deriving it (rather than defaulting to the repo's) keeps a run
+    against a throwaway specs dir, including any test, from writing into the
+    real registry.
+    """
+    return Path(queue_dir).parent / "11_hypotheses"
+
+
+def write_registry_entries(specs: list[dict], registry_dir: Path) -> list[Path]:
     """Write a companion hypothesis-registry entry for each proposed spec.
 
     The registry (cycle/11_hypotheses) is the outer collection that
@@ -360,7 +369,7 @@ def write_registry_entries(specs: list[dict]) -> list[Path]:
     for spec in specs:
         try:
             entry = registry.build_entry(spec, signature=signature(spec))
-            written.append(registry.write_entry(entry))
+            written.append(registry.write_entry(entry, registry_dir))
         except Exception as exc:  # noqa: BLE001 - queue write already succeeded
             print(
                 f"warning: no registry entry for {spec.get('hypothesis_id')}: {exc}",

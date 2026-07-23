@@ -1,6 +1,6 @@
 """Companion hypothesis-contract entries for generated scan specs.
 
-`generate` writes *scan* specs to `cycle/12_specs/queue` — the loop's working
+`generate` writes *scan* specs to `cycle/12_specs` — the loop's working
 format. The hypothesis registry (`cycle/11_hypotheses`) is a different, richer
 format: the durable human-readable memory of every idea tried, and the outer
 collection that `ledger.search` and the viewer's Hypotheses tab iterate over. A

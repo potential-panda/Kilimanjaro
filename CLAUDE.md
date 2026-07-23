@@ -20,9 +20,9 @@ python src/cli.py populate chart-range-sar   # precompute SAR flip events
 python src/cli.py verify  chart-range-sar    # compare bars/SAR vs backtest InfluxDB BAR
 python src/cli.py grid flip --market btc ...  # flip-anchored signal scan (always a grid)
 python src/cli.py verify-scan                # compare scan vs backtest ORDER + EVAL
-python src/cli.py generate --queue cycle/12_specs/queue --limit 5
+python src/cli.py generate --queue cycle/12_specs --limit 5
                                              # propose new formula specs (stage B)
-python src/cli.py loop --queue cycle/12_specs/queue --start ... --end ...
+python src/cli.py loop --queue cycle/12_specs --start ... --end ...
                                              # autonomous scanner loop (steps 1-4)
 ```
 

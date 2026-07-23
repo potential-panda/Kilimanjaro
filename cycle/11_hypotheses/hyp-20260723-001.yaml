@@ -1,26 +1,25 @@
 schema_version: 1
 hypothesis:
-  id: hyp-20260716-003
+  id: hyp-20260723-001
   parent_id: null
-  title: Order-book imbalance on GMO/ETH_JPY
+  title: Trade-aggression lead-lag on GMO/ETH_JPY (manual)
   status: draft
-  family: order_book_imbalance
-  family_label: Order-book imbalance
-  created_at: '2026-07-22T11:56:43Z'
-  owner: agent
-  expected_edge_mechanism: obi signal from BINANCE/ETH_USDT predicting GMO/ETH_JPY
+  family: trade_aggression_burst
+  family_label: Order flow
+  created_at: '2026-07-23T11:40:52Z'
+  owner: human
+  expected_edge_mechanism: aggressive order flow on BINANCE/ETH_USDT predicting GMO/ETH_JPY
   duplicate_search:
-    searched_at: '2026-07-22T11:56:43Z'
+    searched_at: '2026-07-23T11:40:52Z'
     query_terms:
-    - obi
+    - orderflow
     - ETH_JPY
-    - obi_k1_30s_z
-    - obi_k1_120s_z
-    - obi_k5_30s_z
-    - obi_k5_120s_z
-    - 'signature:{"e": ["zscore(a_obi_ema_k1_120s, 1800)", "zscore(a_obi_ema_k1_30s,
-      1800)", "zscore(a_obi_ema_k5_120s, 1800)", "zscore(a_obi_ema_k5_30s, 1800)"],
-      "m": [["BINANCE", "ETH_USDT"]], "rc": "fixed_horizon", "t": ["GMO", "ETH_JPY"]}'
+    - imb5_z
+    - imb30_z
+    - netflow10_z
+    - 'signature:{"e": ["zscore(a_ta_imbalance_qty_30s, 1800)", "zscore(a_ta_imbalance_qty_5s,
+      1800)", "zscore(a_ta_net_flow_10s, 1800)"], "m": [["BINANCE", "ETH_USDT"]],
+      "rc": "fixed_horizon", "t": ["GMO", "ETH_JPY"]}'
     possible_duplicates: []
     conclusion: new
   data_requirements:
@@ -36,9 +35,8 @@ hypothesis:
       generated_by: driver.generate
       scan_window: null
   feature:
-    sql_expression: 'obi_k1_30s_z: zscore(a_obi_ema_k1_30s, 1800); obi_k1_120s_z:
-      zscore(a_obi_ema_k1_120s, 1800); obi_k5_30s_z: zscore(a_obi_ema_k5_30s, 1800);
-      obi_k5_120s_z: zscore(a_obi_ema_k5_120s, 1800)'
+    sql_expression: 'imb5_z: zscore(a_ta_imbalance_qty_5s, 1800); imb30_z: zscore(a_ta_imbalance_qty_30s,
+      1800); netflow10_z: zscore(a_ta_net_flow_10s, 1800)'
     source_datasets:
     - layer: silver
       dataset: MarketPrice
@@ -90,10 +88,11 @@ hypothesis:
     himalaya_config_notes: only if a rank-stable combo survives with meaningful absolute
       holdout strength
   decisions:
-  - at: '2026-07-22T11:56:43Z'
+  - at: '2026-07-23T11:40:52Z'
     actor: agent
     decision: draft
-    reason: proposed by the generator; no ledger activity yet
+    reason: hand-authored trade-aggression screen; first use of the corrected TradeAggression
+      features (ta_* were 1000x-windowed before 2026-07-15)
   cross_market_rationale: The feature is computed on BINANCE/ETH_USDT and predicts
     GMO/ETH_JPY. The premise is that the venues price the same underlying, so a dislocation
     in their ratio mean-reverts; the leading venue's move is informative because it

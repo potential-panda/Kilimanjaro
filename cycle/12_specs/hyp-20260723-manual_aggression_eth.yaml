@@ -5,7 +5,7 @@
 # Cheap screen: fixed_horizon mid-to-mid (is there ANY directional edge?), NOT
 # spread-aware yet. Survivors get an episode (bid/ask) re-test, like basis did.
 # All signals z-scored over 30min so one threshold scale fits every expression.
-# --no-ledger: exploratory; create a hypothesis only if something survives.
+hypothesis_id: hyp-20260723-001
 markets:
   a:
     exchange: BINANCE

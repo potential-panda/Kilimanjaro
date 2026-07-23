@@ -14,8 +14,8 @@ def register(sub: argparse._SubParsersAction) -> None:
         "loop",
         help="Run the autonomous scanner loop over a queue of scan specs (steps 1-4)",
     )
-    p.add_argument("--queue", default="cycle/12_specs/queue",
-                   help="Directory of scan-spec YAMLs to process (default cycle/12_specs/queue)")
+    p.add_argument("--queue", default="cycle/12_specs",
+                   help="Directory of scan-spec YAMLs to process (default cycle/12_specs)")
     p.add_argument("--start", required=True, help="Loop-wide window start YYYY-MM-DD")
     p.add_argument("--end", required=True, help="Loop-wide window end YYYY-MM-DD")
     p.add_argument("--split", default=None,

@@ -15,8 +15,8 @@ def register(sub: argparse._SubParsersAction) -> None:
         "generate",
         help="Propose new formula scan specs into the loop queue (stage B)",
     )
-    p.add_argument("--queue", default="cycle/12_specs/queue",
-                   help="Where to write proposed specs (default cycle/12_specs/queue)")
+    p.add_argument("--queue", default="cycle/12_specs",
+                   help="Where to write proposed specs (default cycle/12_specs)")
     p.add_argument("--limit", type=int, default=5,
                    help="Max new specs to propose this call (default 5)")
     p.add_argument("--date", default=None,

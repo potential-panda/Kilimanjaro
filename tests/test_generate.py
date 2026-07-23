@@ -100,6 +100,21 @@ class TestGenerate(unittest.TestCase):
             self.assertEqual(len(rest), 2)           # remaining 2, deduped
             self.assertEqual(gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q]), [])
 
+    def test_generate_writes_registry_beside_the_specs_not_the_repo(self):
+        """A run against a throwaway specs dir must not touch the real registry.
+
+        Regression: write_registry_entries once defaulted to the repo's
+        cycle/11_hypotheses, so this very test suite wrote live hypothesis files.
+        """
+        repo_registry = Path(__file__).resolve().parents[1] / "cycle" / "11_hypotheses"
+        before = {p.name for p in repo_registry.glob("hyp-*.yaml")}
+        with tempfile.TemporaryDirectory() as tmp:
+            q = Path(tmp) / "12_specs"
+            paths = gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q])
+            entries = sorted((Path(tmp) / "11_hypotheses").glob("hyp-*.yaml"))
+            self.assertEqual(len(entries), len(paths))
+        self.assertEqual({p.name for p in repo_registry.glob("hyp-*.yaml")}, before)
+
 
 if __name__ == "__main__":
     unittest.main()
