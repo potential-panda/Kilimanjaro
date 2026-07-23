@@ -175,6 +175,8 @@ def run_grid(
                     stat_kwargs["signal_strength"] = valid["strength"]
                 if "holding_seconds" in valid.columns:
                     stat_kwargs["holding_seconds"] = valid["holding_seconds"]
+                if "episode" in valid.columns:
+                    stat_kwargs["episodes"] = valid["episode"]
 
                 stats = compute_stats(valid["return_bps"], costs_bps, **stat_kwargs)
                 # Path/drawdown metrics on the net-return equity curve — the

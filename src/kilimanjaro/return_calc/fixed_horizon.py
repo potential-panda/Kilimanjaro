@@ -95,6 +95,12 @@ class FixedHorizonReturn:
                 * 10000.0,
             }
         )
+        # Carry the episode id through so stats can report n_episodes — the
+        # count of *independent* events behind these overlapping observations
+        # (doc/overlapping-returns.md). Per-second sampling means n is not it.
+        if "episode" in sig.columns:
+            trades["episode"] = sig["episode"].values
+
         # entry join was INNER; exit stays LEFT (NaN return, dropped at stats)
         trades = trades[has_entry].reset_index(drop=True)
 

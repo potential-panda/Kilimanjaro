@@ -88,6 +88,7 @@ def compute_stats(
     costs_bps: float,
     signal_strength: pd.Series | None = None,
     holding_seconds: pd.Series | None = None,
+    episodes: pd.Series | None = None,
 ) -> dict:
     """Compute standardised trade statistics.
 
@@ -102,6 +103,11 @@ def compute_stats(
     holding_seconds : pd.Series, optional
         Per-trade holding time in seconds. When provided, adds avg_hold_s,
         median_hold_s, median_gross, p25_bps, p75_bps to output.
+    episodes : pd.Series, optional
+        Per-trade episode id. When provided, adds n_episodes (distinct ids) and
+        t_stat_eff. Under per-second sampling n counts overlapping observations,
+        so n_episodes is the real number of independent events and t_stat is
+        inflated by ~sqrt(n / n_episodes) -- see doc/overlapping-returns.md.
     """
     n = len(returns)
     nan = float("nan")
@@ -121,6 +127,8 @@ def compute_stats(
             "skewness": nan,
             "total_net_bps": nan,
         }
+        if episodes is not None:
+            base.update({"n_episodes": 0, "t_stat_eff": nan})
         if signal_strength is not None:
             base["ic"] = nan
         if holding_seconds is not None:
@@ -163,6 +171,17 @@ def compute_stats(
         "skewness": float(net.skew()) if n > 2 else nan,
         "total_net_bps": float(n * avg_net),
     }
+
+    if episodes is not None:
+        # -1 marks "no active episode"; it is not an event.
+        n_ep = int(episodes[episodes >= 0].nunique())
+        result["n_episodes"] = n_ep
+        # Effective-sample-size correction: the independent unit is the episode,
+        # not the second. Rank on this, never on the raw t_stat, or the grid
+        # simply prefers whichever horizon overlaps most.
+        result["t_stat_eff"] = (
+            t_stat * float(np.sqrt(n_ep / n)) if n_ep > 0 and n > 0 else nan
+        )
 
     if signal_strength is not None:
         result["ic"] = float(signal_strength.corr(returns)) if n > 2 else nan

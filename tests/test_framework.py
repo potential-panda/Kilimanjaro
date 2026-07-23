@@ -202,6 +202,25 @@ class TestRunGridSplit(unittest.TestCase):
     def test_default_split_two_thirds(self):
         self.assertEqual(default_split("2026-01-01", "2026-01-31"), "2026-01-21")
 
+    def test_ranking_falls_back_to_t_stat_without_episodes(self):
+        """Episode-less grids (flip, OBI) must still rank.
+
+        t_stat_eff needs an episode id. Without a fallback the ranking set is
+        empty and the grid reports zero survivors with no error — a silent
+        false negative, the worst failure mode here.
+        """
+        combos = [
+            (GainAwareSignal("a", float(g)), StubReturn(60 + g)) for g in range(1, 11)
+        ]
+        res = run_grid_split(
+            combos, TARGET, "2026-01-01", "2026-03-01", "2026-04-01",
+            rank_metric="t_stat_eff", top_quantile=0.10, min_n=10,
+        )
+        self.assertFalse(any("train_t_stat_eff" in r for r in res["rows"]))
+        ranked = [r for r in res["rows"] if r["train_rank_pct"] == r["train_rank_pct"]]
+        self.assertEqual(len(ranked), 10)
+        self.assertEqual(len(res["stable"]), 1)
+
     def test_stable_requires_top_rank_in_both_windows(self):
         # 10 combos: gains 1..10 → gain 10 ranks top in both windows (returns
         # are gain + noise, same construction in each window)

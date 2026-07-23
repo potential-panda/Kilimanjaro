@@ -108,6 +108,10 @@ class BetweenSignalReturn:
                 "holding_seconds": exit_exec_ts - entry_exec_ts,
             }
         )
+        # Carry the episode id through for n_episodes (see fixed_horizon).
+        if "episode" in sig.columns:
+            trades["episode"] = sig["episode"].values
+
         # ASOF entry join was INNER: signals with no tick at/after ts drop out
         trades = trades[has_entry].reset_index(drop=True)
 

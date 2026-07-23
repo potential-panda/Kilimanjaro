@@ -53,6 +53,7 @@ _STAT_FIELDS = [
     "status",
     "n_trades",
     "n",
+    "n_episodes",
     "avg_gross",
     "avg_net",
     "total_net_bps",
@@ -61,6 +62,7 @@ _STAT_FIELDS = [
     "std_bps",
     "sharpe_per_trade",
     "t_stat",
+    "t_stat_eff",
     "p_value_1sided",
     "p_value_bootstrap",
     "skewness",
@@ -106,9 +108,27 @@ def default_split(start: str, end: str, train_fraction: float = 2 / 3) -> str:
     ).isoformat()
 
 
+def _resolve_rank_metric(rows: list[dict], prefix: str, rank_metric: str) -> str:
+    """The requested metric, or `t_stat` when nothing carries it.
+
+    `t_stat_eff` needs an episode id, which only episode-aware signals emit —
+    flip and OBI grids have none. Without a fallback those grids would rank
+    nothing and silently report zero survivors, so fall back wholesale (never
+    per row: ranking half a window by one metric and half by another is
+    meaningless).
+    """
+    if rank_metric == "t_stat":
+        return rank_metric
+    key = f"{prefix}{rank_metric}"
+    if any(isinstance(r.get(key), (int, float)) and r.get(key) == r.get(key) for r in rows):
+        return rank_metric
+    return "t_stat"
+
+
 def _rank_pcts(rows: list[dict], prefix: str, rank_metric: str, min_n: int) -> None:
     """Add {prefix}rank_pct in-place: percentile of rank_metric among ranked
     rows (1.0 = best). Rows that are not ok or have n < min_n get NaN."""
+    rank_metric = _resolve_rank_metric(rows, prefix, rank_metric)
 
     def _metric(r: dict) -> float:
         v = r.get(f"{prefix}{rank_metric}")
@@ -139,7 +159,7 @@ def run_grid_split(
     schedule: ScheduleFilter | None = None,
     gates: list[Gate] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
-    rank_metric: str = "t_stat",
+    rank_metric: str = "t_stat_eff",
     top_quantile: float = 0.10,
     min_n: int = 30,
     min_month_n: int = 10,
