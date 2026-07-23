@@ -291,13 +291,18 @@ def validate_entry(entry: dict) -> None:
     jsonschema.validate(entry, json.loads(_SCHEMA.read_text()))
 
 
-def write_entry(entry: dict, registry_dir: Path = _REGISTRY_DIR) -> Path:
-    """Validate and write one registry entry. Never overwrites an existing file."""
+def write_entry(entry: dict, registry_dir: Path = _REGISTRY_DIR) -> Path | None:
+    """Validate and write one registry entry.
+
+    Returns None if an entry for this hypothesis already exists — several specs
+    legitimately share one hypothesis, and a hand-written entry is richer than
+    anything derived here, so it is never overwritten.
+    """
     registry_dir = Path(registry_dir)
     registry_dir.mkdir(parents=True, exist_ok=True)
     validate_entry(entry)
     path = registry_dir / f"{entry['hypothesis']['id']}.yaml"
     if path.exists():
-        return path
+        return None
     path.write_text(yaml.safe_dump(entry, sort_keys=False, allow_unicode=True))
     return path

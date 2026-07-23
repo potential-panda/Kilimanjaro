@@ -6,6 +6,7 @@
 # spread-aware yet. Survivors get an episode (bid/ask) re-test, like basis did.
 # All signals z-scored over 30min so one threshold scale fits every expression.
 hypothesis_id: hyp-20260723-001
+family: orderflow
 markets:
   a:
     exchange: BINANCE

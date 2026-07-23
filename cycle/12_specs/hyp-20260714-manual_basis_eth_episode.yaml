@@ -10,6 +10,7 @@
 # age_windows null: episode mode samples the whole run, so entry is the
 # crossing second; max_holds caps the hold instead.
 hypothesis_id: hyp-20260714-002
+family: basis
 return_calc: episode
 markets:
   a:

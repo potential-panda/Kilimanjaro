@@ -1,4 +1,7 @@
 hypothesis_id: hyp-20260714-002
+family: basis
+mechanism: basis signal from BINANCE/BTC_USDT predicting GMO/BTC_JPY
+generated: true
 markets:
   a:
     exchange: BINANCE
@@ -12,17 +15,16 @@ target:
   exchange: GMO
   symbol: BTC_JPY
   execution_size: '0.01'
+return_calc: fixed_horizon
 expressions:
-- label: basis_z_15m
+- label: basis_900_z
   expr: zscore(a_mid / b_mid, 900)
-  invert:
+  invert: &id001
   - false
   - true
-- label: basis_z_1h
+- label: basis_3600_z
   expr: zscore(a_mid / b_mid, 3600)
-  invert:
-  - false
-  - true
+  invert: *id001
 thresholds:
 - 1.5
 - 2.5

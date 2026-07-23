@@ -35,7 +35,12 @@ def _run_generate(args: argparse.Namespace) -> int:
     scan_dirs = [Path(d) for d in args.scan_dirs]
     seen = gen.existing_signatures(*scan_dirs)
     seq = gen.next_seq(date_str, *scan_dirs)
-    specs = gen.propose_specs(args.limit, date_str, seen=seen, seq_start=seq)
+    # idea_ids lets a new spec join the hypothesis already covering its idea
+    # instead of minting one per market — must match what driver.generate does.
+    idea_ids = gen.existing_idea_ids(*scan_dirs)
+    specs = gen.propose_specs(
+        args.limit, date_str, seen=seen, seq_start=seq, idea_ids=idea_ids
+    )
 
     if not specs:
         print("Nothing new to propose — every viable formula is already queued or tested.")
@@ -51,6 +56,12 @@ def _run_generate(args: argparse.Namespace) -> int:
         print("\n(dry-run: no files written)")
         return 0
 
-    paths = gen.write_specs(specs, Path(args.queue))
-    print(f"\nWrote {len(paths)} spec(s) to {args.queue}/. Run `cli.py loop` to scan them.")
+    queue_dir = Path(args.queue)
+    paths = gen.write_specs(specs, queue_dir)
+    entries = gen.write_registry_entries(specs, gen.registry_dir_for(queue_dir))
+    shared = len(specs) - len(entries)
+    note = f", {shared} joining an existing hypothesis" if shared else ""
+    print(f"\nWrote {len(paths)} spec(s) to {args.queue}/ and "
+          f"{len(entries)} new hypothesis entry(ies){note}.")
+    print("Run `cli.py loop` to scan them.")
     return 0

@@ -1,4 +1,7 @@
 hypothesis_id: hyp-20260714-002
+family: basis
+mechanism: basis signal from BINANCE/ETH_USDT predicting GMO/ETH_JPY
+generated: true
 markets:
   a:
     exchange: BINANCE
@@ -7,22 +10,21 @@ markets:
   b:
     exchange: GMO
     symbol: ETH_JPY
-    execution_size: '0.1'
+    execution_size: '0.3'
 target:
   exchange: GMO
   symbol: ETH_JPY
   execution_size: '0.3'
+return_calc: fixed_horizon
 expressions:
-- label: basis_z_15m
+- label: basis_900_z
   expr: zscore(a_mid / b_mid, 900)
-  invert:
+  invert: &id001
   - false
   - true
-- label: basis_z_1h
+- label: basis_3600_z
   expr: zscore(a_mid / b_mid, 3600)
-  invert:
-  - false
-  - true
+  invert: *id001
 thresholds:
 - 1.5
 - 2.5

@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from kilimanjaro.driver import generate as gen  # noqa: E402
@@ -99,6 +101,39 @@ class TestGenerate(unittest.TestCase):
             rest = gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q])
             self.assertEqual(len(rest), 2)           # remaining 2, deduped
             self.assertEqual(gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q]), [])
+
+    def test_same_idea_on_many_markets_shares_one_hypothesis(self):
+        """One idea, N market specs — not N near-identical hypotheses."""
+        with tempfile.TemporaryDirectory() as tmp:
+            q = Path(tmp) / "12_specs"
+            gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q])
+            by_family = {}
+            for p in q.glob("*.yaml"):
+                s = yaml.safe_load(p.read_text())
+                by_family.setdefault(s["family"], set()).add(s["hypothesis_id"])
+            for family, ids in by_family.items():
+                self.assertEqual(len(ids), 1, f"{family} fragmented across {ids}")
+
+    def test_new_spec_joins_the_hypothesis_already_covering_its_idea(self):
+        """An existing spec's hypothesis is reused, even for a different market."""
+        with tempfile.TemporaryDirectory() as tmp:
+            q = Path(tmp) / "12_specs"
+            q.mkdir(parents=True)
+            prior = {
+                "hypothesis_id": "hyp-20260101-042",
+                "family": "basis",
+                "markets": {"a": {"exchange": "BINANCE", "symbol": "ETH_USDT"}},
+                "target": {"exchange": "KRAKEN", "symbol": "ETH_EUR"},
+                "expressions": [{"expr": "zscore(a_mid / b_mid, 900)"}],
+            }
+            (q / "prior.yaml").write_text(yaml.safe_dump(prior))
+            ids = gen.existing_idea_ids(q)
+            self.assertIn(gen.idea_key(prior), ids)
+            specs = gen.propose_specs(20, "20260716", idea_ids=ids)
+            basis = [s for s in specs if s["family"] == "basis"]
+            self.assertTrue(basis)
+            for s in basis:
+                self.assertEqual(s["hypothesis_id"], "hyp-20260101-042")
 
     def test_generate_writes_registry_beside_the_specs_not_the_repo(self):
         """A run against a throwaway specs dir must not touch the real registry.

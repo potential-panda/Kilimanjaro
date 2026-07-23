@@ -164,6 +164,47 @@ def signature(spec: dict) -> str:
     )
 
 
+def idea_key(spec: dict) -> str:
+    """Which *hypothesis* a spec belongs to — the economic idea, not the test.
+
+    Deliberately coarser than `signature`: it drops markets, target and
+    return_calc, and blanks numeric literals inside the formulas. Basis on
+    ETH_JPY and basis on BTC_JPY are one idea tested on two markets, and a
+    30-minute z-score is not a different idea from a 60-minute one. That is the
+    1:N relationship the hand-written specs use — one hypothesis, several specs.
+    """
+    # A set, not a list: sweeping three z-score windows instead of two is the
+    # same idea, so the count of parameterizations must not change the key.
+    exprs = sorted(
+        {re.sub(r"\d+(\.\d+)?", "N", e["expr"]) for e in spec.get("expressions", [])}
+    )
+    return json.dumps({"f": spec.get("family"), "e": exprs}, sort_keys=True)
+
+
+def existing_idea_ids(*dirs: Path) -> dict[str, str]:
+    """idea_key -> the hypothesis id already covering it (earliest id wins).
+
+    Lets a new spec join the hypothesis that first registered its idea instead
+    of minting a near-identical one per market.
+    """
+    ids: dict[str, str] = {}
+    for d in dirs:
+        for path in Path(d).rglob("*.yaml"):
+            try:
+                spec = yaml.safe_load(path.read_text())
+            except Exception:  # noqa: BLE001 — a bad file shouldn't block generation
+                continue
+            if not isinstance(spec, dict) or not spec.get("expressions"):
+                continue
+            hyp = spec.get("hypothesis_id")
+            if not hyp:
+                continue
+            k = idea_key(spec)
+            if k not in ids or hyp < ids[k]:
+                ids[k] = hyp
+    return ids
+
+
 def existing_signatures(*dirs: Path) -> set[str]:
     """Signatures of every scan-spec already on disk (so we never re-propose)."""
     sigs: set[str] = set()
@@ -250,6 +291,7 @@ def propose_specs(
     pairs: list[tuple] = PAIRS,
     families: list[dict] = FAMILIES,
     family_priority: dict[str, float] | None = None,
+    idea_ids: dict[str, str] | None = None,
 ) -> list[dict]:
     """Return up to `limit` new, deduped, data-viable scan specs with hyp ids.
 
@@ -285,14 +327,22 @@ def propose_specs(
 
     out: list[dict] = []
     seen = set(seen or ())
+    idea_ids = dict(idea_ids or {})
     seq = seq_start
     for spec in ordered:
         sig = signature(spec)
         if sig in seen:
             continue
         seen.add(sig)
-        spec = {"hypothesis_id": f"hyp-{date_str}-{seq:03d}", **spec}
-        seq += 1
+        # Join the hypothesis that already covers this idea; only a genuinely
+        # new idea consumes a fresh id.
+        key = idea_key(spec)
+        hyp = idea_ids.get(key)
+        if hyp is None:
+            hyp = f"hyp-{date_str}-{seq:03d}"
+            seq += 1
+            idea_ids[key] = hyp
+        spec = {"hypothesis_id": hyp, **spec}
         out.append(spec)
         if len(out) >= limit:
             break
@@ -331,6 +381,7 @@ def generate(
     """
     scan_dirs = scan_dirs or [Path("cycle/12_specs")]
     seen = existing_signatures(*scan_dirs)
+    idea_ids = existing_idea_ids(*scan_dirs)
     seq = next_seq(date_str, *scan_dirs)
     prio = family_scores(*scan_dirs) if feedback else None
     specs = propose_specs(
@@ -340,6 +391,7 @@ def generate(
         seq_start=seq,
         data_root=data_root,
         family_priority=prio,
+        idea_ids=idea_ids,
     )
     paths = write_specs(specs, queue_dir)
     write_registry_entries(specs, registry_dir_for(queue_dir))
@@ -369,7 +421,9 @@ def write_registry_entries(specs: list[dict], registry_dir: Path) -> list[Path]:
     for spec in specs:
         try:
             entry = registry.build_entry(spec, signature=signature(spec))
-            written.append(registry.write_entry(entry, registry_dir))
+            path = registry.write_entry(entry, registry_dir)
+            if path is not None:  # None = this hypothesis already has an entry
+                written.append(path)
         except Exception as exc:  # noqa: BLE001 - queue write already succeeded
             print(
                 f"warning: no registry entry for {spec.get('hypothesis_id')}: {exc}",
