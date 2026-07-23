@@ -38,6 +38,11 @@ class FixedHorizonReturn:
     horizon_seconds: int
 
     @property
+    def overlap_window_s(self) -> float:
+        """Look-ahead length: observations closer than this share a return path."""
+        return float(self.horizon_seconds)
+
+    @property
     def params(self) -> dict:
         return {"horizon": self.horizon_seconds}
 

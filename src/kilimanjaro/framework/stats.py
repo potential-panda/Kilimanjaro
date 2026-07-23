@@ -89,6 +89,8 @@ def compute_stats(
     signal_strength: pd.Series | None = None,
     holding_seconds: pd.Series | None = None,
     episodes: pd.Series | None = None,
+    overlap_ts: pd.Series | None = None,
+    overlap_window_s: float = 0.0,
 ) -> dict:
     """Compute standardised trade statistics.
 
@@ -104,10 +106,22 @@ def compute_stats(
         Per-trade holding time in seconds. When provided, adds avg_hold_s,
         median_hold_s, median_gross, p25_bps, p75_bps to output.
     episodes : pd.Series, optional
-        Per-trade episode id. When provided, adds n_episodes (distinct ids) and
-        t_stat_eff. Under per-second sampling n counts overlapping observations,
-        so n_episodes is the real number of independent events and t_stat is
-        inflated by ~sqrt(n / n_episodes) -- see doc/overlapping-returns.md.
+        Per-trade episode id. When provided, adds n_episodes (distinct ids).
+    overlap_ts : pd.Series, optional
+        Trade timestamps, used with overlap_window_s to count how many
+        *non-overlapping* return windows were actually sampled.
+    overlap_window_s : float
+        Look-ahead length of one return in seconds (0 = returns do not overlap,
+        e.g. EpisodeReturn). Two observations closer than this share most of
+        their return path and are not independent.
+
+    Together these give n_eff, the effective sample size, and
+    t_stat_eff = t_stat * sqrt(n_eff / n). Two distinct dependencies are at
+    work and both must be counted (doc/overlapping-returns.md):
+      - within-episode: consecutive active seconds are one event  -> n_episodes
+      - horizon overlap: observations < H apart share a return    -> time blocks
+    n_episodes alone is horizon-independent, so it cannot correct the second --
+    ranking on it would still prefer whichever horizon overlaps most.
     """
     n = len(returns)
     nan = float("nan")
@@ -128,7 +142,9 @@ def compute_stats(
             "total_net_bps": nan,
         }
         if episodes is not None:
-            base.update({"n_episodes": 0, "t_stat_eff": nan})
+            base["n_episodes"] = 0
+        if episodes is not None or overlap_window_s > 0:
+            base.update({"n_eff": 0, "t_stat_eff": nan})
         if signal_strength is not None:
             base["ic"] = nan
         if holding_seconds is not None:
@@ -172,15 +188,26 @@ def compute_stats(
         "total_net_bps": float(n * avg_net),
     }
 
+    bounds = []
     if episodes is not None:
         # -1 marks "no active episode"; it is not an event.
         n_ep = int(episodes[episodes >= 0].nunique())
         result["n_episodes"] = n_ep
-        # Effective-sample-size correction: the independent unit is the episode,
-        # not the second. Rank on this, never on the raw t_stat, or the grid
-        # simply prefers whichever horizon overlaps most.
+        bounds.append(n_ep)
+    if overlap_window_s > 0 and overlap_ts is not None and len(overlap_ts):
+        # How many non-overlapping windows of length H did we actually sample?
+        # Observations landing in the same block overlap almost entirely.
+        blocks = np.floor(
+            (overlap_ts.to_numpy() - float(overlap_ts.min())) / overlap_window_s
+        )
+        bounds.append(int(np.unique(blocks).size))
+    if bounds:
+        # The tightest binding constraint: whichever dependency collapses the
+        # sample furthest is the one that governs.
+        n_eff = max(1, min(bounds))
+        result["n_eff"] = n_eff
         result["t_stat_eff"] = (
-            t_stat * float(np.sqrt(n_ep / n)) if n_ep > 0 and n > 0 else nan
+            t_stat * float(np.sqrt(n_eff / n)) if n > 0 else nan
         )
 
     if signal_strength is not None:

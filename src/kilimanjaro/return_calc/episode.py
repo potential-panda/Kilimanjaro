@@ -62,6 +62,12 @@ class EpisodeReturn:
     max_hold_seconds: int | None = None
 
     @property
+    def overlap_window_s(self) -> float:
+        """Zero: episodes are non-overlapping by construction, so n is already
+        the count of independent events."""
+        return 0.0
+
+    @property
     def params(self) -> dict:
         return {
             "max_hold_s": self.max_hold_seconds

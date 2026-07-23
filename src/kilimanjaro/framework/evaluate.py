@@ -54,6 +54,7 @@ _STAT_FIELDS = [
     "n_trades",
     "n",
     "n_episodes",
+    "n_eff",
     "avg_gross",
     "avg_net",
     "total_net_bps",

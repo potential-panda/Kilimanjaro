@@ -177,6 +177,12 @@ def run_grid(
                     stat_kwargs["holding_seconds"] = valid["holding_seconds"]
                 if "episode" in valid.columns:
                     stat_kwargs["episodes"] = valid["episode"]
+                # Overlapping return windows are the other dependency; the calc
+                # knows its own look-ahead (0 when returns don't overlap).
+                overlap = float(getattr(rc, "overlap_window_s", 0.0) or 0.0)
+                if overlap > 0 and "ts" in valid.columns:
+                    stat_kwargs["overlap_ts"] = valid["ts"]
+                    stat_kwargs["overlap_window_s"] = overlap
 
                 stats = compute_stats(valid["return_bps"], costs_bps, **stat_kwargs)
                 # Path/drawdown metrics on the net-return equity curve — the

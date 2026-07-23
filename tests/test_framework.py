@@ -366,3 +366,40 @@ class TestVerdictClassification(unittest.TestCase):
             self.assertIn(key, m)
         self.assertTrue(all("verdict" in r for r in res["rows"]))
         self.assertEqual(sum(res["verdict_counts"].values()), 3)
+
+
+class TestEffectiveSampleSize(unittest.TestCase):
+    """n_eff must answer to BOTH dependencies, not just the episode one."""
+
+    def _stats(self, horizon):
+        import numpy as np
+        import pandas as pd
+
+        from kilimanjaro.framework.stats import compute_stats
+
+        rng = np.random.default_rng(0)
+        r = pd.Series(rng.normal(0.4, 1.0, 600))
+        ep = pd.Series(np.repeat(np.arange(200), 3))
+        ts = pd.Series(np.arange(600, dtype=float))
+        return compute_stats(
+            r, 0.0, episodes=ep, overlap_ts=ts, overlap_window_s=horizon
+        )
+
+    def test_longer_horizon_lowers_effective_n(self):
+        """The whole point: a longer look-ahead overlaps more, so it must not
+        buy a higher t. Ranking on raw t_stat gave h=300 an 82% share of the
+        top decile purely from this."""
+        n_eff = [self._stats(h)["n_eff"] for h in (30, 120, 300)]
+        self.assertEqual(n_eff, sorted(n_eff, reverse=True))
+        t_eff = [self._stats(h)["t_stat_eff"] for h in (30, 120, 300)]
+        self.assertEqual(t_eff, sorted(t_eff, reverse=True))
+
+    def test_raw_t_stat_is_horizon_blind(self):
+        """Confirms the bias exists in the metric we replaced."""
+        raw = [self._stats(h)["t_stat"] for h in (30, 120, 300)]
+        self.assertAlmostEqual(raw[0], raw[2], places=9)
+
+    def test_episode_bound_binds_when_horizon_is_short(self):
+        """With no overlap, n_eff falls back to the episode count."""
+        s = self._stats(0)
+        self.assertEqual(s["n_eff"], s["n_episodes"])
