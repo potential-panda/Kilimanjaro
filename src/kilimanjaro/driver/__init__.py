@@ -16,7 +16,20 @@ See doc/requirements/agent-loop-design.md for the state machine this implements.
 """
 
 from kilimanjaro.driver.loop import process_spec, run_once
-from kilimanjaro.driver.policy import Outcome, evaluate
+from kilimanjaro.driver.policy import (
+    Outcome,
+    evaluate,
+    evaluate_episode,
+    select_candidates,
+)
 from kilimanjaro.driver.validate import validate_scan_spec
 
-__all__ = ["run_once", "process_spec", "evaluate", "Outcome", "validate_scan_spec"]
+__all__ = [
+    "run_once",
+    "process_spec",
+    "evaluate",
+    "evaluate_episode",
+    "select_candidates",
+    "Outcome",
+    "validate_scan_spec",
+]

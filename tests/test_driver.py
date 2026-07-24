@@ -105,14 +105,25 @@ class TestProcessSpec(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _run(self, spec, rows, **kw):
+    def _run(self, spec, rows, episode_rows=None, **kw):
+        """Mock both tiers. `rows` is the screening result; `episode_rows` is the
+        episode re-test result (defaults to the rank-stable screening rows, i.e.
+        the candidates re-confirming). The verdict is decided on the episode tier."""
         out_dir = self.results / "scan_x"
         out_dir.mkdir(parents=True, exist_ok=True)
 
         def fake_run_spec(spec, s, e, results_root, split=None, scan_name="scan", **_):
             return _fake_res(rows), out_dir, "scan_x"
 
-        with patch("kilimanjaro.driver.loop.run_spec", side_effect=fake_run_spec):
+        def fake_retest(spec, candidates, s, e, *, results_root,
+                        screening_scan_id, split=None):
+            ep_dir = self.results / f"{screening_scan_id}_episode"
+            ep_dir.mkdir(parents=True, exist_ok=True)
+            ep = episode_rows if episode_rows is not None else candidates
+            return _fake_res(ep), ep_dir, f"{screening_scan_id}_episode"
+
+        with patch("kilimanjaro.driver.loop.run_spec", side_effect=fake_run_spec), \
+             patch("kilimanjaro.driver.loop.run_episode_retest", side_effect=fake_retest):
             return process_spec(spec, "2025-07-01", "2026-06-30", scan_name="scan_x",
                                 results_root=self.results, ledger_path=self.ledger, **kw)
 
@@ -121,17 +132,37 @@ class TestProcessSpec(unittest.TestCase):
         return [json.loads(l).get("to_status") for l in self.ledger.read_text().splitlines()]
 
     def test_passed_writes_packet_and_ledger(self):
+        # rank-stable candidate that also confirms on the episode tier
         r = self._run(_GOOD_SPEC, [_row(True), _row(False)])
         self.assertEqual(r["status"], "scan-passed")
         self.assertTrue(Path(r["review_packet"]).exists())
+        self.assertIsNotNone(r["episode_folder"])  # episode tier ran
         # scan-ready then scan-passed recorded (+ scan_attached has no to_status)
         self.assertIn("scan-ready", self._statuses())
         self.assertIn("scan-passed", self._statuses())
+
+    def test_two_scan_attached_events_when_episode_runs(self):
+        import json
+        self._run(_GOOD_SPEC, [_row(True), _row(False)])
+        events = [json.loads(l) for l in self.ledger.read_text().splitlines()]
+        attached = [e for e in events if e.get("event_type") == "scan_attached"]
+        self.assertEqual(len(attached), 2)  # screening + episode
 
     def test_failed_no_packet(self):
         r = self._run(_GOOD_SPEC, [_row(False)])
         self.assertEqual(r["status"], "scan-failed")
         self.assertIsNone(r["review_packet"])
+        self.assertIsNone(r["episode_folder"])  # no candidate -> no episode tier
+        self.assertIn("scan-failed", self._statuses())
+
+    def test_rank_stable_but_episode_rejects_fails(self):
+        # A candidate passes screening (rank-stable) but its non-overlapping
+        # episode return is negative in holdout -> not confirmed. This is the
+        # whole point of the episode tier.
+        killed = _row(True, holdout_avg_net=-0.5)
+        r = self._run(_GOOD_SPEC, [_row(True)], episode_rows=[killed])
+        self.assertEqual(r["status"], "scan-failed")
+        self.assertIsNotNone(r["episode_folder"])  # tier ran, then rejected
         self.assertIn("scan-failed", self._statuses())
 
     def test_invalid_spec_recorded_not_scanned(self):

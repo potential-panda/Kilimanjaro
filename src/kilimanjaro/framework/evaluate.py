@@ -321,12 +321,20 @@ def run_grid_split(
     }
 
 
-def _bh_significant(pvals: list[float | None], alpha: float) -> list[bool]:
+def _bh_significant(
+    pvals: list[float | None], alpha: float, m_total: int | None = None
+) -> list[bool]:
     """Benjamini-Hochberg FDR: which one-sided p-values are discoveries at `alpha`.
 
     Controls the expected false-discovery rate across the whole family of combos.
     NaN/None p-values (too few trades to test) are excluded from the family and
     never flagged. Returns a boolean per input position.
+
+    m_total overrides the family size used as BH's denominator. The candidate
+    tier tests only the few combos that survived screening, but they were picked
+    from a much larger grid; passing the full screening combo count keeps the
+    correction honest about how many hypotheses were really searched (a larger
+    m makes the bar strictly harder, never easier).
     """
     import math
 
@@ -336,8 +344,8 @@ def _bh_significant(pvals: list[float | None], alpha: float) -> list[bool]:
         if p is not None and not (isinstance(p, float) and math.isnan(p))
     ]
     flags = [False] * len(pvals)
-    m = len(valid)
-    if m == 0:
+    m = max(len(valid), m_total or 0)
+    if m == 0 or not valid:
         return flags
     order = sorted(valid, key=lambda i: pvals[i])
     thresh = None

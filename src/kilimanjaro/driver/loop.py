@@ -18,7 +18,12 @@ from pathlib import Path
 import yaml
 
 from kilimanjaro.driver import ledger_io
-from kilimanjaro.driver.policy import evaluate
+from kilimanjaro.driver.episode_retest import run_episode_retest
+from kilimanjaro.driver.policy import (
+    Outcome,
+    evaluate_episode,
+    select_candidates,
+)
 from kilimanjaro.driver.review_packet import write_review_packet
 from kilimanjaro.driver.scan_runner import run_spec
 from kilimanjaro.driver.validate import validate_scan_spec
@@ -84,6 +89,7 @@ def process_spec(
             details={"scan_fingerprint": fp, "window": [s, e], "spec_name": scan_name},
             ledger_path=lp,
         )
+        # Step 8-9: screening scan (fixed_horizon, per-second) + attach.
         res, out_dir, scan_id = run_spec(
             spec, s, e, results_root, split=split, scan_name=scan_name
         )
@@ -92,7 +98,43 @@ def process_spec(
         ledger_io.record_scan_attached(
             hyp, actor_id, scan_id, out_dir, market, res, ledger_path=lp
         )
-        outcome = evaluate(res)
+
+        # Step 9b-9c: re-measure rank-stable candidates on non-overlapping
+        # episodes (the honest tier), then attach. The verdict is decided on
+        # THESE numbers; the screening scan only nominates candidates.
+        candidates = select_candidates(res)
+        ep_dir = None
+        if candidates:
+            ep = run_episode_retest(
+                spec, candidates, s, e,
+                results_root=results_root, screening_scan_id=scan_id, split=split,
+            )
+            if ep is not None:
+                ep_res, ep_dir, ep_scan_id = ep
+                ledger_io.record_scan_attached(
+                    hyp, actor_id, ep_scan_id, ep_dir, market, ep_res, ledger_path=lp
+                )
+                outcome = evaluate_episode(
+                    ep_res, len(candidates), res["params"]["n_combos"]
+                )
+            else:
+                outcome = evaluate_episode({"rows": [], "params": {"n_combos": 0}},
+                                           len(candidates), res["params"]["n_combos"])
+        else:
+            # No rank-stable candidate — fail at the screening tier, no episode run.
+            outcome = Outcome(
+                passed=False,
+                status="scan-failed",
+                headline=f"0/{res['params']['n_combos']} rank-stable candidates "
+                         f"— no episode re-test",
+                n_stable=0,
+                n_survivors=0,
+                n_combos=res["params"]["n_combos"],
+                verdicts=res.get("verdict_counts", {}),
+                best=None,
+            )
+
+        # Step 10-11: verdict.
         ledger_io.record_status(
             hyp,
             outcome.status,
@@ -102,10 +144,14 @@ def process_spec(
                 "scan_fingerprint": fp,
                 "scan_id": scan_id,
                 "scan_folder": str(out_dir),
+                "episode_folder": str(ep_dir) if ep_dir else None,
                 "headline": outcome.headline,
             },
             ledger_path=lp,
         )
+        # Step 12: review packet for a survivor (built on the screening result,
+        # which carries the full grid + verdict mix; the episode edge is in the
+        # headline and best).
         packet = None
         if outcome.passed:
             packet = write_review_packet(spec, res, outcome, out_dir, s, e, fp)
@@ -116,6 +162,7 @@ def process_spec(
             "n_stable": outcome.n_stable,
             "n_survivors": outcome.n_survivors,
             "scan_folder": str(out_dir),
+            "episode_folder": str(ep_dir) if ep_dir else None,
             "review_packet": str(packet) if packet else None,
         }
     except Exception as ex:  # noqa: BLE001 — one bad spec must not stop the loop

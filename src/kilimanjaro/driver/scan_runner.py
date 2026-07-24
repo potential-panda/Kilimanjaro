@@ -212,6 +212,20 @@ def run_grid_scan(
     return res, out_dir, scan_id
 
 
+def _target_and_schedule(spec: dict):
+    """Target MarketConfig + schedule filter for a spec — shared by run_spec and
+    the episode re-test so both execute under identical venue rules."""
+    t = spec["target"]
+    target = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
+    # Unified schedule: orion is the source of truth (framework/orion_schedule).
+    schedule = (
+        OrionScheduleFilter(spec.get("schedule_version", "nofilter"))
+        if t["exchange"].upper() == "GMO"
+        else None
+    )
+    return target, schedule
+
+
 def run_spec(
     spec: dict,
     start: str,
@@ -225,14 +239,7 @@ def run_spec(
     on_result=None,
 ) -> tuple[dict, Path, str]:
     """Expression-scan flavour: build combos from a spec, run through the core."""
-    t = spec["target"]
-    target = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
-    # Unified schedule: orion is the source of truth (framework/orion_schedule).
-    schedule = (
-        OrionScheduleFilter(spec.get("schedule_version", "nofilter"))
-        if t["exchange"].upper() == "GMO"
-        else None
-    )
+    target, schedule = _target_and_schedule(spec)
     return run_grid_scan(
         build_combos(spec),
         target,

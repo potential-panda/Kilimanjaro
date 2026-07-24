@@ -171,9 +171,16 @@ Non-waivable blockers:
 5. If invalid, write `invalid-spec` ledger decision.
 6. If data missing, write `needs-more-data`.
 7. If feature requires unsupported transform, write `needs-tooling`.
-8. Run scanner.
-9. Attach scan report to ledger.
-10. Apply thresholds.
+8. Run the **screening** scan (fixed_horizon, per-second grid).
+9. Attach the screening report to the ledger.
+9b. Select the rank-stable combos (overlap-robust screen) and **re-measure them
+    on non-overlapping episodes** (the candidate tier). Skipped when screening
+    produced no rank-stable combo — that spec fails here and writes one folder.
+9c. Attach the episode report to the ledger (a second `scan_attached`).
+10. Apply thresholds **to the episode numbers**: a confirmed survivor is
+    positive in both windows and FDR-significant on the holdout episode p-value
+    (BH family = the full screening grid). Overlap-inflated screening p-values
+    never reach the verdict — see `doc/overlapping-returns.md`.
 11. Write `scan-failed` or `scan-passed`.
 12. For `scan-passed`, prepare human review packet. Generate handoff YAML only after human approval transitions the entry to `backtest-approved`.
 
