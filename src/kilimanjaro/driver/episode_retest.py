@@ -18,9 +18,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kilimanjaro.driver.scan_runner import CSV_FIELDS, _target_and_schedule
+from kilimanjaro.driver.scan_runner import (
+    CSV_FIELDS,
+    _target_and_schedule,
+    gates_for_spec,
+    run_grid_scan,
+)
 from kilimanjaro.return_calc.episode import EpisodeReturn
-from kilimanjaro.driver.scan_runner import run_grid_scan
 from kilimanjaro.signal.expression import ExpressionSignal
 
 # Combo-identity fields on a screening row (ExpressionSignal.params), minus the
@@ -108,6 +112,9 @@ def run_episode_retest(
         split=split,
         param_meta={"spec": spec, "tier": "episode", "screening_scan_id": screening_scan_id},
         schedule=schedule,
+        # Drawdown gate applies here (episodes are non-overlapping), even though
+        # the screening spec's own return_calc still says fixed_horizon.
+        gates=gates_for_spec(spec, return_calc="episode"),
         costs_bps=spec.get("costs_bps"),
         scan_id=scan_id,
         out_dir=results_root / scan_id,

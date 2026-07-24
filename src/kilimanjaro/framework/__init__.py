@@ -1,5 +1,9 @@
 from kilimanjaro.framework.evaluate import default_split, run_grid_split, split_windows
-from kilimanjaro.framework.gate import Gate, RollingDrawdownGate
+from kilimanjaro.framework.gate import (
+    Gate,
+    RollingDrawdownGate,
+    default_drawdown_gate,
+)
 from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
 from kilimanjaro.framework.report import write_csv, write_scan_folder
 from kilimanjaro.framework.runner import run_grid
@@ -12,6 +16,7 @@ __all__ = [
     "SignalDef",
     "Gate",
     "RollingDrawdownGate",
+    "default_drawdown_gate",
     "run_grid",
     "run_grid_split",
     "split_windows",

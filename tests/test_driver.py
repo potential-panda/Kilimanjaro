@@ -75,6 +75,37 @@ class TestValidate(unittest.TestCase):
         self.assertEqual(validate_scan_spec(s), [])
 
 
+class TestGatesForSpec(unittest.TestCase):
+    def test_fixed_horizon_is_ungated_by_nature(self):
+        # The gate sums returns; on the overlapping per-second fixed_horizon grid
+        # that over-blocks (~94%), so it is skipped there regardless of setting.
+        from kilimanjaro.driver.scan_runner import gates_for_spec
+        self.assertEqual(gates_for_spec(_GOOD_SPEC), [])  # _GOOD_SPEC is fixed_horizon
+
+    def test_episode_gets_the_canonical_gate_by_default(self):
+        from kilimanjaro.driver.scan_runner import gates_for_spec
+        from kilimanjaro.framework.gate import (
+            DEFAULT_DD_THRESHOLD_BPS,
+            RollingDrawdownGate,
+        )
+        gates = gates_for_spec(_GOOD_SPEC, return_calc="episode")
+        self.assertEqual(len(gates), 1)
+        self.assertIsInstance(gates[0], RollingDrawdownGate)
+        self.assertEqual(gates[0].threshold_bps, DEFAULT_DD_THRESHOLD_BPS)
+
+    def test_false_disables_even_for_episode(self):
+        from kilimanjaro.driver.scan_runner import gates_for_spec
+        s = {**_GOOD_SPEC, "drawdown_gate": False}
+        self.assertEqual(gates_for_spec(s, return_calc="episode"), [])
+
+    def test_dict_overrides_params(self):
+        from kilimanjaro.driver.scan_runner import gates_for_spec
+        g = gates_for_spec({**_GOOD_SPEC, "drawdown_gate": {"threshold_bps": 250}},
+                           return_calc="episode")[0]
+        self.assertEqual(g.threshold_bps, 250)
+        self.assertEqual(g.window_seconds, 10800.0)  # unspecified -> default
+
+
 class TestPolicy(unittest.TestCase):
     def test_passes_with_a_confirmed_survivor(self):
         out = evaluate(_fake_res([_row(True, mt=True), _row(False)]))

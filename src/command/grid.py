@@ -49,6 +49,9 @@ def register(sub: argparse._SubParsersAction) -> None:
     pe.add_argument("--start"); pe.add_argument("--end")
     _common_opts(pe)
     pe.add_argument("--hypothesis-id", default=None, help="Overrides the spec's hypothesis_id")
+    pe.add_argument("--no-drawdown-gate", action="store_true",
+                    help="Disable the default rolling-drawdown risk gate (applies to "
+                         "episode return_calc; fixed_horizon is ungated by nature)")
     pe.add_argument("--list-features", nargs=2, metavar=("EXCHANGE", "SYMBOL"),
                     help="Show available frame features for a market and exit")
     pe.set_defaults(func=_run_expr)
@@ -146,6 +149,8 @@ def _run_expr(args: argparse.Namespace) -> int:
         return 2
     spec = yaml.safe_load(Path(args.spec).read_text())
     args.hypothesis_id = args.hypothesis_id or spec.get("hypothesis_id")
+    if args.no_drawdown_gate:  # CLI opt-out overrides the spec's default-on gate
+        spec["drawdown_gate"] = False
     combos = build_combos(spec)
     print(f"Expression grid: {Path(args.spec).stem} — {len(combos)} combos")
     res, out_dir, scan_id = run_spec(

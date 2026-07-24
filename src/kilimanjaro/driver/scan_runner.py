@@ -32,6 +32,13 @@ from kilimanjaro.framework import (
     write_csv,
 )
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
+from kilimanjaro.framework.gate import (
+    DEFAULT_DD_COOLDOWN_SECONDS,
+    DEFAULT_DD_THRESHOLD_BPS,
+    DEFAULT_DD_WINDOW_SECONDS,
+    RollingDrawdownGate,
+    default_drawdown_gate,
+)
 from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
 from kilimanjaro.return_calc.episode import EpisodeReturn
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
@@ -77,6 +84,11 @@ CSV_FIELDS = [
     "verdict",
     "stable",
     "mt_significant",
+    # Rolling-drawdown gate effect (0 when the gate never triggered / is off).
+    "train_n_dd_blocked",
+    "train_n_dd_triggers",
+    "holdout_n_dd_blocked",
+    "holdout_n_dd_triggers",
     "n_combos_tested",
     "train_status",
     "holdout_status",
@@ -212,6 +224,43 @@ def run_grid_scan(
     return res, out_dir, scan_id
 
 
+def gates_for_spec(spec: dict, return_calc: str | None = None) -> list:
+    """Risk gates for a spec. The rolling-drawdown gate is ON by default — it is
+    the live-trading risk rule (pause after an extreme loss), so the scan
+    measures the signal under the same overlay live/Himalaya run under.
+
+    It applies ONLY to non-overlapping trades. The gate sums return_bps over a
+    trailing window; on the overlapping per-second fixed_horizon grid that sum
+    double-counts (each loss is seen ~horizon times), the rolling total blows
+    past the threshold almost immediately, and the gate blocks ~94% of the
+    signal — meaningless. So it is skipped for fixed_horizon and applied for
+    episode (one non-overlapping trade per episode), which is where the verdict
+    is decided anyway. `return_calc` overrides the spec's own field, so the
+    episode re-test can request the gate even though its screening spec still
+    says fixed_horizon.
+
+    Opt out or tune per spec via the `drawdown_gate` key:
+      - omitted / true  -> the canonical default gate
+      - false           -> no gate (raw, ungated signal)
+      - {window_seconds, threshold_bps, cooldown_seconds} -> custom params
+    """
+    rc = return_calc or spec.get("return_calc", "fixed_horizon")
+    if rc != "episode":  # overlapping returns -> a rolling-sum gate is not valid
+        return []
+    g = spec.get("drawdown_gate", True)
+    if g is False:
+        return []
+    if isinstance(g, dict):
+        return [
+            RollingDrawdownGate(
+                window_seconds=g.get("window_seconds", DEFAULT_DD_WINDOW_SECONDS),
+                threshold_bps=g.get("threshold_bps", DEFAULT_DD_THRESHOLD_BPS),
+                cooldown_seconds=g.get("cooldown_seconds", DEFAULT_DD_COOLDOWN_SECONDS),
+            )
+        ]
+    return [default_drawdown_gate()]
+
+
 def _target_and_schedule(spec: dict):
     """Target MarketConfig + schedule filter for a spec — shared by run_spec and
     the episode re-test so both execute under identical venue rules."""
@@ -251,6 +300,7 @@ def run_spec(
         split=split,
         param_meta={"spec": spec},
         schedule=schedule,
+        gates=gates_for_spec(spec),
         costs_bps=spec.get("costs_bps"),
         rank_metric=rank_metric,
         top_quantile=top_quantile,

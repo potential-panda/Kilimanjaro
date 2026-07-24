@@ -16,9 +16,16 @@ BOXES = [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.004, 0.005]
 STEPS = [0.01, 0.02, 0.03, 0.04, 0.05]
 
 # ── Rolling-DD risk gate defaults (override via CLI) ─────────────────────────
-DD_WINDOW_SECONDS = 10800
-DD_THRESHOLD_BPS = 500
-DD_COOLDOWN_SECONDS = 21600
+# Canonical values live in framework/gate.py — the same default every scan uses.
+from kilimanjaro.framework.gate import (  # noqa: E402
+    DEFAULT_DD_COOLDOWN_SECONDS as DD_COOLDOWN_SECONDS,
+)
+from kilimanjaro.framework.gate import (  # noqa: E402
+    DEFAULT_DD_THRESHOLD_BPS as DD_THRESHOLD_BPS,
+)
+from kilimanjaro.framework.gate import (  # noqa: E402
+    DEFAULT_DD_WINDOW_SECONDS as DD_WINDOW_SECONDS,
+)
 
 MARKET_CONFIGS: dict[str, dict] = {
     "eth": {

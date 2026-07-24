@@ -34,6 +34,24 @@ class Gate(Protocol):
         ...
 
 
+# Canonical rolling-drawdown gate — the realized live-trading risk rule: pause
+# after a cumulative 5% loss inside any 3h window, stay out 6h, then resume with
+# the window reset. Every scan defaults to this so the scan reflects the same
+# risk overlay that live trading and Himalaya run under.
+DEFAULT_DD_WINDOW_SECONDS = 10800.0  # 3h
+DEFAULT_DD_THRESHOLD_BPS = 500.0  # 5%
+DEFAULT_DD_COOLDOWN_SECONDS = 21600.0  # 6h
+
+
+def default_drawdown_gate() -> "RollingDrawdownGate":
+    """The canonical rolling-drawdown gate applied to every scan by default."""
+    return RollingDrawdownGate(
+        window_seconds=DEFAULT_DD_WINDOW_SECONDS,
+        threshold_bps=DEFAULT_DD_THRESHOLD_BPS,
+        cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS,
+    )
+
+
 @dataclass(frozen=True)
 class RollingDrawdownGate:
     """Rolling drawdown gate (the original flip-scan gate, now shared).
