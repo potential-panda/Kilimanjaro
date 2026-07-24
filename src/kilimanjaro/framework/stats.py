@@ -117,11 +117,17 @@ def compute_stats(
 
     Together these give n_eff, the effective sample size, and
     t_stat_eff = t_stat * sqrt(n_eff / n). Two distinct dependencies are at
-    work and both must be counted (doc/overlapping-returns.md):
+    work and both are counted (doc/overlapping-returns.md):
       - within-episode: consecutive active seconds are one event  -> n_episodes
       - horizon overlap: observations < H apart share a return    -> time blocks
-    n_episodes alone is horizon-independent, so it cannot correct the second --
-    ranking on it would still prefer whichever horizon overlaps most.
+
+    These are reported as *diagnostics*, not as the ranking key. n_eff exposes
+    how few independent events back a big n (n=930k with n_eff=20k is wearing a
+    costume). t_stat_eff is NOT the default rank_metric: it shrinks |t| toward
+    zero, and because that shrinkage is stronger at longer horizons it reorders
+    *negative* t upward, which is meaningless for selection. avg_net is
+    overlap-unbiased and `stable` already gates on avg_net > 0, so ranking
+    stays on t_stat; use n_eff to read significance honestly.
     """
     n = len(returns)
     nan = float("nan")

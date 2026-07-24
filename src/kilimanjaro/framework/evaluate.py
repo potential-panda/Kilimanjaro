@@ -160,7 +160,7 @@ def run_grid_split(
     schedule: ScheduleFilter | None = None,
     gates: list[Gate] | None = None,
     data_root: Path = _DEFAULT_DATA_ROOT,
-    rank_metric: str = "t_stat_eff",
+    rank_metric: str = "t_stat",
     top_quantile: float = 0.10,
     min_n: int = 30,
     min_month_n: int = 10,
