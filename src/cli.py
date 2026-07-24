@@ -32,6 +32,7 @@ def main() -> int:
         generate,
         grid,
         ledger,
+        learn,
         loop,
         populate,
         verify,
@@ -45,6 +46,7 @@ def main() -> int:
     verify.register(sub)
     verify_scan.register(sub)
     grid.register(sub)
+    learn.register(sub)
     loop.register(sub)
     generate.register(sub)
     ledger.register(sub)

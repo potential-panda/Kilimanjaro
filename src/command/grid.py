@@ -1,32 +1,31 @@
 """`cli.py grid` — parameter-grid scans (train/holdout split + rank stability).
 
-Three flavours, one shared core (driver/scan_runner.run_grid_scan):
+Two flavours, one shared core (driver/scan_runner.run_grid_scan):
 
-    python src/cli.py grid flip --market btc --start 2025-07-01 --end 2026-06-30
-    python src/cli.py grid expr --spec my_grid.yaml --start ... --end ...
-    python src/cli.py grid obi  --market eth --start ... --end ...
+    python src/cli.py grid flip    --market btc --start 2025-07-01 --end 2026-06-30
+    python src/cli.py grid horizon --spec my_grid.yaml --start ... --end ...
 
-Replaces the old tools/grid_scan{,_expr,_horizon}.py, which were three copies of
-the same run/write/ledger pipeline differing only in how combos are built.
+`horizon` runs any expression spec (formula signals over the feature frame,
+fixed-horizon returns, with an episode re-test tier). OBI is just an expression
+over an OBI column, so it is one such spec — there is no separate `obi` flavour.
+The OBI age-distribution diagnostic that flavour used to bundle is now the
+signal-agnostic `cli.py learn --op age` command.
 """
 
 from __future__ import annotations
 
 import argparse
-import datetime
 import json
 from pathlib import Path
 
 import yaml
 
-from kilimanjaro.driver import flip_grid, ledger_io, obi_grid
+from kilimanjaro.driver import flip_grid, ledger_io
 from kilimanjaro.driver.scan_runner import build_combos, run_grid_scan, run_spec
-from kilimanjaro.framework import MarketConfig, RollingDrawdownGate, default_split
-from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
+from kilimanjaro.framework import MarketConfig, RollingDrawdownGate
 
 _RESULTS = Path("cycle/13_results/grid_scan")
 _FLIP_HYP = "hyp-20260703-002"  # schedule-adaptive flip-scan spec (box×step×sched)
-_OBI_HYP = {"eth": "hyp-20260713-001", "btc": "hyp-20260618-001"}
 
 
 # ── argparse ─────────────────────────────────────────────────────────────────
@@ -44,24 +43,18 @@ def register(sub: argparse._SubParsersAction) -> None:
     pf.add_argument("--hypothesis-id", default=_FLIP_HYP)
     pf.set_defaults(func=_run_flip)
 
-    pe = gsub.add_parser("expr", help="Expression grid from a YAML spec")
-    pe.add_argument("--spec", help="YAML expression-grid spec")
-    pe.add_argument("--start"); pe.add_argument("--end")
-    _common_opts(pe)
-    pe.add_argument("--hypothesis-id", default=None, help="Overrides the spec's hypothesis_id")
-    pe.add_argument("--no-drawdown-gate", action="store_true",
+    ph = gsub.add_parser("horizon", help="Expression grid from a YAML spec "
+                                         "(formula signals, fixed-horizon returns)")
+    ph.add_argument("--spec", help="YAML expression-grid spec")
+    ph.add_argument("--start"); ph.add_argument("--end")
+    _common_opts(ph)
+    ph.add_argument("--hypothesis-id", default=None, help="Overrides the spec's hypothesis_id")
+    ph.add_argument("--no-drawdown-gate", action="store_true",
                     help="Disable the default rolling-drawdown risk gate (applies to "
                          "episode return_calc; fixed_horizon is ungated by nature)")
-    pe.add_argument("--list-features", nargs=2, metavar=("EXCHANGE", "SYMBOL"),
+    ph.add_argument("--list-features", nargs=2, metavar=("EXCHANGE", "SYMBOL"),
                     help="Show available frame features for a market and exit")
-    pe.set_defaults(func=_run_expr)
-
-    po = gsub.add_parser("obi", help="OBI-age grid (depth × halflife × age × threshold × horizon)")
-    po.add_argument("--market", required=True, choices=list(obi_grid.MARKET_CONFIGS))
-    _common(po)
-    po.add_argument("--hypothesis-id", default=None,
-                    help="Default: per-market; markets without a spec require this or --no-ledger")
-    po.set_defaults(func=_run_obi)
+    ph.set_defaults(func=_run_horizon)
 
 
 def _common(p: argparse.ArgumentParser) -> None:
@@ -138,7 +131,7 @@ def _run_flip(args: argparse.Namespace) -> int:
     return _finish(res, out_dir, scan_id, args, args.market, "grid-flip")
 
 
-def _run_expr(args: argparse.Namespace) -> int:
+def _run_horizon(args: argparse.Namespace) -> int:
     if args.list_features:
         from kilimanjaro.data.feature_frame import available_features
         info = available_features(*args.list_features)
@@ -152,40 +145,12 @@ def _run_expr(args: argparse.Namespace) -> int:
     if args.no_drawdown_gate:  # CLI opt-out overrides the spec's default-on gate
         spec["drawdown_gate"] = False
     combos = build_combos(spec)
-    print(f"Expression grid: {Path(args.spec).stem} — {len(combos)} combos")
+    print(f"Horizon grid: {Path(args.spec).stem} — {len(combos)} combos")
     res, out_dir, scan_id = run_spec(
         spec, args.start, args.end,
-        Path(args.out).parent if args.out else _RESULTS / "expr",
+        Path(args.out).parent if args.out else _RESULTS / "horizon",
         split=args.split, rank_metric=args.rank_metric,
         top_quantile=args.top_quantile, min_n=args.min_n,
         scan_name=Path(args.spec).stem, on_result=_progress(len(combos)),
     )
-    return _finish(res, out_dir, scan_id, args, spec["target"]["symbol"], "grid-expr")
-
-
-def _run_obi(args: argparse.Namespace) -> int:
-    cfg = obi_grid.MARKET_CONFIGS[args.market]
-    if args.hypothesis_id is None:
-        args.hypothesis_id = _OBI_HYP.get(args.market)
-    target = MarketConfig(cfg["target_exchange"], cfg["target_symbol"], cfg["execution_size"])
-    combos = obi_grid.build_combos(cfg)
-    schedule = OrionScheduleFilter("nofilter") if cfg["target_exchange"].upper() == "GMO" else None
-    split = args.split or default_split(args.start, args.end)
-    train_days = max((datetime.date.fromisoformat(split)
-                      - datetime.date.fromisoformat(args.start)).days, 1)
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    scan_id = f"{args.market.upper()}_{args.start}_{args.end}_{ts}"
-    out_dir = Path(args.out) if args.out else _RESULTS / "horizon" / scan_id
-    age_stats: list[dict] = []
-    print(f"OBI-age grid: {args.market.upper()} — {len(combos)} combos")
-    res, out_dir, scan_id = run_grid_scan(
-        combos, target, args.start, args.end,
-        results_root=_RESULTS / "horizon", scan_id=scan_id, out_dir=out_dir,
-        scan_name=args.market.upper(), csv_fields=obi_grid.CSV_FIELDS,
-        split=split, schedule=schedule, row_transform=obi_grid.label_row,
-        on_data_loaded=obi_grid.make_age_hist_hook(out_dir, train_days, age_stats),
-        rank_metric=args.rank_metric, top_quantile=args.top_quantile, min_n=args.min_n,
-        on_result=_progress(len(combos)),
-    )
-    obi_grid.write_age_stats(out_dir, age_stats)
-    return _finish(res, out_dir, scan_id, args, args.market, "grid-obi")
+    return _finish(res, out_dir, scan_id, args, spec["target"]["symbol"], "grid-horizon")

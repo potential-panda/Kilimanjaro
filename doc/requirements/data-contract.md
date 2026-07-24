@@ -27,7 +27,7 @@ Kilimanjaro v1 must use one canonical machine-readable source format per record 
 | inventory snapshot | YAML | `cycle/03_inventory/inventory-YYYYMMDDTHHMMSSZ.yaml` |
 | hypothesis spec | YAML | `cycle/11_hypotheses/hyp-YYYYMMDD-NNN.yaml` |
 | ledger event stream | JSON Lines | `cycle/14_ledger/events.jsonl` |
-| scan output | CSV + `params.json` | `cycle/13_results/grid_scan/{flip,expr,horizon}/<scan_id>/` |
+| scan output | CSV + `params.json` | `cycle/13_results/grid_scan/{flip,horizon}/<scan_id>/` |
 | human approval/waiver | JSON Lines event in ledger | `cycle/14_ledger/events.jsonl` |
 | handoff source | YAML | `cycle/15_handoffs/hyp-YYYYMMDD-NNN.yaml` |
 | human-readable handoff view | Markdown generated from YAML | `cycle/15_handoffs/hyp-YYYYMMDD-NNN.md` |

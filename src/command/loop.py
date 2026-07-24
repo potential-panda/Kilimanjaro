@@ -23,7 +23,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--actor-id", default="scan-loop", help="Ledger actor_id for events")
     p.add_argument("--limit", type=int, default=None,
                    help="Process at most N new specs this pass")
-    p.add_argument("--results-root", default="cycle/13_results/grid_scan/expr",
+    p.add_argument("--results-root", default="cycle/13_results/grid_scan/horizon",
                    help="Where scan output folders are written")
     p.add_argument("--ledger-path", default=None,
                    help="Ledger events file (default: repo cycle/14_ledger/events.jsonl). "

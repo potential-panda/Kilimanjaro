@@ -1,7 +1,7 @@
 """`cli.py verify-scan` — the scan↔backtest fidelity check.
 
 Backs onto the backtest data source (`kilimanjaro.dataset.backtest.verify`).
-Running scans themselves is `cli.py grid {flip,expr,obi}` — there is no
+Running scans themselves is `cli.py grid {flip,horizon}` — there is no
 single-config scan command; a scan is always a grid run.
 """
 

@@ -68,20 +68,26 @@ event to the ledger (what it tried and rejected). See
 | `src/kilimanjaro/data/price_cache.py` | per-window target-price cache — full-year flip grid runs in ~40s (was ~35min); keep return calcs on this, never per-combo parquet scans |
 | `src/kilimanjaro/op/series.py` | causal op library (`ema`, `zscore`, `lag`, `ret`, …) — causality is test-enforced |
 
-Grid scans run via `cli.py grid <flavour>` — three flavours over one shared
+Grid scans run via `cli.py grid <flavour>` — two flavours over one shared
 core (`driver/scan_runner.run_grid_scan`):
 
 ```
-python src/cli.py grid flip --market btc --start ... --end ...   # box×step×schedule
-python src/cli.py grid expr --spec my.yaml --start ... --end ...  # formula specs
-python src/cli.py grid obi  --market eth --start ... --end ...    # depth×halflife×age×threshold×horizon
+python src/cli.py grid flip    --market btc --start ... --end ...  # box×step×schedule
+python src/cli.py grid horizon --spec my.yaml --start ... --end ... # formula specs
 ```
 
-Combo builders live in `driver/{flip_grid,scan_runner,obi_grid}.py`; all run
-through `run_grid_split` and record one `scan_attached` ledger event per run
+`horizon` runs any expression spec (formula signals over the feature frame,
+fixed-horizon returns + an episode re-test tier). OBI is just an expression over
+an OBI column, so it is one such spec — there is no separate `obi` flavour. Combo
+builders live in `driver/{flip_grid,scan_runner}.py`; all run through
+`run_grid_split` and record one `scan_attached` ledger event per run
 (`--no-ledger` to skip, `--hypothesis-id` to re-attribute). Selection criterion
 is rank stability across the train/holdout split, never in-sample p-values.
-(The old `tools/grid_scan*.py` were consolidated into these.)
+
+The OBI age-distribution diagnostic that `grid obi` used to bundle is now the
+signal-agnostic `cli.py learn --op age --spec ... --start ... --end ...` — it
+measures a *property of the signal* (how long threshold-crossing episodes last),
+not an edge, so it is a `learn` op, not a scan. More ops slot in beside `age`.
 
 ## Repo layout
 

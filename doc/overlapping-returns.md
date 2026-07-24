@@ -195,7 +195,7 @@ holdout split and washed out entirely once a survivor is re-measured per episode
 | Episode identification | **built** (`op/age.py::threshold_age`, `group` id) |
 | Event sampling (`age == 0`) | **available** via `ExpressionSignal` age gate |
 | Episode id on signal rows | **built** (`op/age.py::threshold_episode`; emitted by ExpressionSignal) |
-| `EpisodeReturn` calc + bid/ask execution | **built** (`return_calc/episode.py`; `cli.py grid expr` spec `return_calc: episode`) |
+| `EpisodeReturn` calc + bid/ask execution | **built** (`return_calc/episode.py`; `cli.py grid horizon` spec `return_calc: episode`) |
 | Automated candidate tier (episode re-test in the loop) | **built** (`driver/episode_retest.py`; loop steps 9b/9c; verdict via `policy.evaluate_episode`) |
 | `n_episodes` + `n_eff` columns in per-second output | **built** — distinct episode count and effective sample size (`stats.py`); n=930k with n_eff=20k flags an overlap-inflated sample |
 | Newey–West / HAC closed-form SE | optional; bootstrap covers it for now |

@@ -30,7 +30,7 @@ from kilimanjaro.driver.validate import validate_scan_spec
 
 LOG = logging.getLogger("kilimanjaro.driver")
 
-_DEFAULT_RESULTS_ROOT = Path("cycle/13_results/grid_scan/expr")
+_DEFAULT_RESULTS_ROOT = Path("cycle/13_results/grid_scan/horizon")
 
 
 def process_spec(
