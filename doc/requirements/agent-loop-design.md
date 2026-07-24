@@ -9,6 +9,14 @@ Kilimanjaro coordinates two loops:
 
 The agent may reject or park ideas autonomously, but cannot spend Himalaya backtest resources or promote strategies without human approval.
 
+In one line (current state of the repo): **1 hypothesis → N specs; each spec → 1
+screening scan (+ 1 episode scan if it clears the rank-stability screen) → both
+to ledger; verdict on the episode numbers; survivors parked for human approval →
+handoff.** A hypothesis is one idea (an alpha / formula / expression); a spec is
+one concrete executable rendering of it (a market: leader → target, plus a
+parameter grid) — the one-idea-many-specs invariant, enforced by
+`driver.validate.idea_consistency_errors`.
+
 ## Roles
 
 ### Research Agent
