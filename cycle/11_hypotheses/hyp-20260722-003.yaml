@@ -2,7 +2,7 @@ schema_version: 1
 hypothesis:
   id: hyp-20260722-003
   parent_id: null
-  title: Mean reversion on GMO/ETH_JPY
+  title: Mean reversion → BITBANK/ETH_SPOT, GMO/BTC_JPY, GMO/ETH_JPY, GMO/XRP_JPY
   status: scan-failed
   family: liquidity_shock_mean_reversion
   family_label: Mean reversion
@@ -24,7 +24,19 @@ hypothesis:
   data_requirements:
     markets:
     - exchange: BINANCE
+      symbol: BTC_USDT
+    - exchange: GMO
+      symbol: BTC_JPY
+    - exchange: BINANCE
       symbol: ETH_USDT
+    - exchange: GMO
+      symbol: ETH_JPY
+    - exchange: BITBANK
+      symbol: ETH_SPOT
+    - exchange: BINANCE
+      symbol: XRP_USDT
+    - exchange: GMO
+      symbol: XRP_JPY
     datasets:
     - layer: silver
       dataset: MarketPrice

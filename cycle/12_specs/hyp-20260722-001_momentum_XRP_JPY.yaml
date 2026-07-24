@@ -1,6 +1,6 @@
-hypothesis_id: hyp-20260722-011
-family: reversion
-mechanism: reversion signal from BINANCE/XRP_USDT predicting GMO/XRP_JPY
+hypothesis_id: hyp-20260722-001
+family: momentum
+mechanism: momentum signal from BINANCE/XRP_USDT predicting GMO/XRP_JPY
 generated: true
 markets:
   a:
@@ -13,13 +13,16 @@ target:
   execution_size: '300'
 return_calc: fixed_horizon
 expressions:
-- label: revert_300s_z
-  expr: zscore(a_mid / ema(a_mid, 300) - 1, 1800)
+- label: mom_30s_z
+  expr: zscore(ret(a_mid, 30), 1800)
   invert: &id001
   - false
   - true
-- label: revert_900s_z
-  expr: zscore(a_mid / ema(a_mid, 900) - 1, 1800)
+- label: mom_120s_z
+  expr: zscore(ret(a_mid, 120), 1800)
+  invert: *id001
+- label: mom_300s_z
+  expr: zscore(ret(a_mid, 300), 1800)
   invert: *id001
 thresholds:
 - 1.5

@@ -1,16 +1,16 @@
-hypothesis_id: hyp-20260722-015
+hypothesis_id: hyp-20260722-003
 family: reversion
-mechanism: reversion signal from BINANCE/ETH_USDT predicting BITBANK/ETH_SPOT
+mechanism: reversion signal from BINANCE/BTC_USDT predicting GMO/BTC_JPY
 generated: true
 markets:
   a:
     exchange: BINANCE
-    symbol: ETH_USDT
-    execution_size: '0.1'
+    symbol: BTC_USDT
+    execution_size: '0.002'
 target:
-  exchange: BITBANK
-  symbol: ETH_SPOT
-  execution_size: '0.1'
+  exchange: GMO
+  symbol: BTC_JPY
+  execution_size: '0.01'
 return_calc: fixed_horizon
 expressions:
 - label: revert_300s_z

@@ -2,19 +2,20 @@ schema_version: 1
 hypothesis:
   id: hyp-20260714-002
   parent_id: null
-  title: BINANCE/GMO mid-price ratio z-score (cross-market basis) predicts convergence
+  title: Lead-lag → BITBANK/ETH_SPOT, GMO/BTC_JPY, GMO/ETH_JPY, GMO/XRP_JPY
   status: draft
   family: lead_lag
   family_label: Lead-lag
   custom_family_justification: null
   created_at: '2026-07-14T00:00:00Z'
   owner: agent
-  summary: Z-score of the BINANCE_USDT/GMO_JPY mid ratio over 15m-1h windows. High basis = leader rich
-    vs follower; follow (leader is right, follower catches up) and fade (ratio mean-reverts) both swept.
-  expected_edge_mechanism: When the leader/follower price ratio stretches beyond its recent range, the
-    follower has lagged repricing; convergence resolves the gap.
-  economic_rationale: Liquidity providers reprice GMO with a lag after BINANCE moves; verified 600-1000ms
-    optimal lag, ~100% daily lead share (doc/lead-lag-2026-investigation.md).
+  summary: Z-score of the BINANCE_USDT/GMO_JPY mid ratio over 15m-1h windows. High
+    basis = leader rich vs follower; follow (leader is right, follower catches up)
+    and fade (ratio mean-reverts) both swept.
+  expected_edge_mechanism: When the leader/follower price ratio stretches beyond its
+    recent range, the follower has lagged repricing; convergence resolves the gap.
+  economic_rationale: Liquidity providers reprice GMO with a lag after BINANCE moves;
+    verified 600-1000ms optimal lag, ~100% daily lead share (doc/lead-lag-2026-investigation.md).
   duplicate_search:
     searched_at: '2026-07-14T00:00:00Z'
     query_terms:
@@ -23,8 +24,8 @@ hypothesis:
     - basis
     - zscore
     possible_duplicates:
-    - 'expr_demo 2026-07-13 (no spec): May-Jun ETH smoke run, verdict noise with a sign flip between months
-      — this full-year run is the proper test'
+    - 'expr_demo 2026-07-13 (no spec): May-Jun ETH smoke run, verdict noise with a
+      sign flip between months — this full-year run is the proper test'
     conclusion: new
   data_requirements:
     markets:
@@ -36,6 +37,8 @@ hypothesis:
       symbol: ETH_USDT
     - exchange: GMO
       symbol: ETH_JPY
+    - exchange: BITBANK
+      symbol: ETH_SPOT
     - exchange: BINANCE
       symbol: XRP_USDT
     - exchange: GMO
@@ -59,10 +62,10 @@ hypothesis:
       exchange: BINANCE
       symbol: '{BTC,ETH,XRP}_USDT'
     primary_timestamp_column: ts
-    point_in_time_rule: All ops causal (test-enforced, kilimanjaro/op/series.py); frame values ffilled
-      at-or-before ts with 300s staleness bound.
-  cross_market_rationale: Signal computed on BINANCE (leader), return measured on GMO (follower) — the
-    verified lead-lag mechanism.
+    point_in_time_rule: All ops causal (test-enforced, kilimanjaro/op/series.py);
+      frame values ffilled at-or-before ts with 300s staleness bound.
+  cross_market_rationale: Signal computed on BINANCE (leader), return measured on
+    GMO (follower) — the verified lead-lag mechanism.
   target:
     type: next_return
     primary_horizon_seconds: 120
@@ -81,16 +84,18 @@ hypothesis:
     fees_bps: 0
     slippage_bps: 0.5
     latency_ms: 100
-    liquidity_capacity_assumption: single-unit notional (0.01 BTC / 0.3 ETH / 150 XRP)
+    liquidity_capacity_assumption: single-unit notional (0.01 BTC / 0.3 ETH / 150
+      XRP)
   falsification_tests:
   - name: rank-instability-across-split
-    expected_failure_meaning: top-decile train combos fall out of the holdout top decile — selection noise
+    expected_failure_meaning: top-decile train combos fall out of the holdout top
+      decile — selection noise
   - name: regime-sign-flip
-    expected_failure_meaning: signal direction inverts between months (seen in the May/June 2026 basis
-      demo) — regime whipsaw, not an edge
+    expected_failure_meaning: signal direction inverts between months (seen in the
+      May/June 2026 basis demo) — regime whipsaw, not an edge
   - name: fx-contamination
-    expected_failure_meaning: the ratio embeds USD/JPY — apparent basis signals that are actually FX moves
-      will not converge via the crypto leg
+    expected_failure_meaning: the ratio embeds USD/JPY — apparent basis signals that
+      are actually FX moves will not converge via the crypto leg
   scan_plan:
     primary_horizon_seconds: 120
     threshold_grid:
@@ -103,9 +108,10 @@ hypothesis:
     - high_vol
     significance_method: block_bootstrap_by_day
   backtest_handoff_intent:
-    potential_panda_core_strategy_pattern: qate.trading.strategy variant, threshold entry, fixed-horizon
-      exit
-    himalaya_config_notes: only if a rank-stable combo survives with meaningful absolute holdout strength
+    potential_panda_core_strategy_pattern: qate.trading.strategy variant, threshold
+      entry, fixed-horizon exit
+    himalaya_config_notes: only if a rank-stable combo survives with meaningful absolute
+      holdout strength
   decisions:
   - at: '2026-07-14T00:00:00Z'
     actor: agent

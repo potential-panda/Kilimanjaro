@@ -151,5 +151,34 @@ class TestGenerate(unittest.TestCase):
         self.assertEqual({p.name for p in repo_registry.glob("hyp-*.yaml")}, before)
 
 
+class TestIdeaConsistency(unittest.TestCase):
+    """One idea -> one hypothesis (many specs). Enforced, not just conventional."""
+
+    def _load_repo_specs(self):
+        root = Path(__file__).resolve().parents[1] / "cycle" / "12_specs"
+        return [yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")]
+
+    def test_repo_specs_are_idea_consistent(self):
+        """The live spec tree must never split one idea across hypotheses, nor
+        pin two ideas to one id. Fails loudly if a spec re-fragments them."""
+        from kilimanjaro.driver.validate import idea_consistency_errors
+        errors = idea_consistency_errors(self._load_repo_specs())
+        self.assertEqual(errors, [], "\n".join(errors))
+
+    def test_detects_a_split_idea(self):
+        from kilimanjaro.driver.validate import idea_consistency_errors
+        base = {"family": "momentum", "target": {"exchange": "GMO", "symbol": "ETH_JPY"},
+                "markets": {"a": {"exchange": "BINANCE", "symbol": "ETH_USDT"}},
+                "expressions": [{"expr": "zscore(ret(a_mid, 30), 1800)"}]}
+        specs = [
+            {**base, "hypothesis_id": "hyp-20260101-001"},
+            {**base, "hypothesis_id": "hyp-20260101-002",  # same idea, different id
+             "target": {"exchange": "GMO", "symbol": "BTC_JPY"},
+             "markets": {"a": {"exchange": "BINANCE", "symbol": "BTC_USDT"}}},
+        ]
+        errors = idea_consistency_errors(specs)
+        self.assertTrue(any("split across" in e for e in errors))
+
+
 if __name__ == "__main__":
     unittest.main()

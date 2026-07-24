@@ -2,7 +2,7 @@ schema_version: 1
 hypothesis:
   id: hyp-20260723-001
   parent_id: null
-  title: Trade-aggression lead-lag on GMO/ETH_JPY (manual)
+  title: Order flow → BITBANK/ETH_SPOT, GMO/BTC_JPY, GMO/ETH_JPY, GMO/XRP_JPY
   status: draft
   family: trade_aggression_burst
   family_label: Order flow
@@ -25,7 +25,19 @@ hypothesis:
   data_requirements:
     markets:
     - exchange: BINANCE
+      symbol: BTC_USDT
+    - exchange: GMO
+      symbol: BTC_JPY
+    - exchange: BINANCE
       symbol: ETH_USDT
+    - exchange: BITBANK
+      symbol: ETH_SPOT
+    - exchange: BINANCE
+      symbol: XRP_USDT
+    - exchange: GMO
+      symbol: XRP_JPY
+    - exchange: GMO
+      symbol: ETH_JPY
     datasets:
     - layer: silver
       dataset: MarketPrice

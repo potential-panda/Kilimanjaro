@@ -77,3 +77,53 @@ def validate_scan_spec(spec: dict) -> list[str]:
                 )
 
     return errors
+
+
+def idea_consistency_errors(specs: list[dict]) -> list[str]:
+    """Enforce the one-idea-many-specs invariant across a set of scan specs.
+
+    A *hypothesis* is an idea — an alpha/formula/expression. A *spec* is one
+    concrete, executable rendering of it: a market (leader → target) plus a
+    parameter grid. So the same idea tested on ETH and on BTC is ONE hypothesis
+    with two specs, never two hypotheses.
+
+    The idea is identified by `driver.generate.idea_key` (family + the set of
+    numeral-blanked expression shapes; market, target, thresholds and horizons
+    are *execution*, not idea). The invariant this checks, both directions:
+
+      1. one idea -> one hypothesis id  (an idea must not be split across ids)
+      2. one hypothesis id -> one idea  (an id must not cover two ideas)
+
+    Returns a list of human-readable violations (empty = consistent). The
+    generator already assigns ids this way; this is the guard that keeps a
+    hand-added or hand-edited spec from silently re-fragmenting the registry.
+    """
+    from kilimanjaro.driver.generate import idea_key
+
+    idea_to_ids: dict[str, set[str]] = {}
+    id_to_ideas: dict[str, set[str]] = {}
+    for s in specs:
+        if not (isinstance(s, dict) and s.get("expressions")):
+            continue
+        hid = s.get("hypothesis_id")
+        if not hid:
+            continue
+        k = idea_key(s)
+        idea_to_ids.setdefault(k, set()).add(hid)
+        id_to_ideas.setdefault(hid, set()).add(k)
+
+    errors: list[str] = []
+    for k, ids in sorted(idea_to_ids.items()):
+        if len(ids) > 1:
+            errors.append(
+                f"one idea split across {len(ids)} hypotheses "
+                f"{sorted(ids)} — idea {k} must be a single hypothesis with "
+                f"one spec per market"
+            )
+    for hid, ideas in sorted(id_to_ideas.items()):
+        if len(ideas) > 1:
+            errors.append(
+                f"hypothesis {hid} covers {len(ideas)} distinct ideas "
+                f"{sorted(ideas)} — split them into one hypothesis each"
+            )
+    return errors

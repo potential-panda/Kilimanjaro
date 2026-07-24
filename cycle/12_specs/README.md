@@ -8,8 +8,28 @@ ledger, scanned (train/holdout + verdicts), and recorded. Survivors get a
 These are scan *configurations*, not hypotheses. Every spec names its hypothesis
 via `hypothesis_id:`, and the idea itself — title, mechanism, falsification
 tests, decision trail — lives in the registry at `../11_hypotheses/hyp-*.yaml`.
-One hypothesis may have several specs (different markets, or a different
-`return_calc`); that is the normal 1:N relationship, not duplication.
+
+## The invariant: one idea → many specs
+
+A **hypothesis is an idea** — an alpha / strategy / formula / expression (e.g.
+"does momentum on a BINANCE leader predict the JPY venue?"). A **spec is one
+concrete, executable rendering** of that idea: a market (leader → target) plus a
+parameter grid. The same idea tested on ETH and on BTC is **one hypothesis with
+two specs**, never two hypotheses.
+
+The idea is identified by `driver.generate.idea_key` — family + the *set* of
+numeral-blanked expression shapes. Market, target, thresholds and horizons are
+*execution*, not idea, so they do not create a new hypothesis. Two rules, both
+enforced:
+
+1. **one idea → one hypothesis id** (never split an idea across ids), and
+2. **one hypothesis id → one idea** (never pin two ideas to one id).
+
+This is not a convention — it is checked by
+`driver.validate.idea_consistency_errors`, and `tests/test_generate.py` runs that
+check against this directory, so a spec that re-fragments an idea fails the test
+suite. `cli.py generate` already assigns ids this way (it reuses the hypothesis
+already covering an idea); the guard exists for hand-added or hand-edited specs.
 
 Processing is idempotent — a spec whose (content, window) fingerprint is already
 in the ledger is skipped, so re-running the loop is safe.
@@ -32,6 +52,6 @@ file is authoritative; the filename only names the results folder.
 
 ```bash
 # run one spec directly, outside the loop
-python src/cli.py grid expr --spec cycle/12_specs/hyp-20260714-manual_basis_eth.yaml \
+python src/cli.py grid horizon --spec cycle/12_specs/hyp-20260714-manual_basis_eth.yaml \
     --start 2025-07-01 --end 2026-06-30 --split 2026-03-01
 ```

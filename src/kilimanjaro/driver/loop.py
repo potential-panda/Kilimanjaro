@@ -188,6 +188,19 @@ def run_once(
     """One pass over queue_dir/*.yaml. Returns a summary dict."""
     queue_dir = Path(queue_dir)
     specs = sorted(queue_dir.glob("*.yaml")) + sorted(queue_dir.glob("*.yml"))
+
+    # One idea -> one hypothesis (many specs). Warn (don't block) if the queue
+    # breaks it — the generator never does; a hand-added spec might.
+    from kilimanjaro.driver.validate import idea_consistency_errors
+    loaded = []
+    for p in specs:
+        try:
+            loaded.append(yaml.safe_load(p.read_text()))
+        except Exception:  # noqa: BLE001 — per-spec load errors handled in the loop below
+            pass
+    for err in idea_consistency_errors(loaded):
+        LOG.warning("idea-consistency: %s", err)
+
     results: list[dict] = []
     n_run = 0
     for path in specs:

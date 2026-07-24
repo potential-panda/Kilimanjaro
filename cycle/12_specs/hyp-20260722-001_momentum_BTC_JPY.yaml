@@ -1,6 +1,6 @@
-hypothesis_id: hyp-20260722-005
-family: orderflow
-mechanism: orderflow signal from BINANCE/BTC_USDT predicting GMO/BTC_JPY
+hypothesis_id: hyp-20260722-001
+family: momentum
+mechanism: momentum signal from BINANCE/BTC_USDT predicting GMO/BTC_JPY
 generated: true
 markets:
   a:
@@ -13,16 +13,16 @@ target:
   execution_size: '0.01'
 return_calc: fixed_horizon
 expressions:
-- label: imb_5s_z
-  expr: zscore(a_ta_imbalance_qty_5s, 1800)
+- label: mom_30s_z
+  expr: zscore(ret(a_mid, 30), 1800)
   invert: &id001
   - false
   - true
-- label: imb_30s_z
-  expr: zscore(a_ta_imbalance_qty_30s, 1800)
+- label: mom_120s_z
+  expr: zscore(ret(a_mid, 120), 1800)
   invert: *id001
-- label: netflow_10s_z
-  expr: zscore(a_ta_net_flow_10s, 1800)
+- label: mom_300s_z
+  expr: zscore(ret(a_mid, 300), 1800)
   invert: *id001
 thresholds:
 - 1.5
