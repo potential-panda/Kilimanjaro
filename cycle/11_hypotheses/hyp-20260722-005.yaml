@@ -1,13 +1,13 @@
 schema_version: 1
 hypothesis:
-  id: hyp-20260723-001
+  id: hyp-20260722-005
   parent_id: null
   title: Order flow → BITBANK/ETH_SPOT, GMO/BTC_JPY, GMO/ETH_JPY, GMO/XRP_JPY
   status: draft
   family: trade_aggression_burst
   family_label: Order flow
   created_at: '2026-07-23T11:40:52Z'
-  owner: human
+  owner: agent
   expected_edge_mechanism: aggressive order flow on BINANCE/ETH_USDT predicting GMO/ETH_JPY
   duplicate_search:
     searched_at: '2026-07-23T11:40:52Z'
@@ -105,6 +105,12 @@ hypothesis:
     decision: draft
     reason: hand-authored trade-aggression screen; first use of the corrected TradeAggression
       features (ta_* were 1000x-windowed before 2026-07-15)
+  - at: '2026-07-24T00:00:00Z'
+    actor: human
+    decision: draft
+    reason: consolidated orderflow under the generated hypothesis id hyp-20260722-005;
+      the ETH_JPY spec originated as the hand-authored trade-aggression screen (first
+      use of the corrected TA features)
   cross_market_rationale: The feature is computed on BINANCE/ETH_USDT and predicts
     GMO/ETH_JPY. The premise is that the venues price the same underlying, so a dislocation
     in their ratio mean-reverts; the leading venue's move is informative because it

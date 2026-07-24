@@ -1,16 +1,16 @@
-hypothesis_id: hyp-20260723-001
+hypothesis_id: hyp-20260722-005
 family: orderflow
-mechanism: orderflow signal from BINANCE/ETH_USDT predicting BITBANK/ETH_SPOT
+mechanism: orderflow signal from BINANCE/XRP_USDT predicting GMO/XRP_JPY
 generated: true
 markets:
   a:
     exchange: BINANCE
-    symbol: ETH_USDT
-    execution_size: '0.1'
+    symbol: XRP_USDT
+    execution_size: '150'
 target:
-  exchange: BITBANK
-  symbol: ETH_SPOT
-  execution_size: '0.1'
+  exchange: GMO
+  symbol: XRP_JPY
+  execution_size: '300'
 return_calc: fixed_horizon
 expressions:
 - label: imb_5s_z

@@ -5,7 +5,7 @@
 # Cheap screen: fixed_horizon mid-to-mid (is there ANY directional edge?), NOT
 # spread-aware yet. Survivors get an episode (bid/ask) re-test, like basis did.
 # All signals z-scored over 30min so one threshold scale fits every expression.
-hypothesis_id: hyp-20260723-001
+hypothesis_id: hyp-20260722-005
 family: orderflow
 markets:
   a:
