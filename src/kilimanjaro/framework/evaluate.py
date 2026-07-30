@@ -269,11 +269,16 @@ def run_grid_split(
 
     cutoff = 1.0 - top_quantile
     for r in merged:
+        # Step-1 (screening) selects on PREDICTIVE POWER, not PnL: a candidate is
+        # top-decile by the rank metric in both windows AND positively correlated
+        # with return (IC > 0) in both windows. Profitability after spread/gate is
+        # step 2's job (the episode tier), so a predictive-but-not-yet-profitable
+        # signal still reaches it instead of being filtered on cost here.
         r["stable"] = bool(
             r["train_rank_pct"] > cutoff
             and r["holdout_rank_pct"] > cutoff
-            and (r.get("train_avg_net") or 0) > 0
-            and (r.get("holdout_avg_net") or 0) > 0
+            and (r.get("train_ic") or 0) > 0
+            and (r.get("holdout_ic") or 0) > 0
         )
         r["verdict"] = _classify(r, cutoff)
 

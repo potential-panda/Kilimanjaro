@@ -114,8 +114,11 @@ class StubSignal:
     def generate(self, data):
         n = 200
         ts = np.arange(n) * 3600.0 + 1.7e9
+        # Real signals carry a varying strength (a z-score), so IC is defined;
+        # a fixed seed keeps it deterministic and identical across windows.
+        strength = np.random.default_rng(7).normal(0.0, 1.0, n)
         return pd.DataFrame({
-            "ts": ts, "direction": 1.0, "strength": 1.0, "exit_ts": ts + 1800.0,
+            "ts": ts, "direction": 1.0, "strength": strength, "exit_ts": ts + 1800.0,
         })
 
 
@@ -136,7 +139,15 @@ class StubReturn:
         rng = np.random.default_rng(seed)
         gain = signals.attrs.get("gain", 1.0)
         df = signals.copy()
-        df["return_bps"] = rng.normal(gain, 2.0, len(df))
+        # Mean return tracks gain (profitable iff gain>0), driving the ranking.
+        # A small gain-signed strength term adds correlation so IC>0 iff gain>0,
+        # without inflating variance enough to disturb the mean-driven ranking.
+        strength = df["strength"].to_numpy()
+        sign = 1.0 if gain >= 0 else -1.0
+        # gain sets the mean (drives the ranking, well separated); a moderate
+        # gain-signed strength term gives IC>0 iff gain>0; tiny noise keeps the
+        # ranking deterministic across windows.
+        df["return_bps"] = gain + 0.3 * sign * strength + rng.normal(0.0, 0.1, len(df))
         df["holding_seconds"] = 1800.0
         df["jst_hour"] = 12
         df["jst_weekday"] = 2
