@@ -1,9 +1,20 @@
-"""Fixed-horizon return: tradeable bid/ask return over a fixed hold of H seconds.
+"""Fixed-horizon return: the screening tier's predictive-power measurement.
 
 Per the Kilimanjaro cost policy (framework/costs.py): execution is at the
 **actual bid/ask**, never mid — BUY enters at ask / exits at bid, SELL the
 reverse — so the spread is already paid inside the return. Only the flat
 round-trip latency slippage is charged on top, upstream (costs_bps).
+
+**Horizon-based non-overlapping sampling** (`non_overlapping`, default on):
+a signal that fires every second produces returns whose H-second look-aheads
+overlap by H-1s, so per-second observations are not independent and inflate
+significance by ~sqrt(H) (doc/overlapping-returns.md). Instead of correcting for
+that after the fact, we avoid it: keep the first fired observation, skip every
+later one within `horizon_seconds`, keep the next, and so on. Consecutive kept
+observations are >= H apart, so their return windows never overlap and the plain
+t-stat / IC / p-value are honest by construction. This is the cheap, wide
+"is the signal predictive?" screen; realistic PnL (bid/ask, gate, episode) is
+the separate step-2 measurement.
 
 Prices come from the shared per-window target-price cache — one parquet load
 per (market, window), then a searchsorted per combo, instead of a full
@@ -25,6 +36,19 @@ from kilimanjaro.framework.schedule import add_jst_columns
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 
 
+def _nonoverlap_indices(ts: np.ndarray, gap: float) -> np.ndarray:
+    """Indices of a maximal non-overlapping subset: greedily keep the earliest
+    observation, then the first one >= gap seconds later, and so on. `ts` must be
+    sorted ascending. O(k log n) via searchsorted jumps (k = kept count)."""
+    keep: list[int] = []
+    i, n = 0, len(ts)
+    while i < n:
+        keep.append(i)
+        # gap > 0 guarantees the next index is strictly greater -> no infinite loop
+        i = int(np.searchsorted(ts, ts[i] + gap, side="left"))
+    return np.asarray(keep, dtype=np.intp)
+
+
 @dataclass(frozen=True)
 class FixedHorizonReturn:
     """Compute return from signal time to signal time + horizon_seconds.
@@ -33,18 +57,25 @@ class FixedHorizonReturn:
       entry: ask (BUY) / bid (SELL) at first tick at or after signal ts
       exit:  bid (BUY) / ask (SELL) at first tick at or after ts + horizon
       return_bps = direction × (exit_price - entry_price) / entry_price × 10000
+
+    non_overlapping (default True): decimate fired observations to a horizon-
+    spaced, non-overlapping subset before measuring, so the returns are
+    independent and the statistics are honest without an effective-sample
+    correction. See the module docstring.
     """
 
     horizon_seconds: int
+    non_overlapping: bool = True
 
     @property
     def overlap_window_s(self) -> float:
-        """Look-ahead length: observations closer than this share a return path."""
-        return float(self.horizon_seconds)
+        """0 when non-overlapping sampling is on (kept returns never overlap, so
+        n already counts independent events); else the horizon look-ahead."""
+        return 0.0 if self.non_overlapping else float(self.horizon_seconds)
 
     @property
     def params(self) -> dict:
-        return {"horizon": self.horizon_seconds}
+        return {"horizon": self.horizon_seconds, "non_overlapping": self.non_overlapping}
 
     def compute(
         self,
@@ -69,6 +100,12 @@ class FixedHorizonReturn:
             data_root,
         )
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
+        # Horizon-based non-overlapping sampling: drop fired observations whose
+        # return window would overlap the previous kept one, up front, so the
+        # measurement is on independent samples (and cheaper — fewer lookups).
+        if self.non_overlapping and len(sig) > 1:
+            keep = _nonoverlap_indices(sig["ts"].to_numpy(), float(self.horizon_seconds))
+            sig = sig.iloc[keep].reset_index(drop=True)
         direction = sig["direction"].values
         n_mp = len(mp.ts)
 
