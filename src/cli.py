@@ -28,6 +28,7 @@ logging.basicConfig(
 
 def main() -> int:
     from command import (
+        blend,
         factory,
         generate,
         grid,
@@ -47,6 +48,7 @@ def main() -> int:
     verify_scan.register(sub)
     grid.register(sub)
     learn.register(sub)
+    blend.register(sub)
     loop.register(sub)
     generate.register(sub)
     ledger.register(sub)

@@ -15,6 +15,7 @@ from kilimanjaro.driver import ledger_io  # noqa: E402
 from kilimanjaro.driver.loop import process_spec  # noqa: E402
 from kilimanjaro.driver.policy import evaluate  # noqa: E402
 from kilimanjaro.driver.validate import validate_scan_spec  # noqa: E402
+from kilimanjaro.driver import blend as blend_mod  # noqa: E402
 
 _GOOD_SPEC = {
     "hypothesis_id": "hyp-20260716-999",
@@ -125,6 +126,73 @@ class TestPolicy(unittest.TestCase):
         self.assertEqual(out.status, "scan-failed")
         self.assertEqual(out.n_stable, 1)
         self.assertEqual(out.n_survivors, 0)
+
+
+def _spec_with(hyp, markets, exprs):
+    return {
+        "hypothesis_id": hyp,
+        "markets": markets,
+        "target": {"exchange": "GMO", "symbol": "ETH_JPY", "execution_size": "0.3"},
+        "expressions": [{"label": lbl, "expr": e} for lbl, e in exprs],
+    }
+
+
+class TestFactorsFromSpecs(unittest.TestCase):
+    _M = {"a": {"exchange": "BINANCE", "symbol": "ETH_USDT", "execution_size": "0.1"}}
+
+    def test_collects_distinct_factors(self):
+        specs = [
+            _spec_with("h1", self._M, [("f1", "a_mid"), ("f2", "ret(a_mid, 30)")]),
+            _spec_with("h2", self._M, [("g1", "a_obi_ema_k1_30s")]),
+        ]
+        fs = blend_mod.factors_from_specs(specs)
+        self.assertEqual(len(fs), 3)
+        self.assertEqual({f.expr for f in fs}, {"a_mid", "ret(a_mid, 30)", "a_obi_ema_k1_30s"})
+
+    def test_dedups_same_markets_and_expr(self):
+        # same (markets, expr) across two specs collapses to one factor;
+        # invert/threshold are not part of factor identity
+        specs = [
+            _spec_with("h1", self._M, [("f1", "a_mid")]),
+            _spec_with("h2", self._M, [("dup", "a_mid")]),
+        ]
+        self.assertEqual(len(blend_mod.factors_from_specs(specs)), 1)
+
+
+class TestBlendMath(unittest.TestCase):
+    """The IC-weighting / z-scoring / combination math, with build_panel mocked
+    so no data is loaded — two independent weak factors must blend to a HIGHER
+    IC than either alone (the sqrt(N) diversification the whole idea rests on)."""
+
+    def _panels(self, n, seed):
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(seed)
+        f1 = rng.normal(size=n)
+        f2 = rng.normal(size=n)  # independent of f1
+        noise = rng.normal(size=n)
+        # return driven equally by both factors + large noise (weak IC each)
+        ret = 0.2 * f1 + 0.2 * f2 + noise
+        return pd.DataFrame({"ts": np.arange(n, dtype=float),
+                             "F1": f1, "F2": f2, "fwd_ret": ret})
+
+    def test_independent_factors_blend_higher(self):
+        train = self._panels(6000, 1)
+        holdout = self._panels(4000, 2)
+        factors = [
+            blend_mod.Factor("F1", (), "a_mid"),
+            blend_mod.Factor("F2", (), "b_mid"),
+        ]
+        panels = iter([train, holdout])
+        with patch.object(blend_mod, "build_panel", lambda *a, **k: next(panels)):
+            res = blend_mod.blend(factors, None, "2025-07-01", "2026-03-01",
+                                  "2026-06-30", 120)
+        # each single factor is weak; the blend of two independent ones is stronger
+        self.assertGreater(res["blend_holdout_ic"], res["best_single_holdout_ic"])
+        self.assertGreater(res["diversification_ratio"], 1.0)
+        # weights are the train ICs, both positive here
+        self.assertTrue(all(p["weight"] > 0 for p in res["per_factor"]))
 
 
 class TestProcessSpec(unittest.TestCase):
