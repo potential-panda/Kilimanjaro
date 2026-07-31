@@ -158,6 +158,22 @@ def _flow_pressure(a):
     ]
 
 
+def _microprice(a):
+    # Microprice offset: (microprice - best mid) / best mid — the canonical
+    # short-horizon microstructure predictor (price drifts toward the size-
+    # weighted microprice), plus the volume-weighted book imbalance. A channel
+    # (BookState) the obi family cannot see. (Makalu order-book-state §2.)
+    return [
+        (
+            f"mpoff_k{k}_z",
+            f"zscore(({a}_bs_microprice_k{k} - {a}_bs_best_mid) / {a}_bs_best_mid, 1800)",
+        )
+        for k in (1, 5)
+    ] + [
+        (f"wimb_k{k}_z", f"zscore({a}_bs_weighted_imb_k{k}, 1800)") for k in (1, 5)
+    ]
+
+
 # family: needs (feature group on the leader), cross (uses target mid too), build
 FAMILIES = [
     {"family": "momentum", "needs": "mid", "cross": False, "build": _momentum},
@@ -174,6 +190,8 @@ FAMILIES = [
     # wired columns): book-imbalance term structure, and richer trade-flow combos.
     {"family": "book_shape", "needs": "obi", "cross": False, "build": _book_shape},
     {"family": "flow_pressure", "needs": "ta", "cross": False, "build": _flow_pressure},
+    # Tier 2 — BookState channel (microprice), newly wired into the feature frame.
+    {"family": "microprice", "needs": "bs", "cross": False, "build": _microprice},
 ]
 
 
@@ -189,6 +207,7 @@ def _market_features(exchange: str, symbol: str, data_root: Path) -> dict:
         "sizes": sizes,
         "has_obi": any("OBIFeature" in k for k in av),
         "has_ta": any("TradeAggression" in k for k in av),
+        "has_bs": any("BookState" in k for k in av),
     }
 
 
@@ -201,9 +220,12 @@ def _viable(fam: dict, lf: dict, tf: dict) -> bool:
         return False
     if fam["cross"]:
         return lf["has_mid"]
-    return {"mid": lf["has_mid"], "ta": lf["has_ta"], "obi": lf["has_obi"]}[
-        fam["needs"]
-    ]
+    return {
+        "mid": lf["has_mid"],
+        "ta": lf["has_ta"],
+        "obi": lf["has_obi"],
+        "bs": lf["has_bs"],
+    }[fam["needs"]]
 
 
 def _spec_for(fam: dict, pair: tuple, lf: dict, tf: dict) -> dict:

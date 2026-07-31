@@ -12,6 +12,8 @@ Feature name → source routing (per market):
     obi_k{d}                 feature OBIFeature vol_imb_k{d}   (d ∈ 1,3,5,10)
     obi_ema_k{d}_{hl}s       feature OBIFeature ema_k{d}_{hl}s (hl ∈ 10..300)
     ta_{column}              silver TradeAggression {column}, 1s buckets
+    bs_{column}              feature BookState {column}, 1s buckets
+                             (microprice_k{d}, weighted_imb_k{d}, best_mid, ...)
 
 Values are forward-filled onto the grid with a bounded staleness
 (ffill_limit_s, default 300): beyond that, NaN — expressions propagate the
@@ -37,6 +39,8 @@ _OBI_RAW_RE = re.compile(r"^obi_k(\d+)$")
 _OBI_EMA_RE = re.compile(r"^obi_ema_(k\d+_\d+s)$")
 _OBI_EMA_PARTS_RE = re.compile(r"^obi_ema_k(\d+)_(\d+)s$")
 _TA_RE = re.compile(r"^ta_(\w+)$")
+# BookState: bs_<column>, e.g. bs_microprice_k1, bs_best_mid, bs_weighted_imb_k5.
+_BS_RE = re.compile(r"^bs_(\w+)$")
 _MP_FEATURES = {"mid", "spread_bps"}
 
 
@@ -104,6 +108,18 @@ def _ta_glob(exchange: str, symbol: str, data_root: Path) -> str:
     )
 
 
+def _bs_glob(exchange: str, symbol: str, data_root: Path) -> str:
+    return str(
+        data_root
+        / "silver"
+        / "dataset=BookState"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+        / "date=*"
+        / "*.parquet"
+    )
+
+
 def _query(sql: str) -> pd.DataFrame:
     # Hold the connection until .df() materializes (premature-GC bug otherwise)
     con = duckdb.connect()
@@ -115,18 +131,20 @@ def _query(sql: str) -> pd.DataFrame:
 
 def _route(features: list[str]) -> dict[str, list[str]]:
     """Split requested feature names by source dataset."""
-    routes: dict[str, list[str]] = {"mp": [], "obi": [], "ta": []}
+    routes: dict[str, list[str]] = {"mp": [], "obi": [], "ta": [], "bs": []}
     for f in features:
         if f in _MP_FEATURES:
             routes["mp"].append(f)
         elif _OBI_RAW_RE.match(f) or _OBI_EMA_RE.match(f):
             routes["obi"].append(f)
+        elif _BS_RE.match(f):  # before _TA_RE: bs_ is its own dataset
+            routes["bs"].append(f)
         elif _TA_RE.match(f):
             routes["ta"].append(f)
         else:
             raise ValueError(
-                f"unknown feature '{f}' — expected mid, spread_bps,"
-                f" obi_k*, obi_ema_k*_*s, or ta_<column>"
+                f"unknown feature '{f}' — expected mid, spread_bps, obi_k*,"
+                f" obi_ema_k*_*s, ta_<column>, or bs_<column>"
             )
     return routes
 
@@ -185,6 +203,18 @@ def _load_market(
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
             FROM read_parquet('{_ta_glob(exchange, symbol, data_root)}', hive_partitioning=true)
+            WHERE date >= DATE '{start}' AND date <= DATE '{end}'
+            GROUP BY 1
+        """).set_index("sec")
+        parts.append(df)
+
+    if routes["bs"]:
+        cols = ", ".join(
+            f"last({_BS_RE.match(f).group(1)} ORDER BY ts) AS {f}" for f in routes["bs"]
+        )
+        df = _query(f"""
+            SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
+            FROM read_parquet('{_bs_glob(exchange, symbol, data_root)}', hive_partitioning=true)
             WHERE date >= DATE '{start}' AND date <= DATE '{end}'
             GROUP BY 1
         """).set_index("sec")
@@ -333,6 +363,24 @@ def available_features(
         )
         if dates:
             out["ta_* (TradeAggression)"] = {
+                "n_days": len(dates),
+                "first": dates[0],
+                "last": dates[-1],
+            }
+
+    bs_root = (
+        data_root
+        / "silver"
+        / "dataset=BookState"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
+    if bs_root.exists():
+        dates = sorted(
+            d.name[5:] for d in bs_root.iterdir() if d.name.startswith("date=")
+        )
+        if dates:
+            out["bs_* (BookState)"] = {
                 "n_days": len(dates),
                 "first": dates[0],
                 "last": dates[-1],
