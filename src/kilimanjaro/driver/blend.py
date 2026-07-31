@@ -159,8 +159,14 @@ def build_panel(
     if not series:
         return pd.DataFrame()
 
+    # Inner-join on ts to a common time grid, but do NOT drop a row just because
+    # one factor is NaN there: a factor with no reading (e.g. buy/sell ratio in a
+    # second with no trades) must contribute 0 (neutral) in the blend, not delete
+    # the timestamp for every other factor. Only rows with no signal at all — every
+    # factor NaN — are dropped. (The forward return is required, dropped below.)
     panel = pd.concat(series.values(), axis=1, join="inner")
-    panel = panel.dropna(how="any")
+    names = [f.name for f in factors]
+    panel = panel.dropna(how="all", subset=names)
     if panel.empty:
         return panel.reset_index().rename(columns={"index": "ts"})
 
@@ -178,9 +184,13 @@ def build_panel(
 
 
 def _ic(x: np.ndarray, r: np.ndarray) -> float:
-    """Pearson corr, NaN-safe; 0.0 when a series is constant or too short."""
-    if len(x) < 3:
+    """Pearson corr over the rows where both are present; 0.0 when too few
+    finite pairs or a series is constant. A factor with partial coverage is
+    scored on its own present rows — not penalised for the seconds it is silent."""
+    m = np.isfinite(x) & np.isfinite(r)
+    if m.sum() < 3:
         return 0.0
+    x, r = x[m], r[m]
     sx, sr = np.std(x), np.std(r)
     if sx == 0 or sr == 0 or not np.isfinite(sx) or not np.isfinite(sr):
         return 0.0
@@ -219,13 +229,20 @@ def blend(
     for name in names:
         x_tr = train[name].to_numpy(dtype=float)
         x_ho = holdout[name].to_numpy(dtype=float)
-        mu, sd = float(np.mean(x_tr)), float(np.std(x_tr))
-        sd = sd if sd > 0 else 1.0
-        zt = (x_tr - mu) / sd
+        # Train stats over present rows only; a mostly-silent factor is still
+        # standardised by the scale of the readings it does have.
+        mu, sd = float(np.nanmean(x_tr)), float(np.nanstd(x_tr))
+        if not np.isfinite(mu):  # column entirely NaN on train
+            mu = 0.0
+        sd = sd if (sd > 0 and np.isfinite(sd)) else 1.0
+        zt = (x_tr - mu) / sd  # NaN preserved -> scored on present rows by _ic
         zh = (x_ho - mu) / sd  # train stats on holdout: no peeking
         ic_tr = _ic(zt, r_tr)
         ic_ho = _ic(zh, r_ho)
-        z_tr[name], z_ho[name] = zt, zh
+        # In the blend sum a silent second contributes 0 (neutral), never drops
+        # the row — that is the whole point of the coverage fix.
+        z_tr[name] = np.nan_to_num(zt, nan=0.0)
+        z_ho[name] = np.nan_to_num(zh, nan=0.0)
         weights[name] = ic_tr if np.isfinite(ic_tr) else 0.0
         per_factor.append(
             {"factor": name, "weight": ic_tr, "train_ic": ic_tr, "holdout_ic": ic_ho}

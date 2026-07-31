@@ -194,6 +194,34 @@ class TestBlendMath(unittest.TestCase):
         # weights are the train ICs, both positive here
         self.assertTrue(all(p["weight"] > 0 for p in res["per_factor"]))
 
+    def test_partial_coverage_factor_scored_and_neutral_when_silent(self):
+        # A factor that is NaN half the time must still be scored on its present
+        # rows and contribute 0 (not NaN, not a dropped row) where it is silent.
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(3)
+        n = 6000
+        f1 = rng.normal(size=n)
+        f2 = rng.normal(size=n)
+        ret = 0.2 * f1 + 0.2 * f2 + rng.normal(size=n)
+        f2_silent = f2.copy()
+        f2_silent[1::2] = np.nan  # silent on every other row
+        train = pd.DataFrame({"ts": np.arange(n, dtype=float),
+                              "F1": f1, "F2": f2_silent, "fwd_ret": ret})
+        holdout = train.copy()
+        factors = [blend_mod.Factor("F1", (), "a_mid"),
+                   blend_mod.Factor("F2", (), "b_mid")]
+        panels = iter([train, holdout])
+        with patch.object(blend_mod, "build_panel", lambda *a, **k: next(panels)):
+            res = blend_mod.blend(factors, None, "2025-07-01", "2026-03-01",
+                                  "2026-06-30", 120)
+        # nothing NaN-ed out, and the sparse factor keeps a real (positive) IC
+        self.assertTrue(all(p["train_ic"] == p["train_ic"] for p in res["per_factor"]))
+        f2row = next(p for p in res["per_factor"] if p["factor"] == "F2")
+        self.assertGreater(f2row["train_ic"], 0)
+        self.assertEqual(res["train_n"], n)  # panel not shrunk by the silent rows
+
 
 class TestProcessSpec(unittest.TestCase):
     def setUp(self):
