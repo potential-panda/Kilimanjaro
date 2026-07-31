@@ -119,6 +119,45 @@ def _large_trade(a):
     ]
 
 
+def _book_shape(a):
+    # The *term structure* of book imbalance, not its level: how the near-touch
+    # imbalance differs from deeper in the book. Orthogonal to the obi family,
+    # which only reads the level. (Makalu order-book-state gradient/divergence.)
+    return [
+        (f"obigrad_k1_k5_z", f"zscore({a}_obi_k1 - {a}_obi_k5, 1800)"),
+        (f"obigrad_k1_k10_z", f"zscore({a}_obi_k1 - {a}_obi_k10, 1800)"),
+    ]
+
+
+def _flow_pressure(a):
+    # Untapped trade-flow combos (Makalu trade-aggression §1):
+    #  - vwap_skew: buyers' vs sellers' execution price gap (aggressor premium)
+    #  - size_asym: are buyers or sellers using bigger orders (imbalance of avg size)
+    #  - qtycount_div: qty-share minus count-share — big-few vs small-many, the
+    #    informed-size tell — distinct from plain qty imbalance.
+    return [
+        (
+            f"vwapskew_{w}s_z",
+            f"zscore(({a}_ta_vwap_buy_{w}s - {a}_ta_vwap_sell_{w}s) / {a}_ta_vwap_{w}s, 1800)",
+        )
+        for w in (60,)
+    ] + [
+        (
+            f"sizeasym_{w}s_z",
+            f"zscore(imbalance({a}_ta_buy_qty_{w}s / {a}_ta_buy_count_{w}s, "
+            f"{a}_ta_sell_qty_{w}s / {a}_ta_sell_count_{w}s), 1800)",
+        )
+        for w in (60,)
+    ] + [
+        (
+            f"qtycountdiv_{w}s_z",
+            f"zscore({a}_ta_buy_qty_{w}s / {a}_ta_total_qty_{w}s "
+            f"- {a}_ta_buy_count_{w}s / {a}_ta_total_count_{w}s, 1800)",
+        )
+        for w in (60,)
+    ]
+
+
 # family: needs (feature group on the leader), cross (uses target mid too), build
 FAMILIES = [
     {"family": "momentum", "needs": "mid", "cross": False, "build": _momentum},
@@ -131,6 +170,10 @@ FAMILIES = [
     {"family": "vwap_dev", "needs": "ta", "cross": False, "build": _vwap_dev},
     {"family": "aggression", "needs": "ta", "cross": False, "build": _aggression},
     {"family": "large_trade", "needs": "ta", "cross": False, "build": _large_trade},
+    # Ported from the Makalu feature library (Tier 1 — expressible over already-
+    # wired columns): book-imbalance term structure, and richer trade-flow combos.
+    {"family": "book_shape", "needs": "obi", "cross": False, "build": _book_shape},
+    {"family": "flow_pressure", "needs": "ta", "cross": False, "build": _flow_pressure},
 ]
 
 

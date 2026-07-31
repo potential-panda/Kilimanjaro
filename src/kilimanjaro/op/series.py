@@ -80,6 +80,18 @@ def clip(x: pd.Series, lo: float, hi: float) -> pd.Series:
     return x.clip(lo, hi)
 
 
+_EPS = 1e-9
+
+
+def imbalance(a: pd.Series, b: pd.Series) -> pd.Series:
+    """Normalized imbalance (a - b) / (a + b), in [-1, 1] for non-negative a, b.
+
+    Pointwise (no lookback), so trivially causal. The house normalization for
+    two-sided quantities (buy vs sell, bid vs ask) — keeps every such signal on
+    one comparable scale, the way the Makalu feature library uses it."""
+    return (a - b) / (a + b + _EPS)
+
+
 # Whitelist namespace for expression evaluation. Keys are the callable names
 # usable inside a formula; "abs" maps to abs_ so formulas read naturally.
 OPS: dict[str, object] = {
@@ -96,4 +108,5 @@ OPS: dict[str, object] = {
     "sign": sign,
     "abs": abs_,
     "clip": clip,
+    "imbalance": imbalance,
 }

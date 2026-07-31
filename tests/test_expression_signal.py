@@ -18,7 +18,13 @@ from kilimanjaro.signal.expression import (  # noqa: E402
     validate_expr,
 )
 
-# One sample invocation per registered op (op name → args after the series)
+# A second series operand, for ops that take two series (e.g. imbalance).
+_B_SERIES = pd.Series(
+    np.exp(np.random.default_rng(4).normal(0, 0.01, 400).cumsum()) + 1.0
+)
+
+# One sample invocation per registered op (op name → args after the series).
+# A pd.Series arg is truncated alongside the primary series in the causality test.
 _OP_SAMPLE_ARGS = {
     "ema": (30,),
     "roll_mean": (20,),
@@ -33,6 +39,7 @@ _OP_SAMPLE_ARGS = {
     "sign": (),
     "abs": (),
     "clip": (-1.0, 1.0),
+    "imbalance": (_B_SERIES,),
 }
 
 
@@ -50,7 +57,11 @@ class TestOpCausality(unittest.TestCase):
         for name, args in _OP_SAMPLE_ARGS.items():
             with self.subTest(op=name):
                 full = OPS[name](x, *args)
-                prefix = OPS[name](x.iloc[:k], *args)
+                # truncate any series operand alongside x (two-series ops)
+                pre_args = tuple(
+                    a.iloc[:k] if isinstance(a, pd.Series) else a for a in args
+                )
+                prefix = OPS[name](x.iloc[:k], *pre_args)
                 pd.testing.assert_series_equal(
                     full.iloc[:k], prefix, check_names=False,
                     obj=f"op {name} is not causal",
