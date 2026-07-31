@@ -159,6 +159,44 @@ class TestFactorsFromSpecs(unittest.TestCase):
         self.assertEqual(len(blend_mod.factors_from_specs(specs)), 1)
 
 
+class TestCompositeSpec(unittest.TestCase):
+    _M = {"a": {"exchange": "BINANCE", "symbol": "ETH_USDT", "execution_size": "0.1"}}
+
+    def _specs(self):
+        return [
+            _spec_with("h1", self._M, [("f1", "zscore(ret(a_mid, 30), 1800)")]),
+            _spec_with("h2", self._M, [("f2", "zscore(a_obi_k1, 1800)")]),
+        ]
+
+    def test_composite_is_weighted_sum_dropping_dud_factors(self):
+        specs = self._specs()
+        factors = blend_mod.factors_from_specs(specs)
+        # f1 strong, f2 below floor -> only f1 survives into the composite
+        weights = {factors[0].name: 0.05, factors[1].name: 0.001}
+        comp = blend_mod.composite_spec(
+            specs, factors, weights, thresholds=[1.5], horizon=30, min_abs_weight=0.01
+        )
+        expr = comp["expressions"][0]["expr"]
+        self.assertIn("0.050000*(zscore(ret(a_mid, 30), 1800))", expr)
+        self.assertNotIn("a_obi_k1", expr)  # dud dropped
+        self.assertTrue(expr.startswith("zscore(") and expr.endswith(", 1800)"))
+        self.assertEqual(comp["return_calc"], "episode")
+        # the composite is a valid, AST-clean expression signal
+        from kilimanjaro.signal.expression import validate_expr
+        self.assertEqual(validate_expr(expr), ["a_mid"])
+
+    def test_inconsistent_alias_across_specs_raises(self):
+        a1 = _spec_with("h1", {"a": {"exchange": "BINANCE", "symbol": "ETH_USDT",
+                                      "execution_size": "0.1"}}, [("f1", "a_mid")])
+        a2 = _spec_with("h2", {"a": {"exchange": "GMO", "symbol": "ETH_JPY",
+                                     "execution_size": "0.3"}}, [("f2", "a_mid")])
+        factors = blend_mod.factors_from_specs([a1, a2])
+        weights = {f.name: 0.05 for f in factors}
+        with self.assertRaises(ValueError):
+            blend_mod.composite_spec([a1, a2], factors, weights,
+                                     thresholds=[1.5], horizon=30)
+
+
 class TestBlendMath(unittest.TestCase):
     """The IC-weighting / z-scoring / combination math, with build_panel mocked
     so no data is loaded — two independent weak factors must blend to a HIGHER

@@ -183,6 +183,56 @@ def build_panel(
     return panel
 
 
+def composite_spec(
+    specs: list[dict],
+    factors: list[Factor],
+    weights: dict[str, float],
+    *,
+    thresholds: list[float],
+    horizon: int,
+    min_abs_weight: float = 0.01,
+    return_calc: str = "episode",
+) -> dict:
+    """Turn a fitted blend into a single tradeable spec: one ExpressionSignal
+    whose formula is the IC-weighted sum of the factor expressions, wrapped in a
+    rolling zscore so a std-unit threshold trades it. This is the bridge from
+    the step-1 blend (IC only) to the step-2 sim (bid/ask, gate, cost) — it runs
+    through the exact same episode machinery every other spec does.
+
+    Factors below `min_abs_weight` (the ~0-IC duds) are dropped from the sum.
+    Markets are the union across the input specs (aliases must be consistent).
+    """
+    markets: dict[str, dict] = {}
+    for s in specs:
+        for alias, m in s["markets"].items():
+            if alias in markets and markets[alias] != m:
+                raise ValueError(f"alias {alias!r} maps to different markets across specs")
+            markets[alias] = m
+
+    terms = [
+        (f, weights.get(f.name, 0.0))
+        for f in factors
+        if abs(weights.get(f.name, 0.0)) >= min_abs_weight
+    ]
+    if not terms:
+        raise ValueError("no factor clears the weight floor")
+    summed = " + ".join(f"{w:.6f}*({f.expr})" for f, w in terms)
+    expr = f"zscore({summed}, 1800)"
+
+    return {
+        "hypothesis_id": "blend-composite",
+        "family": "blend",
+        "markets": markets,
+        "target": dict(specs[0]["target"]),
+        "return_calc": return_calc,
+        "expressions": [{"label": "blend", "expr": expr, "invert": [False]}],
+        "thresholds": list(thresholds),
+        "age_windows": [[None, None]],
+        "horizons": [horizon],
+        "max_holds": [None],
+    }
+
+
 def _ic(x: np.ndarray, r: np.ndarray) -> float:
     """Pearson corr over the rows where both are present; 0.0 when too few
     finite pairs or a series is constant. A factor with partial coverage is

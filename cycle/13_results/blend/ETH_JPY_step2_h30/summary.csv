@@ -1,0 +1,2 @@
+n_factors,horizon,train_n,holdout_n,blend_train_ic,blend_holdout_ic,best_single_holdout_ic,diversification_ratio
+27,30,697346,329870,0.13832449527205495,0.13196611617119508,0.12788400472075656,1.0319204224121077

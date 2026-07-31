@@ -36,6 +36,11 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--split", default=None, help="Train/holdout split date "
                    "(default: 2/3 of the range)")
     p.add_argument("--horizon", type=int, default=120, help="Forward horizon seconds")
+    p.add_argument("--step2", action="store_true",
+                   help="After the blend, run the composite through the realistic "
+                        "episode sim (bid/ask, gate, cost) and report net PnL")
+    p.add_argument("--min-weight", type=float, default=0.01,
+                   help="Drop factors with |train IC| below this from the composite")
     p.add_argument("--out", default=None, help="Output dir (default under "
                    "cycle/13_results/blend/)")
     p.set_defaults(func=_run_blend)
@@ -80,4 +85,41 @@ def _run_blend(args: argparse.Namespace) -> int:
     summary = {k: v for k, v in res.items() if k != "per_factor"}
     write_csv([summary], out_dir / "summary.csv", list(summary.keys()))
     print(f"\n  -> {out_dir}")
+
+    if args.step2:
+        _run_step2(specs, factors, res, target, split, args, out_dir)
     return 0
+
+
+def _run_step2(specs, factors, res, target, split, args, out_dir) -> None:
+    """Run the IC-weighted composite through the realistic episode sim."""
+    from kilimanjaro.driver.blend import composite_spec
+    from kilimanjaro.driver.scan_runner import run_spec
+
+    weights = {p["factor"]: p["weight"] for p in res["per_factor"]}
+    comp = composite_spec(
+        specs, factors, weights,
+        thresholds=[1.5, 2.5], horizon=args.horizon,
+        min_abs_weight=args.min_weight, return_calc="episode",
+    )
+    n_terms = comp["expressions"][0]["expr"].count("*(")
+    print(f"\n  step-2 sim: composite of {n_terms} factors (|IC| >= {args.min_weight}), "
+          f"episode + gate + cost, threshold sweep 1.5/2.5")
+    scan_res, s2_dir, _ = run_spec(
+        comp, args.start, args.end,
+        results_root=out_dir / "step2", split=split, scan_name="blend_step2",
+    )
+    print(f"  {'thr':>4} {'ho_episodes':>12} {'ho_avg_net':>11} {'hit_net':>8} "
+          f"{'ho_total_net':>13} {'sharpe':>7} {'dd_blk':>7}")
+    for r in sorted(scan_res["rows"], key=lambda r: r.get("threshold", 0)):
+        print(f"  {r.get('threshold'):>4} {r.get('holdout_n_episodes', 0):>12} "
+              f"{_f(r.get('holdout_avg_net')):>11} {_f(r.get('holdout_hit_rate_net')):>8} "
+              f"{_f(r.get('holdout_total_net_bps')):>13} {_f(r.get('holdout_sharpe_per_trade')):>7} "
+              f"{r.get('holdout_n_dd_blocked', 0):>7}")
+    print(f"  -> {s2_dir}")
+    print("  NB: expression+episode is trend-only (uncalibrated) — direction/"
+          "magnitude indicative, not a promotion number (see doc/calibration.md)")
+
+
+def _f(v) -> str:
+    return f"{v:.3f}" if isinstance(v, (int, float)) and v == v else "—"
