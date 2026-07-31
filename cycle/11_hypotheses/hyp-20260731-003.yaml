@@ -1,0 +1,98 @@
+schema_version: 1
+hypothesis:
+  id: hyp-20260731-003
+  parent_id: null
+  title: large_trade on GMO/ETH_JPY
+  status: draft
+  family: custom
+  family_label: large_trade
+  created_at: '2026-07-31T12:17:11Z'
+  owner: agent
+  expected_edge_mechanism: large_trade signal from BINANCE/ETH_USDT predicting GMO/ETH_JPY
+  duplicate_search:
+    searched_at: '2026-07-31T12:17:11Z'
+    query_terms:
+    - large_trade
+    - ETH_JPY
+    - bigflow_5s_z
+    - bigflow_30s_z
+    - 'signature:{"e": ["sign(a_ta_net_flow_30s) * zscore(a_ta_max_trade_size_30s,
+      1800)", "sign(a_ta_net_flow_5s) * zscore(a_ta_max_trade_size_5s, 1800)"], "m":
+      [["BINANCE", "ETH_USDT"]], "rc": "fixed_horizon", "t": ["GMO", "ETH_JPY"]}'
+    possible_duplicates: []
+    conclusion: new
+  data_requirements:
+    markets:
+    - exchange: BINANCE
+      symbol: ETH_USDT
+    datasets:
+    - layer: silver
+      dataset: MarketPrice
+    minimum_distinct_days: 200
+    unavailable_data_policy: needs-more-data
+    research_metadata:
+      generated_by: driver.generate
+      scan_window: null
+  feature:
+    sql_expression: 'bigflow_5s_z: sign(a_ta_net_flow_5s) * zscore(a_ta_max_trade_size_5s,
+      1800); bigflow_30s_z: sign(a_ta_net_flow_30s) * zscore(a_ta_max_trade_size_30s,
+      1800)'
+    source_datasets:
+    - layer: silver
+      dataset: MarketPrice
+      exchange: BINANCE
+      symbol: ETH_USDT
+      alias: a
+    primary_timestamp_column: ts
+    point_in_time_rule: All ops causal (test-enforced, kilimanjaro/op/series.py);
+      frame values ffilled at-or-before ts.
+  target:
+    type: next_return
+    primary_horizon_seconds: 120
+    comparison_horizons_seconds:
+    - 30
+    - 120
+    - 300
+    source_dataset:
+      layer: silver
+      dataset: MarketPrice
+      exchange: GMO
+      symbol: ETH_JPY
+    timestamp_cutoff_rule: target window starts strictly after the signal timestamp
+  execution_assumptions:
+    order_type: market
+    fees_bps: 0
+    slippage_bps: 1.0
+    liquidity_capacity_assumption: execution size 0.3
+  falsification_tests:
+  - name: rank-instability-across-split
+    expected_failure_meaning: top-decile train combos fall out of the holdout top
+      decile — selection noise, not signal
+  - name: multiple-testing-fdr
+    expected_failure_meaning: no combo survives Benjamini-Hochberg across the grid
+      — the best result is what a grid of this size yields by chance
+  - name: cost-buffer
+    expected_failure_meaning: edge does not clear the round-trip cost floor (bid/ask
+      execution plus 1.0 bps latency slippage) — gross-only edge
+  scan_plan:
+    primary_horizon_seconds: 120
+    threshold_grid:
+    - 1.5
+    - 2.5
+    significance_method: block_bootstrap_by_day
+    selection_rule: rank stability across a train/holdout split, then Benjamini-Hochberg
+      across the grid
+  backtest_handoff_intent:
+    potential_panda_core_strategy_pattern: qate.trading.strategy variant, threshold
+      entry, fixed_horizon exit
+    himalaya_config_notes: only if a rank-stable combo survives with meaningful absolute
+      holdout strength
+  decisions:
+  - at: '2026-07-31T12:17:11Z'
+    actor: agent
+    decision: draft
+    reason: proposed by the generator; no ledger activity yet
+  cross_market_rationale: The feature is computed on BINANCE/ETH_USDT and predicts
+    GMO/ETH_JPY. The premise is that the venues price the same underlying, so a dislocation
+    in their ratio mean-reverts; the leading venue's move is informative because it
+    is the more liquid price discovery site, not merely correlated.

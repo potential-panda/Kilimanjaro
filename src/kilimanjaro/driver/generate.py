@@ -80,6 +80,45 @@ def _basis(a, b):
     return [(f"basis_{w}_z", f"zscore({a}_mid / {b}_mid, {w})") for w in (900, 3600)]
 
 
+def _vwap_dev(a):
+    # Price relative to the *trade-weighted* VWAP: distinct channel from the
+    # time-weighted ema reversion (_reversion) — VWAP is where volume actually
+    # traded, so this is a microstructure pressure signal, not a price-path one.
+    return [
+        (f"vwapdev_{w}s_z", f"zscore({a}_mid / {a}_ta_vwap_{w}s - 1, 1800)")
+        for w in (10, 60)
+    ]
+
+
+def _aggression(a):
+    # Count-based aggressor pressure: how many aggressors lean each way, and the
+    # buy/sell ratio (centred at 0 by subtracting 1). Different information from
+    # the qty-based net_flow/imbalance the orderflow family already uses — small
+    # informed orders show up in counts before they show up in size.
+    out = [
+        (f"aggcount_{w}s_z", f"zscore({a}_ta_imbalance_count_{w}s, 1800)")
+        for w in (10, 60)
+    ]
+    out += [
+        (f"bsratio_{w}s_z", f"zscore({a}_ta_buy_sell_ratio_{w}s - 1, 1800)")
+        for w in (30,)
+    ]
+    return out
+
+
+def _large_trade(a):
+    # Size-weighted informed flow: a big print in the flow direction. sign() takes
+    # the aggressor side, the zscored max trade size takes the conviction — the
+    # whale/informed-trader footprint, a channel neither price nor book carries.
+    return [
+        (
+            f"bigflow_{w}s_z",
+            f"sign({a}_ta_net_flow_{w}s) * zscore({a}_ta_max_trade_size_{w}s, 1800)",
+        )
+        for w in (5, 30)
+    ]
+
+
 # family: needs (feature group on the leader), cross (uses target mid too), build
 FAMILIES = [
     {"family": "momentum", "needs": "mid", "cross": False, "build": _momentum},
@@ -87,6 +126,11 @@ FAMILIES = [
     {"family": "obi", "needs": "obi", "cross": False, "build": _obi},
     {"family": "reversion", "needs": "mid", "cross": False, "build": _reversion},
     {"family": "basis", "needs": "mid", "cross": True, "build": _basis},
+    # Untapped TradeAggression channels — added to raise *effective* breadth
+    # (orthogonal to the price/book cluster), not just factor count.
+    {"family": "vwap_dev", "needs": "ta", "cross": False, "build": _vwap_dev},
+    {"family": "aggression", "needs": "ta", "cross": False, "build": _aggression},
+    {"family": "large_trade", "needs": "ta", "cross": False, "build": _large_trade},
 ]
 
 

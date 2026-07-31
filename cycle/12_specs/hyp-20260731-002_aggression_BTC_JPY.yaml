@@ -1,0 +1,38 @@
+hypothesis_id: hyp-20260731-002
+family: aggression
+mechanism: aggression signal from BINANCE/BTC_USDT predicting GMO/BTC_JPY
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+target:
+  exchange: GMO
+  symbol: BTC_JPY
+  execution_size: '0.01'
+return_calc: fixed_horizon
+expressions:
+- label: aggcount_10s_z
+  expr: zscore(a_ta_imbalance_count_10s, 1800)
+  invert: &id001
+  - false
+  - true
+- label: aggcount_60s_z
+  expr: zscore(a_ta_imbalance_count_60s, 1800)
+  invert: *id001
+- label: bsratio_30s_z
+  expr: zscore(a_ta_buy_sell_ratio_30s - 1, 1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300
