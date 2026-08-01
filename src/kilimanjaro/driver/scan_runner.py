@@ -286,9 +286,15 @@ def run_spec(
     min_n: int = 30,
     scan_name: str = "scan",
     on_result=None,
+    schedule=None,
 ) -> tuple[dict, Path, str]:
-    """Expression-scan flavour: build combos from a spec, run through the core."""
-    target, schedule = _target_and_schedule(spec)
+    """Expression-scan flavour: build combos from a spec, run through the core.
+
+    `schedule` overrides the spec's default venue schedule when given (e.g. to
+    restrict trading to specific JST hours) — otherwise the target's own venue
+    rules apply.
+    """
+    target, default_schedule = _target_and_schedule(spec)
     return run_grid_scan(
         build_combos(spec),
         target,
@@ -299,7 +305,7 @@ def run_spec(
         csv_fields=CSV_FIELDS,
         split=split,
         param_meta={"spec": spec},
-        schedule=schedule,
+        schedule=schedule if schedule is not None else default_schedule,
         gates=gates_for_spec(spec),
         costs_bps=spec.get("costs_bps"),
         rank_metric=rank_metric,

@@ -24,6 +24,7 @@ from pathlib import Path
 import yaml
 
 from kilimanjaro.framework import MarketConfig, default_split, write_csv
+from kilimanjaro.framework.schedule import ScheduleFilter
 
 _RESULTS = Path("cycle/13_results/blend")
 
@@ -41,6 +42,9 @@ def register(sub: argparse._SubParsersAction) -> None:
                         "episode sim (bid/ask, gate, cost) and report net PnL")
     p.add_argument("--min-weight", type=float, default=0.01,
                    help="Drop factors with |train IC| below this from the composite")
+    p.add_argument("--jst-hours", default=None,
+                   help="step-2 only: restrict trades to these JST hours "
+                        "(comma list, e.g. 22,23,0,1,2 for the US session)")
     p.add_argument("--out", default=None, help="Output dir (default under "
                    "cycle/13_results/blend/)")
     p.set_defaults(func=_run_blend)
@@ -103,11 +107,22 @@ def _run_step2(specs, factors, res, target, split, args, out_dir) -> None:
         min_abs_weight=args.min_weight, return_calc="episode",
     )
     n_terms = comp["expressions"][0]["expr"].count("*(")
+    schedule = None
+    hours_note = ""
+    if args.jst_hours:
+        allowed = {int(h) for h in args.jst_hours.split(",")}
+        blocked = [h for h in range(24) if h not in allowed]
+        schedule = ScheduleFilter(
+            block_weekday_hours=blocked, block_weekend_hours=blocked,
+            block_gmo_maintenance=True, name=f"jst_{args.jst_hours}",
+        )
+        hours_note = f", JST hours {sorted(allowed)} only"
     print(f"\n  step-2 sim: composite of {n_terms} factors (|IC| >= {args.min_weight}), "
-          f"episode + gate + cost, threshold sweep 1.5/2.5")
+          f"episode + gate + cost, threshold sweep 1.5/2.5{hours_note}")
     scan_res, s2_dir, _ = run_spec(
         comp, args.start, args.end,
         results_root=out_dir / "step2", split=split, scan_name="blend_step2",
+        schedule=schedule,
     )
     print(f"  {'thr':>4} {'ho_episodes':>12} {'ho_avg_net':>11} {'hit_net':>8} "
           f"{'ho_total_net':>13} {'sharpe':>7} {'dd_blk':>7}")
