@@ -151,10 +151,12 @@ def build_panel(
     for f in factors:
         try:
             fr = load_feature_frame(f.markets_dict, f.columns, start, end, data_root=data_root)
-        except ValueError:
-            # No data for this factor's columns in this window (e.g. BookChange
-            # is absent in the holdout months). Treat it as entirely silent — a
-            # NaN column, imputed neutral downstream — never crash the panel.
+        except Exception:  # noqa: BLE001
+            # This factor can't be built in this window — no rows (BookChange is
+            # absent in the holdout months) or a column its market lacks (some
+            # venues have no BookState best_mid). Treat it as entirely silent: a
+            # NaN column, imputed neutral downstream — never crash the whole blend
+            # for one factor.
             missing.append(f.name)
             continue
         val = eval_expr(f.expr, fr).to_numpy(dtype=float)
