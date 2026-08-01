@@ -1,0 +1,40 @@
+hypothesis_id: hyp-20260731-005
+family: flow_pressure
+mechanism: flow_pressure signal from BINANCE/XRP_USDT predicting GMO/XRP_SPOT
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: XRP_USDT
+    execution_size: '150'
+target:
+  exchange: GMO
+  symbol: XRP_SPOT
+  execution_size: '150'
+return_calc: fixed_horizon
+expressions:
+- label: vwapskew_60s_z
+  expr: zscore((a_ta_vwap_buy_60s - a_ta_vwap_sell_60s) / a_ta_vwap_60s, 1800)
+  invert: &id001
+  - false
+  - true
+- label: sizeasym_60s_z
+  expr: zscore(imbalance(a_ta_buy_qty_60s / a_ta_buy_count_60s, a_ta_sell_qty_60s
+    / a_ta_sell_count_60s), 1800)
+  invert: *id001
+- label: qtycountdiv_60s_z
+  expr: zscore(a_ta_buy_qty_60s / a_ta_total_qty_60s - a_ta_buy_count_60s / a_ta_total_count_60s,
+    1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

@@ -1,0 +1,39 @@
+hypothesis_id: hyp-20260714-002
+family: basis
+mechanism: basis signal from BINANCE/XRP_USDT predicting GMO/XRP_SPOT
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: XRP_USDT
+    execution_size: '150'
+  b:
+    exchange: GMO
+    symbol: XRP_SPOT
+    execution_size: '150'
+target:
+  exchange: GMO
+  symbol: XRP_SPOT
+  execution_size: '150'
+return_calc: fixed_horizon
+expressions:
+- label: basis_900_z
+  expr: zscore(a_mid / b_mid, 900)
+  invert: &id001
+  - false
+  - true
+- label: basis_3600_z
+  expr: zscore(a_mid / b_mid, 3600)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

@@ -1,0 +1,37 @@
+hypothesis_id: hyp-20260801-001
+family: breakout
+mechanism: breakout signal from BINANCE/XRP_USDT predicting GMO/XRP_SPOT
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: XRP_USDT
+    execution_size: '150'
+target:
+  exchange: GMO
+  symbol: XRP_SPOT
+  execution_size: '150'
+return_calc: fixed_horizon
+expressions:
+- label: donch_300s_z
+  expr: zscore(2 * (a_mid - roll_min(lag(a_mid, 1), 300)) / (roll_max(lag(a_mid, 1),
+    300) - roll_min(lag(a_mid, 1), 300) + 0.000001) - 1, 1800)
+  invert: &id001
+  - false
+  - true
+- label: donch_900s_z
+  expr: zscore(2 * (a_mid - roll_min(lag(a_mid, 1), 900)) / (roll_max(lag(a_mid, 1),
+    900) - roll_min(lag(a_mid, 1), 900) + 0.000001) - 1, 1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

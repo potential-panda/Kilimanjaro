@@ -39,6 +39,11 @@ PAIRS = [
     ("BINANCE", "BTC_USDT", "GMO", "BTC_JPY"),
     ("BINANCE", "XRP_USDT", "GMO", "XRP_JPY"),
     ("BINANCE", "ETH_USDT", "BITBANK", "ETH_SPOT"),
+    # GMO spot markets — tighter spreads than the JPY margin products (BTC_SPOT
+    # ~1.35 vs BTC_JPY ~2.33 bps), 0 taker fee, full history. The tighter-market
+    # lever for a taker (COINCHECK, also 0-fee, is data-blocked — only 7 days).
+    ("BINANCE", "BTC_USDT", "GMO", "BTC_SPOT"),
+    ("BINANCE", "XRP_USDT", "GMO", "XRP_SPOT"),
 ]
 
 # Shared sweep: the driver permutes these per generated formula.

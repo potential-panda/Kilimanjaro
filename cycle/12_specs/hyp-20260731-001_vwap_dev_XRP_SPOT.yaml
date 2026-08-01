@@ -1,0 +1,35 @@
+hypothesis_id: hyp-20260731-001
+family: vwap_dev
+mechanism: vwap_dev signal from BINANCE/XRP_USDT predicting GMO/XRP_SPOT
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: XRP_USDT
+    execution_size: '150'
+target:
+  exchange: GMO
+  symbol: XRP_SPOT
+  execution_size: '150'
+return_calc: fixed_horizon
+expressions:
+- label: vwapdev_10s_z
+  expr: zscore(a_mid / a_ta_vwap_10s - 1, 1800)
+  invert: &id001
+  - false
+  - true
+- label: vwapdev_60s_z
+  expr: zscore(a_mid / a_ta_vwap_60s - 1, 1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

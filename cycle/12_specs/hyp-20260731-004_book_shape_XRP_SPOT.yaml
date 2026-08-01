@@ -1,0 +1,35 @@
+hypothesis_id: hyp-20260731-004
+family: book_shape
+mechanism: book_shape signal from BINANCE/XRP_USDT predicting GMO/XRP_SPOT
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: XRP_USDT
+    execution_size: '150'
+target:
+  exchange: GMO
+  symbol: XRP_SPOT
+  execution_size: '150'
+return_calc: fixed_horizon
+expressions:
+- label: obigrad_k1_k5_z
+  expr: zscore(a_obi_k1 - a_obi_k5, 1800)
+  invert: &id001
+  - false
+  - true
+- label: obigrad_k1_k10_z
+  expr: zscore(a_obi_k1 - a_obi_k10, 1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

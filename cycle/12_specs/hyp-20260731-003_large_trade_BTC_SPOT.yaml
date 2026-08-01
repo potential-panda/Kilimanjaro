@@ -1,0 +1,35 @@
+hypothesis_id: hyp-20260731-003
+family: large_trade
+mechanism: large_trade signal from BINANCE/BTC_USDT predicting GMO/BTC_SPOT
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+target:
+  exchange: GMO
+  symbol: BTC_SPOT
+  execution_size: '0.002'
+return_calc: fixed_horizon
+expressions:
+- label: bigflow_5s_z
+  expr: sign(a_ta_net_flow_5s) * zscore(a_ta_max_trade_size_5s, 1800)
+  invert: &id001
+  - false
+  - true
+- label: bigflow_30s_z
+  expr: sign(a_ta_net_flow_30s) * zscore(a_ta_max_trade_size_30s, 1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300
