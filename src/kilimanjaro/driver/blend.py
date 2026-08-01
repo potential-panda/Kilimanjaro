@@ -200,6 +200,8 @@ def composite_spec(
     horizon: int,
     min_abs_weight: float = 0.01,
     return_calc: str = "episode",
+    barrier_bps: float = 5.0,
+    time_cap: int | None = None,
 ) -> dict:
     """Turn a fitted blend into a single tradeable spec: one ExpressionSignal
     whose formula is the IC-weighted sum of the factor expressions, wrapped in a
@@ -238,6 +240,9 @@ def composite_spec(
         "age_windows": [[None, None]],
         "horizons": [horizon],
         "max_holds": [None],
+        # triple_barrier params (ignored by other return_calcs)
+        "barriers": [barrier_bps],
+        "time_caps": [time_cap if time_cap is not None else horizon],
     }
 
 

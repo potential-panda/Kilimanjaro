@@ -172,3 +172,62 @@ class TestEpisodeReturn(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- Triple-barrier -------------------------------------------------------
+
+from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn  # noqa: E402
+
+# ticks every 1s at t=0..4; spread 2 (bid=mid-1, ask=mid+1)
+def _mp(mids):
+    mids = np.asarray(mids, dtype=float)
+    return TargetPrices(ts=np.arange(len(mids), dtype=float),
+                        bid=mids - 1.0, ask=mids + 1.0)
+
+
+class TestTripleBarrierReturn(unittest.TestCase):
+    def _compute(self, mids, rows, barrier_bps, time_cap):
+        with patch("kilimanjaro.return_calc.triple_barrier.load_target_prices",
+                   return_value=_mp(mids)):
+            return TripleBarrierReturn(barrier_bps=barrier_bps,
+                                       time_cap_seconds=time_cap).compute(
+                _signals(rows), TARGET, "2026-01-01", "2026-01-02")
+
+    def test_take_profit_exits_at_first_up_cross(self):
+        # barrier 100bps of entry mid 100 = 101; mid jumps to 105 at t=2
+        out = self._compute([100, 100.2, 105, 106, 107],
+                            [{"ts": 0.0, "direction": 1.0, "strength": 2.0}],
+                            barrier_bps=100, time_cap=100)
+        r = out.iloc[0]
+        self.assertEqual(r["entry_price"], 101.0)          # BUY enters ask@t0
+        self.assertEqual(r["exit_exec_ts"], 2.0)           # first mid >= 101
+        self.assertEqual(r["exit_price"], 104.0)           # BUY exits bid@t2
+        self.assertAlmostEqual(r["return_bps"], (104.0 - 101.0) / 101.0 * 1e4)
+        self.assertEqual(r["holding_seconds"], 2.0)
+
+    def test_stop_exits_at_first_down_cross(self):
+        # down barrier 99; mid drops to 94 at t=2
+        out = self._compute([100, 99.5, 94, 90, 90],
+                            [{"ts": 0.0, "direction": 1.0, "strength": 2.0}],
+                            barrier_bps=100, time_cap=100)
+        r = out.iloc[0]
+        self.assertEqual(r["exit_exec_ts"], 2.0)
+        self.assertEqual(r["exit_price"], 93.0)            # bid@t2
+        self.assertLess(r["return_bps"], 0)
+
+    def test_time_cap_when_no_barrier_hit(self):
+        # never moves +-1%; vertical barrier at t=3
+        out = self._compute([100, 100.1, 100.2, 100.3, 100.4],
+                            [{"ts": 0.0, "direction": 1.0, "strength": 2.0}],
+                            barrier_bps=100, time_cap=3)
+        r = out.iloc[0]
+        self.assertEqual(r["exit_exec_ts"], 3.0)           # capped, not t4
+        self.assertEqual(r["holding_seconds"], 3.0)
+
+    def test_non_overlapping_decimation_by_time_cap(self):
+        # two signals 1s apart, time_cap 3 -> second is inside the first's window
+        out = self._compute([100, 100, 100, 100, 100],
+                            [{"ts": 0.0, "direction": 1.0, "strength": 1.0},
+                             {"ts": 1.0, "direction": 1.0, "strength": 1.0}],
+                            barrier_bps=100, time_cap=3)
+        self.assertEqual(len(out), 1)                       # only the first kept

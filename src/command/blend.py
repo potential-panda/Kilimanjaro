@@ -45,6 +45,10 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--jst-hours", default=None,
                    help="step-2 only: restrict trades to these JST hours "
                         "(comma list, e.g. 22,23,0,1,2 for the US session)")
+    p.add_argument("--exit", default="episode", choices=["episode", "triple_barrier"],
+                   help="step-2 exit mechanism (default: episode)")
+    p.add_argument("--barrier-bps", type=float, default=5.0,
+                   help="triple_barrier: symmetric take-profit/stop distance (bps)")
     p.add_argument("--out", default=None, help="Output dir (default under "
                    "cycle/13_results/blend/)")
     p.set_defaults(func=_run_blend)
@@ -104,7 +108,8 @@ def _run_step2(specs, factors, res, target, split, args, out_dir) -> None:
     comp = composite_spec(
         specs, factors, weights,
         thresholds=[1.5, 2.5], horizon=args.horizon,
-        min_abs_weight=args.min_weight, return_calc="episode",
+        min_abs_weight=args.min_weight, return_calc=args.exit,
+        barrier_bps=args.barrier_bps, time_cap=args.horizon,
     )
     # Persist the composite as a spec so it can be re-examined later — e.g.
     #   cli.py learn --op return_dist --spec <out>/composite_spec.yaml ...
