@@ -10,6 +10,11 @@ Naming:
 - generated human-readable view: `hyp-YYYYMMDD-NNN.md` (generated from the
   YAML, never hand-edited, never the source of truth)
 
+Multi-file packages (e.g. a blend composite that needs a validation request, the
+composite spec, and a qate implementation guide) live in a **named subfolder**
+rather than a single top-level file — e.g. `blend-btc-jpy-us-z35/`. These are
+novel-mechanism handoffs outside the flip-based `build_backtest_env.py` flow.
+
 A handoff file may only be generated once a hypothesis has reached
 `backtest-approved` status in the ledger — generating it does not itself
 perform that approval. It describes the entry/exit rules, parameter grid,

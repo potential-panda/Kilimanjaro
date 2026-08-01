@@ -7,9 +7,9 @@ triple-barrier exit) and does **not** map onto the existing flip-based
 it in Himalaya/qate. The goal of the run is **calibration**: convert an
 *uncalibrated* scan edge into a trusted number, per `doc/calibration.md`.
 
-Machine-readable signal: `blend-btc-jpy-us-z35_composite.yaml` (the composite as a
-single-expression scan spec — the exact formula + weights are baked into
-`expressions[0].expr`).
+Machine-readable signal: `composite.yaml` (the composite as a single-expression
+scan spec — the exact formula + weights are baked into `expressions[0].expr`).
+Implementing it in qate: see `qate-implementation-guide.md` in this folder.
 
 ---
 
@@ -89,7 +89,7 @@ python src/cli.py blend --horizon 300 --step2 --exit triple_barrier --barrier-bp
 
 # signal-quality (time distribution, mid-to-mid) of the composite:
 python src/cli.py learn --op return_dist \
-    --spec cycle/15_handoffs/blend-btc-jpy-us-z35_composite.yaml \
+    --spec cycle/15_handoffs/blend-btc-jpy-us-z35/composite.yaml \
     --thresholds 1.0,1.5,2.5,3.5 --start 2025-07-01 --end 2026-06-30
 ```
 

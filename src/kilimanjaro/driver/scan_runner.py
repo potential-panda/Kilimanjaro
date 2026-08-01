@@ -256,7 +256,10 @@ def gates_for_spec(spec: dict, return_calc: str | None = None) -> list:
       - {window_seconds, threshold_bps, cooldown_seconds} -> custom params
     """
     rc = return_calc or spec.get("return_calc", "fixed_horizon")
-    if rc not in ("episode", "triple_barrier"):  # overlapping -> rolling-sum gate invalid
+    if rc not in (
+        "episode",
+        "triple_barrier",
+    ):  # overlapping -> rolling-sum gate invalid
         return []
     g = spec.get("drawdown_gate", True)
     if g is False:
