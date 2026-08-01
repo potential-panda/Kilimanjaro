@@ -1,0 +1,43 @@
+hypothesis_id: hyp-20260801-003
+family: liquidity
+mechanism: liquidity signal from BINANCE/ETH_USDT predicting GMO/ETH_JPY
+generated: true
+markets:
+  a:
+    exchange: BINANCE
+    symbol: ETH_USDT
+    execution_size: '0.1'
+target:
+  exchange: GMO
+  symbol: ETH_JPY
+  execution_size: '0.3'
+return_calc: fixed_horizon
+expressions:
+- label: pull_imb_k1_z
+  expr: zscore(imbalance(a_bc_pull_ask_rate_k1, a_bc_pull_bid_rate_k1), 1800)
+  invert: &id001
+  - false
+  - true
+- label: pull_imb_k5_z
+  expr: zscore(imbalance(a_bc_pull_ask_rate_k5, a_bc_pull_bid_rate_k5), 1800)
+  invert: *id001
+- label: ofi_k1_z
+  expr: zscore(imbalance(a_bc_delta_depth_bid_rate_k1, a_bc_delta_depth_ask_rate_k1),
+    1800)
+  invert: *id001
+- label: ofi_k5_z
+  expr: zscore(imbalance(a_bc_delta_depth_bid_rate_k5, a_bc_delta_depth_ask_rate_k5),
+    1800)
+  invert: *id001
+thresholds:
+- 1.5
+- 2.5
+age_windows:
+- - 0
+  - 60
+- - 0
+  - 300
+horizons:
+- 30
+- 120
+- 300

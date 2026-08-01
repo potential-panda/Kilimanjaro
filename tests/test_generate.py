@@ -16,7 +16,7 @@ from kilimanjaro.driver.validate import validate_scan_spec  # noqa: E402
 
 # a market that has everything (leader) and a target that has only mid
 _FULL = {"mid, spread_bps (execution_size=0.1)": {}, "obi (OBIFeature)": {},
-         "ta_* (TradeAggression)": {}, "bs_* (BookState)": {}}
+         "ta_* (TradeAggression)": {}, "bs_* (BookState)": {}, "bc_* (BookChange)": {}}
 _MID_ONLY = {"mid, spread_bps (execution_size=0.3)": {},
              "mid, spread_bps (execution_size=0.1)": {}}
 
@@ -86,9 +86,9 @@ class TestGenerate(unittest.TestCase):
     def test_generate_end_to_end_writes_queue(self):
         with tempfile.TemporaryDirectory() as tmp:
             q = Path(tmp) / "queue"
-            # one viable target x 11 families = 11 proposable ideas
+            # one viable target x 14 families = 14 proposable ideas
             paths = gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q])
-            self.assertEqual(len(paths), 11)
+            self.assertEqual(len(paths), 14)
             # exhausted: a second call dedups against what it wrote -> nothing new
             paths2 = gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q])
             self.assertEqual(paths2, [])
@@ -99,7 +99,7 @@ class TestGenerate(unittest.TestCase):
             first = gen.generate(q, limit=3, date_str="20260716", scan_dirs=[q])
             self.assertEqual(len(first), 3)          # first 3 families
             rest = gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q])
-            self.assertEqual(len(rest), 8)           # remaining 8, deduped
+            self.assertEqual(len(rest), 11)          # remaining 11, deduped
             self.assertEqual(gen.generate(q, limit=20, date_str="20260716", scan_dirs=[q]), [])
 
     def test_same_idea_on_many_markets_shares_one_hypothesis(self):

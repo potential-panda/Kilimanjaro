@@ -158,6 +158,55 @@ def _flow_pressure(a):
     ]
 
 
+def _breakout(a):
+    # Donchian channel position: where mid sits in its rolling [min,max], scaled
+    # to ~[-1,+1]; beyond ±1 = breaking out past the recent high/low. A momentum/
+    # big-move trigger (predicts moves that can clear a spread), distinct from the
+    # mean-based momentum family.
+    return [
+        (
+            f"donch_{w}s_z",
+            f"zscore(2 * ({a}_mid - roll_min(lag({a}_mid, 1), {w})) / "
+            f"(roll_max(lag({a}_mid, 1), {w}) - roll_min(lag({a}_mid, 1), {w}) "
+            f"+ 0.000001) - 1, 1800)",
+        )
+        for w in (300, 900)
+    ]
+
+
+def _vol_breakout(a):
+    # Directional volatility expansion: the recent move, scaled by how stretched
+    # realized vol is vs its norm. Fires hardest when a big move is underway — the
+    # taker's target regime (moves large enough to beat the spread).
+    return [
+        (
+            f"volmom_{w}s_z",
+            f"sign(ret({a}_mid, {w})) * zscore(roll_std(ret({a}_mid, 1), {w}), 1800)",
+        )
+        for w in (120, 300)
+    ]
+
+
+def _liquidity(a):
+    # BookChange order-book dynamics: liquidity vanishing / one-sided depth change
+    # precedes moves. pull imbalance (asks pulled vs bids) and OFI (bid depth
+    # growth vs ask growth) — signed; IC-weighting fixes direction.
+    return [
+        (
+            f"pull_imb_k{k}_z",
+            f"zscore(imbalance({a}_bc_pull_ask_rate_k{k}, {a}_bc_pull_bid_rate_k{k}), 1800)",
+        )
+        for k in (1, 5)
+    ] + [
+        (
+            f"ofi_k{k}_z",
+            f"zscore(imbalance({a}_bc_delta_depth_bid_rate_k{k}, "
+            f"{a}_bc_delta_depth_ask_rate_k{k}), 1800)",
+        )
+        for k in (1, 5)
+    ]
+
+
 def _microprice(a):
     # Microprice offset: (microprice - best mid) / best mid — the canonical
     # short-horizon microstructure predictor (price drifts toward the size-
@@ -192,6 +241,11 @@ FAMILIES = [
     {"family": "flow_pressure", "needs": "ta", "cross": False, "build": _flow_pressure},
     # Tier 2 — BookState channel (microprice), newly wired into the feature frame.
     {"family": "microprice", "needs": "bs", "cross": False, "build": _microprice},
+    # Big-move class — what a TAKER needs (moves that clear the spread), unlike
+    # the sub-spread directional microstructure above.
+    {"family": "breakout", "needs": "mid", "cross": False, "build": _breakout},
+    {"family": "vol_breakout", "needs": "mid", "cross": False, "build": _vol_breakout},
+    {"family": "liquidity", "needs": "bc", "cross": False, "build": _liquidity},
 ]
 
 
@@ -208,6 +262,7 @@ def _market_features(exchange: str, symbol: str, data_root: Path) -> dict:
         "has_obi": any("OBIFeature" in k for k in av),
         "has_ta": any("TradeAggression" in k for k in av),
         "has_bs": any("BookState" in k for k in av),
+        "has_bc": any("BookChange" in k for k in av),
     }
 
 
@@ -225,6 +280,7 @@ def _viable(fam: dict, lf: dict, tf: dict) -> bool:
         "ta": lf["has_ta"],
         "obi": lf["has_obi"],
         "bs": lf["has_bs"],
+        "bc": lf["has_bc"],
     }[fam["needs"]]
 
 

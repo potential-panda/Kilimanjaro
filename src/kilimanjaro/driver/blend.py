@@ -159,12 +159,12 @@ def build_panel(
     if not series:
         return pd.DataFrame()
 
-    # Inner-join on ts to a common time grid, but do NOT drop a row just because
-    # one factor is NaN there: a factor with no reading (e.g. buy/sell ratio in a
-    # second with no trades) must contribute 0 (neutral) in the blend, not delete
-    # the timestamp for every other factor. Only rows with no signal at all — every
-    # factor NaN — are dropped. (The forward return is required, dropped below.)
-    panel = pd.concat(series.values(), axis=1, join="inner")
+    # Outer-join on ts to the UNION grid: a factor with narrow coverage (e.g.
+    # BookChange spans only weeks) must not shrink the panel to its own span — it
+    # contributes 0 (neutral) where it is absent, not delete those timestamps for
+    # every other factor. A factor NaN anywhere is imputed neutral downstream; only
+    # rows where every factor is NaN are dropped. (fwd_ret is required, below.)
+    panel = pd.concat(series.values(), axis=1, join="outer").sort_index()
     names = [f.name for f in factors]
     panel = panel.dropna(how="all", subset=names)
     if panel.empty:
