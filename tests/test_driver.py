@@ -347,5 +347,69 @@ class TestProcessSpec(unittest.TestCase):
         self.assertFalse(self.ledger.exists())
 
 
+class TestMetaLabel(unittest.TestCase):
+    """Meta-labeling core: the ranking comparison + the LGBM fit."""
+
+    def _factors(self):
+        M = {"a": {"exchange": "BINANCE", "symbol": "ETH_USDT", "execution_size": "0.1"}}
+        specs = [
+            _spec_with("h1", M, [("f1", "a_mid"), ("f2", "ret(a_mid, 30)")]),
+            _spec_with("h2", M, [("g1", "a_obi_k1")]),
+        ]
+        return blend_mod.factors_from_specs(specs)
+
+    def test_factor_columns_and_feature_cols(self):
+        from kilimanjaro.driver import meta_label as ml
+        factors = self._factors()
+        cols = ml.factor_columns(factors)
+        self.assertEqual(list(cols), ["fac_00", "fac_01", "fac_02"])
+        feats = ml.feature_cols_for(factors)
+        self.assertEqual(feats[-3:], ["strength", "jst_hour", "jst_weekday"])
+        self.assertEqual(len(feats), 6)  # 3 factors + strength + 2 time cols
+
+    def test_compare_rankings_prefers_better_selector(self):
+        import numpy as np
+        import pandas as pd
+        from kilimanjaro.driver import meta_label as ml
+        # 100 trades. |strength| is uninformative (constant); the meta pred is
+        # perfectly aligned with net, so the meta ranking must dominate at every
+        # top-k budget (except the full pool where both take everything).
+        n = 100
+        net = np.linspace(-5, 5, n)
+        holdout = pd.DataFrame({"net_bps": net, "strength": np.ones(n)})
+        preds = net.copy()  # oracle ranking
+        rows = ml.compare_rankings(holdout, preds, fractions=(0.1, 0.5, 1.0))
+        by_frac = {r["frac"]: r for r in rows}
+        self.assertGreater(by_frac[0.1]["meta_total_net"], by_frac[0.1]["z_total_net"])
+        self.assertGreater(by_frac[0.5]["meta_total_net"], by_frac[0.5]["z_total_net"])
+        # whole pool: identical, both take all 100
+        self.assertAlmostEqual(
+            by_frac[1.0]["meta_total_net"], by_frac[1.0]["z_total_net"]
+        )
+
+    def test_fit_meta_learns_separable_signal(self):
+        import numpy as np
+        import pandas as pd
+        from kilimanjaro.driver import meta_label as ml
+        rng = np.random.default_rng(0)
+        n = 4000
+        # feature x drives the label; net > 0 exactly when x > 0. AUC should be ~1.
+        x = rng.normal(size=n)
+        ts = np.arange(n, dtype=float)
+        net = x + rng.normal(scale=0.1, size=n)
+        df = pd.DataFrame({
+            "ts": ts, "fac_00": x, "strength": rng.normal(size=n),
+            "jst_hour": rng.integers(0, 24, n), "jst_weekday": rng.integers(0, 7, n),
+            "net_bps": net, "label": (net > 0).astype(int),
+        })
+        train, holdout = df.iloc[:3000], df.iloc[3000:].reset_index(drop=True)
+        feats = ["fac_00", "strength", "jst_hour", "jst_weekday"]
+        fit = ml.fit_meta(train, holdout, feats)
+        self.assertGreater(fit["holdout_auc"], 0.9)
+        self.assertEqual(len(fit["preds"]), len(holdout))
+        # fac_00 must be the top feature by gain
+        self.assertEqual(fit["importances"][0][0], "fac_00")
+
+
 if __name__ == "__main__":
     unittest.main()
