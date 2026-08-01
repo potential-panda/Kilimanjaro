@@ -1,0 +1,44 @@
+hypothesis_id: blend-composite
+family: blend
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+  b:
+    exchange: GMO
+    symbol: BTC_JPY
+    execution_size: '0.01'
+target:
+  exchange: GMO
+  symbol: BTC_JPY
+  execution_size: '0.01'
+return_calc: triple_barrier
+expressions:
+- label: blend
+  expr: zscore(0.028334*(zscore(a_mid / b_mid, 900)) + 0.017288*(zscore(a_mid / b_mid,
+    3600)) + 0.022945*(zscore(ret(a_mid, 30), 1800)) + 0.012110*(zscore(ret(a_mid,
+    120), 1800)) + 0.014256*(zscore(ret(a_mid, 300), 1800)) + 0.012885*(zscore(a_obi_ema_k1_30s,
+    1800)) + 0.010498*(zscore(a_obi_ema_k1_120s, 1800)) + 0.012671*(zscore(a_obi_ema_k5_30s,
+    1800)) + 0.033593*(zscore(a_ta_imbalance_qty_5s, 1800)) + 0.016954*(zscore(a_ta_imbalance_qty_30s,
+    1800)) + 0.018265*(zscore(a_ta_net_flow_10s, 1800)) + 0.040650*(zscore(a_mid /
+    a_ta_vwap_10s - 1, 1800)) + 0.022557*(zscore(a_mid / a_ta_vwap_60s - 1, 1800))
+    + 0.036974*(zscore(a_ta_imbalance_count_10s, 1800)) + 0.016863*(zscore(a_ta_imbalance_count_60s,
+    1800)) + -0.010421*(sign(a_ta_net_flow_30s) * zscore(a_ta_max_trade_size_30s,
+    1800)) + -0.012789*(zscore(a_obi_k1 - a_obi_k5, 1800)) + 0.052977*(zscore(a_bs_weighted_imb_k1,
+    1800)) + 0.054746*(zscore(a_bs_weighted_imb_k5, 1800)), 1800)
+  invert:
+  - false
+thresholds:
+- 3.5
+age_windows:
+- - null
+  - null
+horizons:
+- 300
+max_holds:
+- null
+barriers:
+- 10.0
+time_caps:
+- 300
