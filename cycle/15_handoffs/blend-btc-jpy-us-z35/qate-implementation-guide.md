@@ -45,10 +45,32 @@ signal live from the tick stream (Section 2). Precompute is replay-only.
 
 ## 2. Full streaming port (for prod)
 
+### Reference strategies to follow
+
+Three existing strategies are the patterns to copy — read them before writing code:
+
+1. **corvus** — `potential-panda-core/src/qate/strategy/corvus/` (`config.py`,
+   `v1.py`). The **minimal complete `Strategy`**: the smallest working shape to
+   start from (config + a single version).
+2. **pisces** — `potential-panda-core/src/qate/strategy/pisces/` (`source.py`,
+   `schedule.py`, `adjust_inventory.py`, `v1.py`/`v2.py`, `DESIGN.md`). A **fuller
+   example**: how to source features (`source.py`), how to do **time-of-day
+   scheduling** (`schedule.py` — directly relevant to our JST-hours filter),
+   inventory handling, and multi-version layout with a design doc.
+3. **orion** — `potential-panda-orion/src/orion/` (`schedule.py`, `risk.py`,
+   `circuit_breaker.py`, `regime.py`, `template.py`, `v1.py`…`v6*.py`). The
+   flagship **taker** strategy — the same execution style this edge targets — and
+   the reference for **production concerns**: scheduling, risk / circuit-breaker
+   (the live drawdown-gate analogue), regime handling, and versioned variants.
+
+Suggested mapping: start from **corvus** for the skeleton, take **pisces**'s
+`source.py`/`schedule.py` patterns for feature sourcing + the JST-hours filter, and
+follow **orion** for the taker execution + risk/circuit-breaker wiring.
+
 ### 2.1 Strategy skeleton
 
-Subclass `qate.trading.strategy.Strategy` (template: `qate/strategy/vineyard/
-margaux.py`, `penfolds.py`). You receive **both markets'** streams — BINANCE
+Subclass `qate.trading.strategy.Strategy` (skeleton: **corvus**; fuller patterns:
+**pisces**, **orion** — see above). You receive **both markets'** streams — BINANCE
 BTC_USDT (leader, alias `a`) and GMO BTC_JPY (target/execution, alias `b`):
 
 ```python
