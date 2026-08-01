@@ -73,6 +73,29 @@ were the *best* days).
 
 ---
 
+## Second execution venue — COINCHECK BTC_SPOT (blocked on data backfill)
+
+COINCHECK BTC_SPOT is the tightest JPY-BTC market available (median spread **1.81
+bps**, vs GMO BTC_JPY 2.33). It is wired as a drop-in *execution/basis* variant of
+the same edge — the signal is unchanged (all 19 factors on the BINANCE leader); only
+the `b` leg and target are swapped. COINCHECK has **MarketPrice only** (no OBI /
+TradeAggression / BookState), so it can never be a signal source, only execution —
+which is all this composite needs from `b` (`b_mid`).
+
+- Spec: `composite_coincheck.yaml` (this folder).
+- Runner: `run_coincheck.py` (this folder) — one command, mirrors the GMO US-hours
+  run (JST 22,23,0,1,2), both exits, z=3.5/4.5.
+
+**Status: BLOCKED ON DATA.** As of 2026-08-02 only 7 days of COINCHECK MarketPrice
+exist (2026-05-25 … 05-31) — a smoke test with no statistical power. The 7-day
+smoke run reproduces the *shape* (only the z≥3.5 tail is net-positive; the tighter
+spread does **not** rescue the low-z zone — consistent with edge/spread coupling)
+but nothing more. **To validate: backfill BTC_SPOT MarketPrice across train
+(2025-07-01 … 2026-02-28) and holdout (2026-03-01 … 2026-06-30)**, then run
+`run_coincheck.py`. OBI/TradeAggression/BookState are NOT needed for COINCHECK.
+
+---
+
 ## Reproduce the scan numbers
 
 ```bash
