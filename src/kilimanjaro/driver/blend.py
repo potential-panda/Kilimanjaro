@@ -144,17 +144,21 @@ def build_panel(
 
     Returns a DataFrame [ts, <factor.name> ..., fwd_ret]; empty if no overlap.
     """
-    series: dict[str, pd.Series] = {}
-    ts_ref: pd.Series | None = None
-    for f in factors:
-        frame = f.markets_dict  # load per factor (frame cache shares loads)
-        from kilimanjaro.data.feature_frame import load_feature_frame
+    from kilimanjaro.data.feature_frame import load_feature_frame
 
-        fr = load_feature_frame(frame, f.columns, start, end, data_root=data_root)
+    series: dict[str, pd.Series] = {}
+    missing: list[str] = []
+    for f in factors:
+        try:
+            fr = load_feature_frame(f.markets_dict, f.columns, start, end, data_root=data_root)
+        except ValueError:
+            # No data for this factor's columns in this window (e.g. BookChange
+            # is absent in the holdout months). Treat it as entirely silent — a
+            # NaN column, imputed neutral downstream — never crash the panel.
+            missing.append(f.name)
+            continue
         val = eval_expr(f.expr, fr).to_numpy(dtype=float)
-        s = pd.Series(val, index=fr["ts"].to_numpy(), name=f.name)
-        series[f.name] = s
-        ts_ref = s.index if ts_ref is None else ts_ref
+        series[f.name] = pd.Series(val, index=fr["ts"].to_numpy(), name=f.name)
 
     if not series:
         return pd.DataFrame()
@@ -165,6 +169,8 @@ def build_panel(
     # every other factor. A factor NaN anywhere is imputed neutral downstream; only
     # rows where every factor is NaN are dropped. (fwd_ret is required, below.)
     panel = pd.concat(series.values(), axis=1, join="outer").sort_index()
+    for name in missing:  # absent-in-window factors: all-neutral columns
+        panel[name] = np.nan
     names = [f.name for f in factors]
     panel = panel.dropna(how="all", subset=names)
     if panel.empty:
