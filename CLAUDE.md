@@ -87,7 +87,11 @@ is rank stability across the train/holdout split, never in-sample p-values.
 The OBI age-distribution diagnostic that `grid obi` used to bundle is now the
 signal-agnostic `cli.py learn --op age --spec ... --start ... --end ...` — it
 measures a *property of the signal* (how long threshold-crossing episodes last),
-not an edge, so it is a `learn` op, not a scan. More ops slot in beside `age`.
+not an edge, so it is a `learn` op, not a scan. A second op,
+`learn --op return_dist`, measures the **time distribution** of a signal's
+mid-to-mid directional returns (positive-day/month share, single-day and top-10
+concentration) — the "is the edge broad or event-driven?" check
+(`doc/return-distribution-verification.md`). More ops slot in beside them.
 
 ## Repo layout
 

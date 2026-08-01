@@ -106,6 +106,11 @@ def _run_step2(specs, factors, res, target, split, args, out_dir) -> None:
         thresholds=[1.5, 2.5], horizon=args.horizon,
         min_abs_weight=args.min_weight, return_calc="episode",
     )
+    # Persist the composite as a spec so it can be re-examined later — e.g.
+    #   cli.py learn --op return_dist --spec <out>/composite_spec.yaml ...
+    import yaml
+    (out_dir / "composite_spec.yaml").write_text(yaml.safe_dump(comp, sort_keys=False))
+
     n_terms = comp["expressions"][0]["expr"].count("*(")
     schedule = None
     hours_note = ""
