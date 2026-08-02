@@ -6,15 +6,13 @@
 # so it can never be a signal source — it is execution + basis (`b_mid`) only, which
 # MarketPrice provides. See validation-request.md for the mechanism and caveats.
 #
-# Rationale: COINCHECK BTC_SPOT median spread ~1.81 bps is the tightest JPY-BTC market
-# available (GMO BTC_JPY is 2.33). The edge/spread coupling finding says tighter is not
-# automatically better, so this is a comparison venue for the SAME edge, not a new one.
-#
-# BLOCKED ON DATA: as of 2026-08-02 only 7 days of COINCHECK MarketPrice exist
-# (2026-05-25 .. 05-31) — a smoke test only, no verdict power. Backfill BTC_SPOT
-# MarketPrice across the train (2025-07-01 .. 2026-02-28) and holdout
-# (2026-03-01 .. 2026-06-30) windows before running this for real. OBI/TradeAggression/
-# BookState are NOT needed for COINCHECK (execution-only); MarketPrice is enough.
+# RESULT (full year, 2026-08-02): COINCHECK BTC_SPOT is the BEST venue found —
+# ~2x GMO BTC_JPY, 12/12 months positive. Holdout US-hours: episode z=3.5 +3.03 /
+# z=4.5 +3.93; triple-barrier X=10 +3.19/+4.47. See validation-request.md. Median
+# spread 1.80 bps (1.90 US hrs) vs GMO BTC_JPY 2.33; COINCHECK's retail flow gives
+# high edge AND acceptable spread, overturning the "tighter spot = worse" prior.
+# Weights below are GMO-fit (basis leg slightly mis-weighted) → this is a floor.
+# OBI/TradeAggression/BookState NOT needed for COINCHECK (execution-only).
 hypothesis_id: blend-composite-coincheck
 family: blend
 markets:

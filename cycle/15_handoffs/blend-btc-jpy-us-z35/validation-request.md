@@ -73,26 +73,43 @@ were the *best* days).
 
 ---
 
-## Second execution venue — COINCHECK BTC_SPOT (blocked on data backfill)
+## COINCHECK BTC_SPOT — the BEST venue found (validated on full year, 2026-08-02)
 
-COINCHECK BTC_SPOT is the tightest JPY-BTC market available (median spread **1.81
-bps**, vs GMO BTC_JPY 2.33). It is wired as a drop-in *execution/basis* variant of
-the same edge — the signal is unchanged (all 19 factors on the BINANCE leader); only
-the `b` leg and target are swapped. COINCHECK has **MarketPrice only** (no OBI /
-TradeAggression / BookState), so it can never be a signal source, only execution —
-which is all this composite needs from `b` (`b_mid`).
+**COINCHECK BTC_SPOT beats GMO BTC_JPY by ~2× and should be the PRIMARY Himalaya
+target.** After the full-year backfill (388 days, 2025-07-01 … 2026-07-31; median
+spread 1.80 bps / 1.90 in US hours, vs GMO BTC_JPY 2.33), the identical composite
+(BINANCE-leader signal, only the `b`/target leg swapped to COINCHECK) run US-hours
+through the same episode + drawdown-gate + cost machinery gives, on the **holdout**:
 
-- Spec: `composite_coincheck.yaml` (this folder).
-- Runner: `run_coincheck.py` (this folder) — one command, mirrors the GMO US-hours
-  run (JST 22,23,0,1,2), both exits, z=3.5/4.5.
+| exit | z=3.5 | z=4.5 | months + |
+|---|---|---|---|
+| episode | **+3.03** (n=1347, hit 0.77) | **+3.93** (n=375) | 12/12 |
+| triple-barrier X=10 | **+3.19** | **+4.47** | 12/12 |
+| triple-barrier X=20 | **+4.29** | **+5.08** | 12/12 |
 
-**Status: BLOCKED ON DATA.** As of 2026-08-02 only 7 days of COINCHECK MarketPrice
-exist (2026-05-25 … 05-31) — a smoke test with no statistical power. The 7-day
-smoke run reproduces the *shape* (only the z≥3.5 tail is net-positive; the tighter
-spread does **not** rescue the low-z zone — consistent with edge/spread coupling)
-but nothing more. **To validate: backfill BTC_SPOT MarketPrice across train
-(2025-07-01 … 2026-02-28) and holdout (2026-03-01 … 2026-06-30)**, then run
-`run_coincheck.py`. OBI/TradeAggression/BookState are NOT needed for COINCHECK.
+Compare GMO BTC_JPY: episode +1.38/+1.98, TB X=10 +1.99/+3.06, 11/12 months. Every
+COINCHECK config is **12/12 months positive** (weakest month 2025-09, still ≥0),
+train and holdout both positive — a stronger and more consistent edge.
+
+**This overturns the "tighter spot market = efficient = worse" prior.** GMO
+BTC_SPOT (spread 1.35) was *worse* than BTC_JPY; COINCHECK BTC_SPOT (1.80) is far
+*better*. COINCHECK is Japan's retail app-dominated exchange — dumb, exploitable
+flow AND a moderate spread — so it has high edge *and* an acceptable spread,
+breaking the edge/spread coupling in our favour. (Note the composite weights are
+GMO-fit, not re-tuned for COINCHECK — the basis leg is therefore slightly
+mis-weighted, so this is if anything a floor; refitting could do better.)
+
+- Spec: `composite_coincheck.yaml` (this folder). Signal unchanged; only `b` +
+  target = COINCHECK/BTC_SPOT/0.002. COINCHECK has **MarketPrice only**, which is
+  all the composite needs from `b` (`b_mid`) — it is execution-only, never a
+  signal source.
+- Runner: `run_coincheck.py` — one command, mirrors the GMO US-hours run.
+- Results: `cycle/13_results/blend/coincheck_us/`.
+
+**Must confirm before promotion:** COINCHECK BTC_SPOT taker fee. These nets assume
+0-fee taker (only the flat 1 bp latency slippage) — the repo's venue note lists
+COINCHECK BTC/ETH/XRP_SPOT as 0-fee, but re-verify: a non-zero taker fee subtracts
+directly from every per-trade net above.
 
 ---
 
