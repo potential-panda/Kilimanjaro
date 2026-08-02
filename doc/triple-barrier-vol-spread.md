@@ -187,6 +187,36 @@ the "just widen the barrier" read from avg-net alone:
   drawdown cost a wide *fixed* barrier incurs in quiet periods. That is exactly
   what §5c builds and must beat: the ±10 baseline of Sharpe ≈ 11–14, Martin ≈ 325–406.
 
+## 5c. Vol-scaled barrier, built and tested — does NOT robustly beat fixed ±10
+
+Built `VolScaledTripleBarrierReturn` (`return_calc: vol_triple_barrier`): per-entry
+barrier = max(k·σ_T, cost_floor), σ_T = causal trailing 1s realized-vol scaled to
+the horizon. Compared to fixed ±10/±20 on COINCHECK, z=3.5, US hours, cost_floor 3
+bps, k∈{1..3}, train + holdout (risk-adjusted, per-trade net curve):
+
+| | fixed ±10 | vol k=1 (b~10–12) | vol k=2 (b~21–24) |
+|---|---|---|---|
+| **Sharpe** train / holdout | **11.2 / 14.4** | 9.1 / 14.5 | 7.4 / 12.8 |
+| martin train / holdout | 405 / 325 | 255 / **704** | 156 / 564 |
+| max_dd train / holdout | 65 / 130 | 124 / 86 | 146 / 73 |
+
+**Verdict: the same window-instability, no robust win.** Vol-scaling is *better on
+holdout* (k=1: Sharpe 14.5 vs 14.4, Martin 704 vs 325, lower DD) but *worse on
+train* (Sharpe 9.1 vs 11.2, deeper DD) — the ranking flips between windows exactly as
+the fixed-barrier width did. On the more stable metric (Sharpe) **fixed ±10 is best
+on train and tied on holdout**, so it remains the robust default; the adaptive
+barrier does not earn its added complexity here. (Martin/Calmar swing wildly because
+max-DD is a single-episode number — do not rank on them across windows.)
+
+Interpretation: k=1 has ~the same *median* barrier as fixed ±10 but *redistributes*
+it (wider in high vol, tighter in low vol). That redistribution helped in the
+holdout regime and hurt in the train regime — i.e. the local vol estimate was only
+sometimes informative about which trades run. This is conditional on the vol
+estimate used (1s realized vol, 1800 s lookback); a different σ could differ, but we
+deliberately did **not** grid-search it (that would just overfit the exit). The
+mechanism is built, tested, and available (`vol_triple_barrier`) if a future signal
+has a stronger vol→continuation link; for the current edge, **fixed ±10 stands**.
+
 ## 6. Priority / perspective
 
 Keep the reshaping in perspective. Widening the barrier ±10→±20 bps changed total
