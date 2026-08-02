@@ -244,7 +244,19 @@ EXIT_MODE_FIELDS = [
     "avg_net_timeout",
     "avg_net_barrier",
     "win_rate_net",
+    # Risk-adjusted (path metrics on the per-trade net equity curve) — the check
+    # that avg-net rising with barrier width is real, not just concentration.
+    "total_net_bps",
+    "sharpe_daily",
+    "sortino_daily",
+    "calmar",
+    "martin",
+    "max_dd_bps",
 ]
+
+_PATH_KEYS = (
+    "total_net_bps", "sharpe_daily", "sortino_daily", "calmar", "martin", "max_dd_bps",
+)
 
 
 def exit_mode_distribution(label: str, trades, barrier_bps: float, time_cap: int) -> dict:
@@ -271,6 +283,7 @@ def exit_mode_distribution(label: str, trades, barrier_bps: float, time_cap: int
         "hold_p75_s": None, "hold_p90_s": None,
         "avg_net_all": None, "avg_net_timeout": None, "avg_net_barrier": None,
         "win_rate_net": None,
+        **{k: None for k in _PATH_KEYS},
     }
     if n == 0:
         return empty
@@ -286,6 +299,15 @@ def exit_mode_distribution(label: str, trades, barrier_bps: float, time_cap: int
     is_stop = is_barrier & (ret <= 0)
     pct = lambda m: round(float(m.mean()) * 100, 1)  # noqa: E731
     avg = lambda m: (round(float(net[m].mean()), 3) if m.any() else None)  # noqa: E731
+
+    # Risk-adjusted path metrics on the per-trade net equity curve (bucketed by
+    # JST day). Concentration (few big winners) shows up here as lumpy daily
+    # returns -> lower Sharpe/Martin and deeper drawdown, even when avg_net is high.
+    from kilimanjaro.framework.performance import compute_path_metrics
+
+    path = compute_path_metrics(net, trades["ts"].to_numpy(dtype=float))
+    rnd = lambda v: (round(float(v), 3) if v == v else None)  # NaN -> None  # noqa: E731
+
     return {
         "expr": label,
         "threshold": None,  # filled by caller
@@ -305,6 +327,7 @@ def exit_mode_distribution(label: str, trades, barrier_bps: float, time_cap: int
         "avg_net_timeout": avg(is_timeout),
         "avg_net_barrier": avg(is_barrier),
         "win_rate_net": round(float((net > 0).mean()), 3),
+        **{k: rnd(path[k]) for k in _PATH_KEYS},
     }
 
 

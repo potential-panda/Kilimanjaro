@@ -158,10 +158,34 @@ Three findings:
    vol-scaling — ±10 is too tight for the high-vol US session it trades in.
 3. **But wider = concentration + variance risk.** At ±40, 87% of trades time out
    near breakeven and ~13% carry all the P&L; hold_p50 = 300 s means it is really a
-   fixed-horizon hold with an occasional early stop. Higher *avg* net is not
-   necessarily higher *risk-adjusted* net — the next step is **Sharpe/drawdown by
-   barrier**, not avg-net alone, before choosing a wider fixed barrier (or the
-   vol-scaled rule, which widens only when vol justifies it).
+   fixed-horizon hold with an occasional early stop.
+
+### Risk-adjusted (Sharpe / Martin / max-DD by barrier) — the avg-net gain does NOT survive
+
+`exit_mode` now also reports path metrics on the per-trade net curve. This overturns
+the "just widen the barrier" read from avg-net alone:
+
+| | z=3.5 ±10 | ±20 | ±40 |
+|---|---|---|---|
+| avg_net | 3.09 / 3.19 | 3.52 / 4.29 | 3.74 / 4.90 |
+| **sharpe** (train/holdout) | **11.2 / 14.4** | 9.4 / 13.3 | 7.7 / 12.7 |
+| max_dd bps (train/holdout) | **65 / 130** | 172 / 68 | 185 / 92 |
+| martin (train/holdout) | 406 / 325 | 142 / 486 | 138 / 517 |
+
+- **±10 has the best Sharpe in *both* windows** (train 11.2, holdout 14.4) and the
+  lowest drawdown on train. Widening raises *total* net but **lowers Sharpe** and
+  (on train) roughly triples max-DD — you are paid for taking concentration risk,
+  not harvesting free edge.
+- **The risk-adjusted optimum is unstable across windows:** train ranks ±10 best on
+  every ratio; holdout's Martin/Calmar peak in the mid-range (±20–30, because DD
+  happened to be lower there that window). That instability is itself the verdict —
+  **don't over-tune a fixed barrier.** ±10 is the robust, simplest choice
+  (best Sharpe both windows); ±15–20 a defensible middle.
+- This *reinforces* the vol-scaling case: a fixed barrier's best width is
+  window-dependent, whereas a barrier that widens **only when local vol justifies
+  it** can chase the big-move runs (the avg-net upside) without paying the blanket
+  drawdown cost a wide *fixed* barrier incurs in quiet periods. That is exactly
+  what §5c builds and must beat: the ±10 baseline of Sharpe ≈ 11–14, Martin ≈ 325–406.
 
 ## 6. Priority / perspective
 

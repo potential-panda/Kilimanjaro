@@ -117,17 +117,18 @@ def _run_learn(args: argparse.Namespace) -> int:
         out_path = out_dir / "exit_mode.csv"
         write_csv(rows, out_path, lm.EXIT_MODE_FIELDS)
         hrs = f" | JST {sorted(jst_hours)}" if jst_hours else ""
-        print(f"learn exit_mode: {stem}{hrs} — barrier vs time-cap exit split")
-        print(f"  {'thr':>4} {'barr':>5} {'cap':>5} {'n':>6} {'%tout':>6} "
-              f"{'%barr':>6} {'%tp':>5} {'%stop':>6} {'hold_p50':>8} "
-              f"{'net_tout':>8} {'net_barr':>8} {'net_all':>7}")
+        print(f"learn exit_mode: {stem}{hrs} — barrier vs time-cap exit split "
+              f"+ risk-adjusted (martin/sharpe/DD on the per-trade net curve)")
+        print(f"  {'thr':>4} {'barr':>5} {'n':>6} {'%barr':>6} {'%tp':>5} "
+              f"{'hold_p50':>8} {'net_all':>7} {'total':>8} {'sharpe':>7} "
+              f"{'martin':>7} {'calmar':>7} {'max_dd':>8}")
         for r in rows:
-            print(f"  {r['threshold']:>4} {r['barrier_bps']:>5} {r['time_cap_s']:>5} "
-                  f"{r['n_trades']:>6} {_fmt(r['pct_timeout']):>6} "
+            print(f"  {r['threshold']:>4} {r['barrier_bps']:>5} {r['n_trades']:>6} "
                   f"{_fmt(r['pct_barrier']):>6} {_fmt(r['pct_tp']):>5} "
-                  f"{_fmt(r['pct_stop']):>6} {_fmt(r['hold_p50_s']):>8} "
-                  f"{_fmt(r['avg_net_timeout']):>8} {_fmt(r['avg_net_barrier']):>8} "
-                  f"{_fmt(r['avg_net_all']):>7}")
+                  f"{_fmt(r['hold_p50_s']):>8} {_fmt(r['avg_net_all']):>7} "
+                  f"{_fmt(r['total_net_bps']):>8} {_fmt(r['sharpe_daily']):>7} "
+                  f"{_fmt(r['martin']):>7} {_fmt(r['calmar']):>7} "
+                  f"{_fmt(r['max_dd_bps']):>8}")
         print(f"  -> {out_path}")
         return 0
 
