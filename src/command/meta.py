@@ -44,6 +44,10 @@ def register(sub: argparse._SubParsersAction) -> None:
                    help="Triple-barrier symmetric take-profit/stop (bps)")
     p.add_argument("--time-cap", type=int, default=300,
                    help="Triple-barrier vertical barrier / non-overlap spacing (s)")
+    p.add_argument("--objective", default="classify",
+                   choices=["classify", "regress"],
+                   help="classify (v1: P(net>0), optimizes hit count) or "
+                        "regress (v2: predict net_bps, magnitude-aware)")
     p.add_argument("--min-weight", type=float, default=0.01,
                    help="Drop factors with |train IC| below this from the composite")
     p.add_argument("--jst-hours", default=None,
@@ -114,10 +118,18 @@ def _run_meta(args: argparse.Namespace) -> int:
 
     # 3. Fit + score.
     feature_cols = feature_cols_for(factors)
-    fit = fit_meta(train_tbl, holdout_tbl, feature_cols)
-    print(f"  LGBM: best_iter={fit['best_iteration']} "
-          f"val_auc={fit['val_auc']:.4f} holdout_auc={fit['holdout_auc']:.4f}  "
-          f"(0.5 = no separation)")
+    fit = fit_meta(train_tbl, holdout_tbl, feature_cols, objective=args.objective)
+    if args.objective == "classify":
+        print(f"  LGBM classify: best_iter={fit['best_iteration']} "
+              f"val_auc={fit['val_auc']:.4f} holdout_auc={fit['holdout_auc']:.4f}  "
+              f"(0.5 = no separation)")
+        nat_cut = 0.5
+    else:
+        print(f"  LGBM regress: best_iter={fit['best_iteration']} "
+              f"val_rank_ic={fit['val_rank_ic']:.4f} "
+              f"holdout_rank_ic={fit['holdout_rank_ic']:.4f} "
+              f"holdout_ic={fit['holdout_ic']:.4f}  (0 = no ranking skill)")
+        nat_cut = 0.0
 
     # 4. The verdict: meta ranking vs |z| ranking at matched trade counts.
     rows = compare_rankings(holdout_tbl, fit["preds"])
@@ -131,8 +143,9 @@ def _run_meta(args: argparse.Namespace) -> int:
               f"{r['meta_avg_net']:>8.3f} {r['meta_total_net']:>10.1f} "
               f"{r['meta_hit']:>8.3f} | {win:>4}")
 
-    nop = natural_operating_point(holdout_tbl, fit["preds"])
-    print(f"\n  meta natural cut (P>=0.5): takes {nop['meta_n']}/{nop['pool_n']} "
+    nop = natural_operating_point(holdout_tbl, fit["preds"], cut=nat_cut)
+    cut_label = "P>=0.5" if args.objective == "classify" else "pred_net>=0"
+    print(f"\n  meta natural cut ({cut_label}): takes {nop['meta_n']}/{nop['pool_n']} "
           f"trades, avg_net {nop['meta_avg_net']:.3f} (pool avg {nop['pool_avg_net']:.3f}), "
           f"total {nop['meta_total_net']:.1f} (pool {nop['pool_total_net']:.1f})")
 
@@ -143,7 +156,8 @@ def _run_meta(args: argparse.Namespace) -> int:
 
     # 5. Persist.
     out_dir = Path(args.out) if args.out else (
-        _RESULTS / f"{t['symbol']}_{args.start}_{args.end}_z{args.primary_threshold}"
+        _RESULTS
+        / f"{t['symbol']}_{args.start}_{args.end}_z{args.primary_threshold}_{args.objective}"
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     write_csv(rows, out_dir / "ranking_compare.csv", list(rows[0].keys()))

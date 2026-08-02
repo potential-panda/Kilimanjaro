@@ -120,28 +120,45 @@ def feature_cols_for(factors: list[Factor]) -> list[str]:
     return list(factor_columns(factors)) + ["strength", "jst_hour", "jst_weekday"]
 
 
+def _rank_ic(pred: np.ndarray, actual: np.ndarray) -> float:
+    """Spearman rank correlation, computed as Pearson over ranks (no scipy)."""
+    if len(pred) < 3:
+        return float("nan")
+    rp = pd.Series(pred).rank().to_numpy()
+    ra = pd.Series(actual).rank().to_numpy()
+    if np.std(rp) == 0 or np.std(ra) == 0:
+        return float("nan")
+    return float(np.corrcoef(rp, ra)[0, 1])
+
+
 def fit_meta(
     train: pd.DataFrame,
     holdout: pd.DataFrame,
     feature_cols: list[str],
     *,
+    objective: str = "classify",
     seed: int = 0,
 ) -> dict:
-    """Fit a heavily-regularized LGBM meta-classifier (predict P(profitable)) on
-    train, early-stopping on a time-separated tail of train, and score holdout.
+    """Fit a heavily-regularized LGBM meta-model on train, early-stopping on a
+    time-separated tail of train, and score holdout.
 
-    Returns preds (holdout P(profitable)), holdout/val AUC, importances. Falls
-    back to a fixed small n_estimators when a validation fold is single-class
-    (early stopping needs both classes)."""
+    objective:
+      "classify" (v1) — LGBMClassifier on the binary net>0 label; ranks trades by
+        P(profitable). Optimizes hit COUNT, not PnL — a big winner counts the same
+        as a tiny one.
+      "regress" (v2) — LGBMRegressor on net_bps with a robust L1 objective; ranks
+        trades by EXPECTED net return. Magnitude-aware: it is rewarded for putting
+        the big winners on top, which is what actually drives PnL. L1 (not L2) so
+        the fat-tailed net distribution doesn't let a few outliers dominate the fit.
+
+    Either way `preds` is a score to rank by (higher = take), so compare_rankings
+    treats both identically. Returns preds, importances, and mode-specific holdout
+    skill: AUC (classify) or rank_ic/ic (regress)."""
     import lightgbm as lgb
-    from sklearn.metrics import roc_auc_score
 
     tr = train.sort_values("ts").reset_index(drop=True)
     n_val = max(1, int(len(tr) * 0.15))
     fit_part, val_part = tr.iloc[:-n_val], tr.iloc[-n_val:]
-
-    Xf, yf = fit_part[feature_cols], fit_part["label"]
-    Xv, yv = val_part[feature_cols], val_part["label"]
 
     params = dict(
         learning_rate=0.02,
@@ -152,45 +169,79 @@ def fit_meta(
         colsample_bytree=0.7,
         reg_lambda=5.0,
         reg_alpha=1.0,
-        objective="binary",
         random_state=seed,
         n_jobs=-1,
         verbose=-1,
     )
-    can_early = yf.nunique() > 1 and yv.nunique() > 1
+
+    if objective == "classify":
+        y_col, eval_metric = "label", "auc"
+        make = lambda n: lgb.LGBMClassifier(
+            n_estimators=n, objective="binary", **params
+        )
+        predict = lambda m, X: m.predict_proba(X)[:, 1]
+        can_early = fit_part[y_col].nunique() > 1 and val_part[y_col].nunique() > 1
+    elif objective == "regress":
+        y_col, eval_metric = "net_bps", "l1"
+        make = lambda n: lgb.LGBMRegressor(
+            n_estimators=n, objective="regression_l1", **params
+        )
+        predict = lambda m, X: m.predict(X)
+        can_early = True
+    else:
+        raise ValueError(
+            f"objective must be 'classify' or 'regress', got {objective!r}"
+        )
+
+    Xf, yf = fit_part[feature_cols], fit_part[y_col]
+    Xv, yv = val_part[feature_cols], val_part[y_col]
     if can_early:
-        model = lgb.LGBMClassifier(n_estimators=3000, **params)
+        model = make(3000)
         model.fit(
-            Xf, yf, eval_set=[(Xv, yv)], eval_metric="auc",
+            Xf,
+            yf,
+            eval_set=[(Xv, yv)],
+            eval_metric=eval_metric,
             callbacks=[lgb.early_stopping(100, verbose=False), lgb.log_evaluation(0)],
         )
-        val_preds = model.predict_proba(Xv)[:, 1]
-        val_auc = roc_auc_score(yv, val_preds)
         best_iter = model.best_iteration_
-    else:  # not enough class balance to early-stop; keep it small
-        model = lgb.LGBMClassifier(n_estimators=200, **params)
-        model.fit(tr[feature_cols], tr["label"])
-        val_auc = float("nan")
+    else:  # single-class fold: can't early-stop, keep it small
+        model = make(200)
+        model.fit(tr[feature_cols], tr[y_col])
         best_iter = 200
 
-    preds = model.predict_proba(holdout[feature_cols])[:, 1]
-    holdout_auc = (
-        roc_auc_score(holdout["label"], preds)
-        if holdout["label"].nunique() > 1
-        else float("nan")
-    )
+    preds = predict(model, holdout[feature_cols])
     importances = sorted(
-        zip(feature_cols, model.feature_importances_),
-        key=lambda kv: -kv[1],
+        zip(feature_cols, model.feature_importances_), key=lambda kv: -kv[1]
     )
-    return {
+    out = {
         "model": model,
         "preds": preds,
-        "holdout_auc": float(holdout_auc),
-        "val_auc": float(val_auc),
+        "objective": objective,
         "best_iteration": int(best_iter),
         "importances": importances,
     }
+    if objective == "classify":
+        from sklearn.metrics import roc_auc_score
+
+        out["holdout_auc"] = (
+            float(roc_auc_score(holdout["label"], preds))
+            if holdout["label"].nunique() > 1
+            else float("nan")
+        )
+        out["val_auc"] = (
+            float(roc_auc_score(yv, predict(model, Xv)))
+            if yv.nunique() > 1
+            else float("nan")
+        )
+    else:
+        net = holdout["net_bps"].to_numpy(dtype=float)
+        out["holdout_rank_ic"] = _rank_ic(preds, net)
+        out["holdout_ic"] = (
+            float(np.corrcoef(preds, net)[0, 1]) if len(net) > 2 else float("nan")
+        )
+        out["val_rank_ic"] = _rank_ic(predict(model, Xv), yv.to_numpy(dtype=float))
+    return out
 
 
 def compare_rankings(
@@ -228,11 +279,14 @@ def compare_rankings(
     return rows
 
 
-def natural_operating_point(holdout: pd.DataFrame, preds: np.ndarray) -> dict:
-    """The meta model's own P>=0.5 cut: how many trades it would take and their
-    net, vs taking the whole pool (primary-only). No |z| tuning involved."""
+def natural_operating_point(
+    holdout: pd.DataFrame, preds: np.ndarray, cut: float = 0.5
+) -> dict:
+    """The meta model's own cut: take trades with pred >= cut (0.5 for classify =
+    P(profit); 0.0 for regress = predicted net > 0), vs taking the whole pool
+    (primary-only). No |z| tuning involved."""
     net = holdout["net_bps"].to_numpy(dtype=float)
-    take = preds >= 0.5
+    take = preds >= cut
     k = int(take.sum())
     return {
         "pool_n": len(holdout),

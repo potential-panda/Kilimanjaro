@@ -410,6 +410,38 @@ class TestMetaLabel(unittest.TestCase):
         # fac_00 must be the top feature by gain
         self.assertEqual(fit["importances"][0][0], "fac_00")
 
+    def test_fit_meta_regress_ranks_by_magnitude(self):
+        import numpy as np
+        import pandas as pd
+        from kilimanjaro.driver import meta_label as ml
+        rng = np.random.default_rng(1)
+        n = 4000
+        x = rng.normal(size=n)
+        ts = np.arange(n, dtype=float)
+        net = x + rng.normal(scale=0.1, size=n)  # net magnitude tracks x
+        df = pd.DataFrame({
+            "ts": ts, "fac_00": x, "strength": rng.normal(size=n),
+            "jst_hour": rng.integers(0, 24, n), "jst_weekday": rng.integers(0, 7, n),
+            "net_bps": net, "label": (net > 0).astype(int),
+        })
+        train, holdout = df.iloc[:3000], df.iloc[3000:].reset_index(drop=True)
+        feats = ["fac_00", "strength", "jst_hour", "jst_weekday"]
+        fit = ml.fit_meta(train, holdout, feats, objective="regress")
+        # the regressor must rank holdout trades by realized net (rank IC ~1)
+        self.assertGreater(fit["holdout_rank_ic"], 0.9)
+        self.assertEqual(fit["importances"][0][0], "fac_00")
+
+    def test_natural_operating_point_regress_cut(self):
+        import numpy as np
+        import pandas as pd
+        from kilimanjaro.driver import meta_label as ml
+        net = np.array([-2.0, -1.0, 1.0, 2.0])
+        holdout = pd.DataFrame({"net_bps": net, "strength": np.ones(4)})
+        preds = net.copy()  # regressor predicts net exactly
+        nop = ml.natural_operating_point(holdout, preds, cut=0.0)
+        self.assertEqual(nop["meta_n"], 2)  # the two pred>=0 trades
+        self.assertAlmostEqual(nop["meta_total_net"], 3.0)
+
 
 if __name__ == "__main__":
     unittest.main()
