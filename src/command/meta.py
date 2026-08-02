@@ -52,6 +52,10 @@ def register(sub: argparse._SubParsersAction) -> None:
                    help="Drop factors with |train IC| below this from the composite")
     p.add_argument("--jst-hours", default=None,
                    help="Restrict candidates to these JST hours (e.g. 22,23,0,1,2)")
+    p.add_argument("--retarget", default=None, metavar="EX/SYM/SIZE",
+                   help="Execute on a different venue than the specs' target "
+                        "(e.g. COINCHECK/BTC_SPOT/0.002); keeps the composite + "
+                        "its weights, swaps only the execution/basis leg")
     p.add_argument("--out", default=None, help="Output dir (default under "
                    "cycle/13_results/meta/)")
     p.set_defaults(func=_run_meta)
@@ -90,11 +94,25 @@ def _run_meta(args: argparse.Namespace) -> int:
         time_cap=args.time_cap,
     )
     composite_expr = comp["expressions"][0]["expr"]
-    markets = comp["markets"]
+    markets = dict(comp["markets"])
+
+    # Optional retarget: keep the composite + its (spec-target-fit) weights, but
+    # EXECUTE on a different venue — rewrite the execution/basis leg (the alias
+    # matching the spec target) and the target. Factor features are all on the
+    # `a` leader, so only `b_mid` changes. Mirrors composite_coincheck.yaml.
+    if args.retarget:
+        rex, rsym, rsize = args.retarget.split("/")
+        old = (t["exchange"], t["symbol"])
+        for alias, m in markets.items():
+            if (m["exchange"], m["symbol"]) == old:
+                markets[alias] = {"exchange": rex, "symbol": rsym, "execution_size": rsize}
+        target = MarketConfig(rex, rsym, rsize)
+
     hours_note = f" | JST hours {sorted(jst_hours)}" if jst_hours else ""
-    print(f"meta: {len(factors)} factors -> {t['exchange']}/{t['symbol']} | "
+    print(f"meta: {len(factors)} factors -> {target.exchange}/{target.symbol} | "
           f"primary |z|>={args.primary_threshold} | barrier {args.barrier_bps}bps "
-          f"cap {args.time_cap}s{hours_note}")
+          f"cap {args.time_cap}s{hours_note}"
+          + (f" | weights fit on {t['exchange']}/{t['symbol']}" if args.retarget else ""))
 
     # 2. Candidate tables on disjoint train / holdout windows.
     tr_s, tr_e, ho_s, ho_e = split_windows(args.start, split, args.end)
@@ -157,7 +175,7 @@ def _run_meta(args: argparse.Namespace) -> int:
     # 5. Persist.
     out_dir = Path(args.out) if args.out else (
         _RESULTS
-        / f"{t['symbol']}_{args.start}_{args.end}_z{args.primary_threshold}_{args.objective}"
+        / f"{target.symbol}_{args.start}_{args.end}_z{args.primary_threshold}_{args.objective}"
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     write_csv(rows, out_dir / "ranking_compare.csv", list(rows[0].keys()))
