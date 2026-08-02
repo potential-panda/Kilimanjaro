@@ -106,6 +106,16 @@ mis-weighted, so this is if anything a floor; refitting could do better.)
 - Runner: `run_coincheck.py` — one command, mirrors the GMO US-hours run.
 - Results: `cycle/13_results/blend/coincheck_us/`.
 
+**Weights: use the GMO-fit composite as-is — refitting on COINCHECK is WORSE, not
+better** (tested 2026-08-03, `refit_coincheck.py`). Refitting each factor's
+IC-weight against COINCHECK's own forward return gives episode +2.43/+3.53 and
+TB ±10 +2.63/+3.24 — *below* the GMO-fit +3.03/+3.93 and +3.19/+4.47. Reason: the
+composite is BINANCE-lead-driven, so its predictive content is venue-agnostic
+(BINANCE→BTC); refitting on COINCHECK's noisier own-return just adds train
+estimation noise (refit blend holdout IC only +0.019) without new signal. So the
+GMO-fit `composite_coincheck.yaml` is not a floor — it is the better, more robust
+estimate, and the one to validate.
+
 **Fee: CONFIRMED 0-fee taker** (2026-08-03, https://coincheck.com/ja/exchange/fee —
 BTC_SPOT 取引所 spot trading fee is 0%). So only the flat 1 bp latency slippage
 applies, exactly as these nets assume. The cost assumption is validated.
