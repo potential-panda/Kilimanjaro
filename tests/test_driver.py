@@ -443,5 +443,41 @@ class TestMetaLabel(unittest.TestCase):
         self.assertAlmostEqual(nop["meta_total_net"], 3.0)
 
 
+class TestExitModeDistribution(unittest.TestCase):
+    """The triple-barrier exit-mode diagnostic (doc/triple-barrier-vol-spread.md)."""
+
+    def test_classifies_timeout_barrier_tp_stop(self):
+        import pandas as pd
+        from kilimanjaro.driver import learn_metrics as lm
+        # cap=300, barrier=10. 4 trades:
+        #  A timeout (elapsed 300 >= cap), ret -0.5  -> net -1.5
+        #  B barrier TP (elapsed 50, ret +9)         -> net +8
+        #  C barrier stop (elapsed 30, ret -11)      -> net -12
+        #  D barrier TP (elapsed 80, ret +8.5)       -> net +7.5
+        trades = pd.DataFrame({
+            "ts": [0.0, 0.0, 0.0, 0.0],
+            "exit_exec_ts": [300.0, 50.0, 30.0, 80.0],
+            "return_bps": [-0.5, 9.0, -11.0, 8.5],
+            "holding_seconds": [300.0, 50.0, 30.0, 80.0],
+        })
+        r = lm.exit_mode_distribution("blend", trades, barrier_bps=10.0, time_cap=300)
+        self.assertEqual(r["n_trades"], 4)
+        self.assertEqual(r["pct_timeout"], 25.0)
+        self.assertEqual(r["pct_barrier"], 75.0)
+        self.assertEqual(r["pct_tp"], 50.0)
+        self.assertEqual(r["pct_stop"], 25.0)
+        self.assertAlmostEqual(r["avg_net_all"], 0.5, places=3)
+        self.assertAlmostEqual(r["avg_net_timeout"], -1.5, places=3)
+        self.assertAlmostEqual(r["avg_net_barrier"], 3.5 / 3, places=3)
+        self.assertAlmostEqual(r["win_rate_net"], 0.5, places=3)
+
+    def test_empty_trades(self):
+        import pandas as pd
+        from kilimanjaro.driver import learn_metrics as lm
+        r = lm.exit_mode_distribution("blend", pd.DataFrame(), barrier_bps=10.0, time_cap=300)
+        self.assertEqual(r["n_trades"], 0)
+        self.assertIsNone(r["pct_timeout"])
+
+
 if __name__ == "__main__":
     unittest.main()

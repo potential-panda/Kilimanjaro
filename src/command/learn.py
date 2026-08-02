@@ -22,21 +22,28 @@ from kilimanjaro.framework import write_csv
 
 _RESULTS = Path("cycle/13_results/learn")
 
-_OPS = ("age", "return_dist")
+_OPS = ("age", "return_dist", "exit_mode")
 
 
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("learn", help="Learn a descriptive metric about a signal (not a scan)")
     p.add_argument("--op", default="age", choices=_OPS,
-                   help="Which metric to learn: age (episode length) or "
-                        "return_dist (time distribution of directional returns)")
+                   help="Which metric to learn: age (episode length), return_dist "
+                        "(time distribution of directional returns), or exit_mode "
+                        "(triple-barrier: barrier vs time-cap exit split)")
     p.add_argument("--spec", required=True, help="YAML spec (expressions + thresholds)")
     p.add_argument("--start", required=True, help="Window start YYYY-MM-DD")
     p.add_argument("--end", required=True, help="Window end YYYY-MM-DD")
     p.add_argument("--thresholds", default=None,
-                   help="return_dist: comma z-thresholds (default: the spec's)")
+                   help="return_dist/exit_mode: comma z-thresholds (default: the spec's)")
     p.add_argument("--horizon", type=int, default=300,
                    help="return_dist: forward horizon seconds (default 300)")
+    p.add_argument("--barriers", default=None,
+                   help="exit_mode: comma barrier bps to sweep (default: the spec's)")
+    p.add_argument("--time-caps", default=None,
+                   help="exit_mode: comma time caps in seconds (default: the spec's)")
+    p.add_argument("--jst-hours", default=None,
+                   help="exit_mode: restrict to these JST hours (e.g. 22,23,0,1,2)")
     p.add_argument("--out", default=None, help="Output directory (default under "
                    "cycle/13_results/learn/<op>/)")
     p.set_defaults(func=_run_learn)
@@ -83,6 +90,44 @@ def _run_learn(args: argparse.Namespace) -> int:
             print(f"  {str(r['expr'])[:18]:<18} {r['threshold']:>4} {r['n_trades']:>7} "
                   f"{_fmt(r['mean_bps']):>7} {_fmt(r['pos_day_share']):>8} "
                   f"{_fmt(r['top10_day_share_pct']):>7} {_fmt(r['pos_month_share']):>7}")
+        print(f"  -> {out_path}")
+        return 0
+
+    if args.op == "exit_mode":
+        thresholds = (
+            [float(x) for x in args.thresholds.split(",")] if args.thresholds else None
+        )
+        barriers = (
+            [float(x) for x in args.barriers.split(",")] if args.barriers else None
+        )
+        time_caps = (
+            [int(x) for x in args.time_caps.split(",")] if args.time_caps else None
+        )
+        jst_hours = (
+            {int(h) for h in args.jst_hours.split(",")} if args.jst_hours else None
+        )
+        rows = lm.learn_exit_mode(
+            spec, args.start, args.end, thresholds=thresholds,
+            barriers=barriers, time_caps=time_caps, jst_hours=jst_hours,
+        )
+        out_dir = Path(args.out) if args.out else (
+            _RESULTS / "exit_mode" / f"{stem}_{args.start}_{args.end}"
+        )
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / "exit_mode.csv"
+        write_csv(rows, out_path, lm.EXIT_MODE_FIELDS)
+        hrs = f" | JST {sorted(jst_hours)}" if jst_hours else ""
+        print(f"learn exit_mode: {stem}{hrs} — barrier vs time-cap exit split")
+        print(f"  {'thr':>4} {'barr':>5} {'cap':>5} {'n':>6} {'%tout':>6} "
+              f"{'%barr':>6} {'%tp':>5} {'%stop':>6} {'hold_p50':>8} "
+              f"{'net_tout':>8} {'net_barr':>8} {'net_all':>7}")
+        for r in rows:
+            print(f"  {r['threshold']:>4} {r['barrier_bps']:>5} {r['time_cap_s']:>5} "
+                  f"{r['n_trades']:>6} {_fmt(r['pct_timeout']):>6} "
+                  f"{_fmt(r['pct_barrier']):>6} {_fmt(r['pct_tp']):>5} "
+                  f"{_fmt(r['pct_stop']):>6} {_fmt(r['hold_p50_s']):>8} "
+                  f"{_fmt(r['avg_net_timeout']):>8} {_fmt(r['avg_net_barrier']):>8} "
+                  f"{_fmt(r['avg_net_all']):>7}")
         print(f"  -> {out_path}")
         return 0
 

@@ -223,3 +223,137 @@ def learn_return_dist(
         for thr in thresholds:
             rows.append(return_distribution(label, series, ts, thr, horizon, mp))
     return rows
+
+
+EXIT_MODE_FIELDS = [
+    "expr",
+    "threshold",
+    "barrier_bps",
+    "time_cap_s",
+    "n_trades",
+    "pct_timeout",
+    "pct_barrier",
+    "pct_tp",
+    "pct_stop",
+    "hold_mean_s",
+    "hold_p25_s",
+    "hold_p50_s",
+    "hold_p75_s",
+    "hold_p90_s",
+    "avg_net_all",
+    "avg_net_timeout",
+    "avg_net_barrier",
+    "win_rate_net",
+]
+
+
+def exit_mode_distribution(label: str, trades, barrier_bps: float, time_cap: int) -> dict:
+    """How a triple-barrier signal's trades exit: at a price BARRIER or the TIME
+    CAP, plus the holding-time distribution and per-mode net.
+
+    The doc/triple-barrier-vol-spread.md §4.1 diagnostic — run FIRST, before tuning
+    barrier/timeout. If most trades time out, the barrier is rarely reached (b too
+    wide for T, or vol too low) and you are effectively running a fixed-horizon
+    exit; if most hit the barrier it is barrier-dominated. Exit mode is inferred
+    from the existing per-trade output (no instrumented return_calc): a trade is a
+    TIMEOUT when its exit lands at/after the vertical barrier (exit_exec_ts - ts >=
+    time_cap), else a BARRIER hit; among barrier hits, net>0 ~ take-profit, else
+    stop (the barrier is on mid, the sign of the bid/ask net splits TP vs stop
+    cleanly because barrier >> spread here)."""
+    from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
+
+    n = int(len(trades))
+    empty = {
+        "expr": label, "threshold": None, "barrier_bps": barrier_bps,
+        "time_cap_s": time_cap, "n_trades": 0,
+        "pct_timeout": None, "pct_barrier": None, "pct_tp": None, "pct_stop": None,
+        "hold_mean_s": None, "hold_p25_s": None, "hold_p50_s": None,
+        "hold_p75_s": None, "hold_p90_s": None,
+        "avg_net_all": None, "avg_net_timeout": None, "avg_net_barrier": None,
+        "win_rate_net": None,
+    }
+    if n == 0:
+        return empty
+
+    elapsed = (trades["exit_exec_ts"] - trades["ts"]).to_numpy(dtype=float)
+    ret = trades["return_bps"].to_numpy(dtype=float)
+    net = ret - ROUND_TRIP_COST_BPS
+    hold = trades["holding_seconds"].to_numpy(dtype=float)
+
+    is_timeout = elapsed >= time_cap
+    is_barrier = ~is_timeout
+    is_tp = is_barrier & (ret > 0)
+    is_stop = is_barrier & (ret <= 0)
+    pct = lambda m: round(float(m.mean()) * 100, 1)  # noqa: E731
+    avg = lambda m: (round(float(net[m].mean()), 3) if m.any() else None)  # noqa: E731
+    return {
+        "expr": label,
+        "threshold": None,  # filled by caller
+        "barrier_bps": barrier_bps,
+        "time_cap_s": time_cap,
+        "n_trades": n,
+        "pct_timeout": pct(is_timeout),
+        "pct_barrier": pct(is_barrier),
+        "pct_tp": pct(is_tp),
+        "pct_stop": pct(is_stop),
+        "hold_mean_s": round(float(hold.mean()), 1),
+        "hold_p25_s": round(float(np.quantile(hold, 0.25)), 1),
+        "hold_p50_s": round(float(np.quantile(hold, 0.50)), 1),
+        "hold_p75_s": round(float(np.quantile(hold, 0.75)), 1),
+        "hold_p90_s": round(float(np.quantile(hold, 0.90)), 1),
+        "avg_net_all": round(float(net.mean()), 3),
+        "avg_net_timeout": avg(is_timeout),
+        "avg_net_barrier": avg(is_barrier),
+        "win_rate_net": round(float((net > 0).mean()), 3),
+    }
+
+
+def learn_exit_mode(
+    spec: dict,
+    start: str,
+    end: str,
+    *,
+    thresholds: list[float] | None = None,
+    barriers: list[float] | None = None,
+    time_caps: list[int] | None = None,
+    jst_hours: set[int] | None = None,
+    data_root: Path = _DEFAULT_DATA_ROOT,
+) -> list[dict]:
+    """Exit-mode rows for every (expression, threshold, barrier, time_cap).
+
+    Fires each expression at each threshold, runs the triple-barrier exit, and
+    describes whether trades exit at the barrier or the time cap. Optional
+    `jst_hours` restricts to a session (e.g. the US window) to match a tradeable
+    config. No drawdown gate — this measures the exit mechanism on the fired
+    trades, which the gate (an entry overlay) does not change."""
+    from kilimanjaro.framework.protocol import MarketConfig
+    from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
+
+    markets = spec["markets"]
+    thresholds = thresholds or spec.get("thresholds", [1.5])
+    barriers = barriers or spec.get("barriers", [10.0])
+    time_caps = time_caps or spec.get("time_caps", [300])
+    t = spec["target"]
+    target = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
+
+    rows: list[dict] = []
+    for e in spec["expressions"]:
+        expr = e["expr"]
+        label = e.get("label") or expr
+        for thr in thresholds:
+            sig = ExpressionSignal.create(markets=markets, expr=expr, threshold=thr)
+            frame = sig.load_data(start, end, data_root)
+            fired = sig.generate(frame)
+            for cap in time_caps:
+                for b in barriers:
+                    if fired.empty:
+                        row = exit_mode_distribution(label, fired, b, cap)
+                    else:
+                        rc = TripleBarrierReturn(barrier_bps=b, time_cap_seconds=cap)
+                        trades = rc.compute(fired, target, start, end, data_root)
+                        if jst_hours is not None and not trades.empty:
+                            trades = trades[trades["jst_hour"].isin(jst_hours)]
+                        row = exit_mode_distribution(label, trades, b, cap)
+                    row["threshold"] = thr
+                    rows.append(row)
+    return rows
