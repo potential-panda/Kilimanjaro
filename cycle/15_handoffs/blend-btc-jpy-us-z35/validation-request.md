@@ -106,10 +106,9 @@ mis-weighted, so this is if anything a floor; refitting could do better.)
 - Runner: `run_coincheck.py` — one command, mirrors the GMO US-hours run.
 - Results: `cycle/13_results/blend/coincheck_us/`.
 
-**Must confirm before promotion:** COINCHECK BTC_SPOT taker fee. These nets assume
-0-fee taker (only the flat 1 bp latency slippage) — the repo's venue note lists
-COINCHECK BTC/ETH/XRP_SPOT as 0-fee, but re-verify: a non-zero taker fee subtracts
-directly from every per-trade net above.
+**Fee: CONFIRMED 0-fee taker** (2026-08-03, https://coincheck.com/ja/exchange/fee —
+BTC_SPOT 取引所 spot trading fee is 0%). So only the flat 1 bp latency slippage
+applies, exactly as these nets assume. The cost assumption is validated.
 
 ---
 
