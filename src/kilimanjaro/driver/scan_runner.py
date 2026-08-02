@@ -43,6 +43,7 @@ from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
 from kilimanjaro.return_calc.episode import EpisodeReturn
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
+from kilimanjaro.return_calc.vol_triple_barrier import VolScaledTripleBarrierReturn
 from kilimanjaro.signal.expression import ExpressionSignal
 
 CSV_FIELDS = [
@@ -55,6 +56,9 @@ CSV_FIELDS = [
     "max_hold_s",
     "barrier_bps",
     "time_cap_s",
+    "k",
+    "vol_lookback_s",
+    "cost_floor_bps",
     "train_n",
     "train_n_episodes",
     "train_n_eff",
@@ -112,8 +116,20 @@ def _return_calcs(spec: dict) -> list:
             for x in spec["barriers"]
             for t in spec.get("time_caps", [300])
         ]
+    if kind == "vol_triple_barrier":
+        return [
+            VolScaledTripleBarrierReturn(
+                k=k,
+                time_cap_seconds=t,
+                vol_lookback_seconds=spec.get("vol_lookback_s", 1800),
+                cost_floor_bps=spec.get("cost_floor_bps", 0.0),
+            )
+            for k in spec["ks"]
+            for t in spec.get("time_caps", [300])
+        ]
     raise ValueError(
-        f"unknown return_calc {kind!r} (want fixed_horizon, episode, or triple_barrier)"
+        f"unknown return_calc {kind!r} (want fixed_horizon, episode, "
+        "triple_barrier, or vol_triple_barrier)"
     )
 
 
@@ -259,6 +275,7 @@ def gates_for_spec(spec: dict, return_calc: str | None = None) -> list:
     if rc not in (
         "episode",
         "triple_barrier",
+        "vol_triple_barrier",
     ):  # overlapping -> rolling-sum gate invalid
         return []
     g = spec.get("drawdown_gate", True)

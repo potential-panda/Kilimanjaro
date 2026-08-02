@@ -231,3 +231,41 @@ class TestTripleBarrierReturn(unittest.TestCase):
                              {"ts": 1.0, "direction": 1.0, "strength": 1.0}],
                             barrier_bps=100, time_cap=3)
         self.assertEqual(len(out), 1)                       # only the first kept
+
+
+class TestVolScaledTripleBarrierReturn(unittest.TestCase):
+    def test_barrier_widens_with_vol(self):
+        from kilimanjaro.return_calc.vol_triple_barrier import VolScaledTripleBarrierReturn
+        rc = VolScaledTripleBarrierReturn(
+            k=2.0, time_cap_seconds=100, vol_lookback_seconds=10, cost_floor_bps=0.0
+        )
+        low = _mp([100 + 0.01 * (i % 2) for i in range(60)])   # tiny wiggle
+        high = _mp([100 + 1.00 * (i % 2) for i in range(60)])  # big wiggle
+        b_low = rc._entry_barriers_bps(np.array([50.0]), low)[0]
+        b_high = rc._entry_barriers_bps(np.array([50.0]), high)[0]
+        self.assertGreater(b_high, b_low)     # more vol -> wider barrier
+        self.assertGreaterEqual(b_low, 0.0)
+
+    def test_cost_floor_binds_when_vol_low(self):
+        from kilimanjaro.return_calc.vol_triple_barrier import VolScaledTripleBarrierReturn
+        rc = VolScaledTripleBarrierReturn(
+            k=2.0, time_cap_seconds=100, vol_lookback_seconds=10, cost_floor_bps=5.0
+        )
+        low = _mp([100 + 0.001 * (i % 2) for i in range(60)])  # ~0 vol
+        b = rc._entry_barriers_bps(np.array([50.0]), low)[0]
+        self.assertAlmostEqual(b, 5.0)        # floor dominates a ~0-vol window
+
+    def test_k_zero_reduces_to_fixed_floor_barrier(self):
+        # k=0 -> barrier == cost_floor everywhere; behaves like a fixed barrier.
+        from kilimanjaro.return_calc.vol_triple_barrier import VolScaledTripleBarrierReturn
+        mids = [100.0] * 5 + [101.5] + [102.0] * 5   # +1.5% at t=5
+        rc = VolScaledTripleBarrierReturn(
+            k=0.0, time_cap_seconds=100, vol_lookback_seconds=3, cost_floor_bps=100
+        )
+        with patch("kilimanjaro.return_calc.vol_triple_barrier.load_target_prices",
+                   return_value=_mp(mids)):
+            out = rc.compute(_signals([{"ts": 0.0, "direction": 1.0, "strength": 2.0}]),
+                             TARGET, "2026-01-01", "2026-01-02")
+        r = out.iloc[0]
+        self.assertAlmostEqual(r["barrier_bps"], 100.0)   # floor, k*sigma=0
+        self.assertEqual(r["exit_exec_ts"], 5.0)          # first mid >= 100*1.01
