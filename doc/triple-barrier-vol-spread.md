@@ -136,6 +136,33 @@ from the existing per-trade output with no new return_calc.
 
 ---
 
+## 5b. What the exit-mode diagnostic found (COINCHECK BTC_SPOT, 2026-08-03)
+
+Ran `learn --op exit_mode` on the COINCHECK composite, US hours, sweeping barrier ∈
+{10,15,20,30,40} bps at cap 300 s, split train/holdout. **Train and holdout agree —
+robust, not overfit.** Holdout, z=3.5:
+
+| barrier | %barrier-hit | TP:stop | hold_p50 | net_timeout | net_barrier | **net_all** |
+|---|---|---|---|---|---|---|
+| ±10 | 76% | 62.5 : 13.7 (4.6:1) | 47 s | −1.89 | +4.77 | **+3.19** |
+| ±20 | 46% | 38.1 : 7.8 | 300 s | −1.69 | +11.4 | **+4.29** |
+| ±40 | 13% | 11.4 : 1.6 | 300 s | +1.34 | +28.7 | **+4.90** |
+
+Three findings:
+1. **At ±10 it is barrier-dominated (76% hit), not inert** — the current params are
+   in a sensible regime, not the "everything times out" failure mode. TP:stop ≈
+   **4.6:1** confirms the barrier harvests real directional drift, not noise.
+2. **Favourable moves run well beyond 10 bps** — widening the barrier raises net_all
+   **monotonically** (+3.19 → +4.90), in *both* windows. The current ±10 leaves
+   money on the table; the signal's winners keep going. This is direct evidence for
+   vol-scaling — ±10 is too tight for the high-vol US session it trades in.
+3. **But wider = concentration + variance risk.** At ±40, 87% of trades time out
+   near breakeven and ~13% carry all the P&L; hold_p50 = 300 s means it is really a
+   fixed-horizon hold with an occasional early stop. Higher *avg* net is not
+   necessarily higher *risk-adjusted* net — the next step is **Sharpe/drawdown by
+   barrier**, not avg-net alone, before choosing a wider fixed barrier (or the
+   vol-scaled rule, which widens only when vol justifies it).
+
 ## 6. Priority / perspective
 
 Keep the reshaping in perspective. Widening the barrier ±10→±20 bps changed total
