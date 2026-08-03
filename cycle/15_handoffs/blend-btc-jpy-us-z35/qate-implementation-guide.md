@@ -1,4 +1,4 @@
-# qate implementation guide — BTC_JPY blend composite
+# qate implementation guide — COINCHECK BTC_SPOT blend composite
 
 Companion to `validation-request.md`. This is the **how** for a code agent (or
 human) building the strategy in qate (`potential-panda-core`,
@@ -6,6 +6,15 @@ human) building the strategy in qate (`potential-panda-core`,
 Kilimanjaro's **batch / 1-second-grid** semantics, while qate is an **event-driven
 tick** framework — porting is a real reimplementation, and the edge lives in the
 `z≥3.5` tail, so **feature parity is pass/fail, not best-effort**.
+
+> **PRIMARY TARGET: COINCHECK / BTC_SPOT (0-fee, confirmed).** The signal is
+> unchanged from the original BTC_JPY work — **all 19 factors are on the BINANCE
+> leader (`a`)**; only the execution/basis leg `b` and the target are
+> COINCHECK/BTC_SPOT/0.002. Use `composite_coincheck.yaml`. Where this guide says
+> "GMO/BTC_JPY" below, read **COINCHECK/BTC_SPOT**, with these venue deltas:
+> **no GMO Saturday-maintenance block** (instead confirm and block COINCHECK's own
+> maintenance windows), and **taker fee = 0**. Everything about the BINANCE-side
+> features, ops, grid, and parity harness is identical.
 
 > **Do the cheap thing first.** Don't port 19 features until the edge is confirmed.
 > Section 1 (precomputed-signal replay) validates the edge in Himalaya without any
@@ -23,7 +32,7 @@ Goal: confirm the edge in Himalaya **without** reimplementing features.
    ```python
    from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
    import yaml
-   spec = yaml.safe_load(open("composite.yaml"))
+   spec = yaml.safe_load(open("composite_coincheck.yaml"))
    expr = spec["expressions"][0]["expr"]
    sig  = ExpressionSignal.create(markets=spec["markets"], expr=expr, threshold=3.5)
    frame = sig.load_data("2025-07-01", "2026-06-30")
@@ -71,7 +80,8 @@ follow **orion** for the taker execution + risk/circuit-breaker wiring.
 
 Subclass `qate.trading.strategy.Strategy` (skeleton: **corvus**; fuller patterns:
 **pisces**, **orion** — see above). You receive **both markets'** streams — BINANCE
-BTC_USDT (leader, alias `a`) and GMO BTC_JPY (target/execution, alias `b`):
+BTC_USDT (leader, alias `a`, carries all 19 factors) and COINCHECK BTC_SPOT
+(target/execution, alias `b` — used only for `b_mid` in the basis terms):
 
 ```python
 class Variant(Strategy[Config]):
@@ -90,7 +100,7 @@ grid, and the open position.
 
 Reference implementation: `src/kilimanjaro/data/feature_frame.py` (grid + sources),
 `src/kilimanjaro/op/series.py` (ops), `src/kilimanjaro/op/age.py`. The composite's
-19 factors and their inputs (full formula in `composite.yaml`):
+19 factors and their inputs (full formula in `composite_coincheck.yaml`):
 
 | factor group | Kilimanjaro column | source & semantics to match |
 |---|---|---|
@@ -126,7 +136,7 @@ Reference implementation: `src/kilimanjaro/data/feature_frame.py` (grid + source
 
 Per 1s step, once features are computed:
 1. `z_i = zscore(factor_i, 1800)` for each of the 19 factors.
-2. `raw = Σ w_i · z_i` with the weights `w_i` from `composite.yaml`
+2. `raw = Σ w_i · z_i` with the weights `w_i` from `composite_coincheck.yaml`
    (`expressions[0].expr` has them inline, e.g. `0.0547*(zscore(...))`).
 3. `composite = zscore(raw, 1800)`.
 4. Entry when `|composite| ≥ 3.5`; `direction = sign(composite)`.
@@ -146,8 +156,10 @@ Per 1s step, once features are computed:
 
 ### 2.5 Filters & warmup
 
-- **Time filter**: trade only JST hours 22,23,0,1,2; block GMO Saturday maintenance
-  09–11 JST. (`framework/schedule.py` / `orion_schedule.py` for the exact rule.)
+- **Time filter**: trade only JST hours 22,23,0,1,2. **COINCHECK, not GMO** — the GMO
+  Saturday-maintenance block does NOT apply; instead confirm COINCHECK's own
+  maintenance windows and block those. (`framework/schedule.py` for the hour filter;
+  the scan used `ScheduleFilter(block_gmo_maintenance=False)` for COINCHECK.)
 - **Warmup**: the 1800 s z-scores and the 3600 s basis window need ≥ 1 h of grid
   history before signals are valid — suppress entries until warm.
 
@@ -184,7 +196,7 @@ for this mechanism (`doc/calibration.md`, `doc/verification`).
 - **timezone**: hour filter is **JST** (UTC+9).
 - **execution sides**: entry aggressive (ask BUY / bid SELL), exit on the closing
   aggressive side (bid BUY / ask SELL) — the spread is paid, as designed.
-- **two-market alignment**: BINANCE leader and GMO target on one shared 1s clock;
+- **two-market alignment**: BINANCE leader and COINCHECK target on one shared 1s clock;
   a lead/lag or clock skew between feeds will not show in a single-market replay —
   test parity on the real two-feed replay.
 
