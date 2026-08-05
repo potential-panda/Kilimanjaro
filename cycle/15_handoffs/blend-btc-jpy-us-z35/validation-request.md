@@ -56,16 +56,25 @@ at a time, re-enter on the first fire after the previous exit) — this replaced
 earlier fixed-time-cap decimation that under-counted trades and *over-stated*
 per-trade net (old v1 X=10 read +3.19; the honest re-entry value is +2.72).
 
-| exit | z=3.5 | z=4.5 | months + |
+| exit | z=3.5 | z=4.5 | months + (3.5 · 4.5) |
 |---|---|---|---|
-| **v1 triple-barrier X=10** | **+2.72** (n=1046, hit 0.69) | **+3.89** (n=327, hit 0.73) | 12/12 · 11/12 |
-| v1 triple-barrier X=20 | +4.06 (n=896, hit 0.61) | +4.96 (n=301, hit 0.62) | 12/12 |
-| **v3 trailing X=10** | **+4.22** (n=826, hit 0.52) | **+4.77** (n=276) | 11/12 · 12/12 |
-| v3 trailing X=20 | +4.76 | +5.31 | — |
+| **v1 triple-barrier X=10** | **+2.72** (n=1046, hit 0.69, Sharpe 0.295) | **+3.89** (n=327, hit 0.73) | 12/12 · 11/12 |
+| v1 triple-barrier X=20 | +4.06 (n=896, hit 0.61) | +4.96 (n=301, hit 0.62) | 12/12 · 12/12 |
+| v3 trailing+flip X=10 | +4.53 (n=675, hit 0.43, Sharpe 0.146) | +2.48 (n=230, hit 0.38) | 10/12 · 9/12 |
+| v3 trailing+flip X=20 | +4.73 (n=519, hit 0.44) | +0.77 (n=184, hit 0.37) | 9/12 · 9/12 |
 
-v3 leads on per-trade **net** (letting winners run); v1 leads on **hit rate** and
-per-trade **Sharpe** (0.295 vs 0.263 at z=3.5 X=10) — smoother, more consistent. That
-efficiency-vs-smoothness trade-off is exactly what Himalaya should settle.
+**v1 is the lead candidate.** v3 (pure trailing stop + opposite-side flip, no time cap
+— the faithful "let winners run") wins only the *headline* per-trade net at z=3.5
+(+4.53 vs +2.72), and that comes with **half the Sharpe (0.146 vs 0.295), a 0.43 hit
+rate, and worse monthly consistency** — a low-win-rate fat-tail profile carried by a
+few big winners, so it is lumpy. Everywhere else v1 wins: risk-adjusted (~2× Sharpe),
+consistency (12/12 vs 10/12), capacity (~1.5× the trades ⇒ higher total PnL), and
+robustness — at **z=4.5 (the most selective tier) v3 collapses** (+2.48 / +0.77) while
+v1 is strongest (+3.89 / +4.96), because the no-cap trailing needs frequent same-side
+fires to ratchet and a rare threshold supplies none. Read: this signal's edge is in the
+*immediate* predicted move (v1's tight ±barrier + timeout captures it cleanly and
+often), not in sustained trends. Himalaya should confirm v1 first; v3 is the
+lower-priority variant.
 
 Trade frequency: z=3.5 ≈ 4/day; z=4.5 ≈ 2–3/day. For reference, the original **GMO
 BTC_JPY** target is ~half these — COINCHECK is the stronger venue.
