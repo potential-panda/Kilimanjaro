@@ -9,9 +9,12 @@ train/holdout split — so the two venues are directly comparable for the SAME e
     python cycle/15_handoffs/blend-btc-jpy-us-z35/run_coincheck.py \
         --start 2025-07-01 --end 2026-06-30
 
-Prints holdout net per threshold for both exits (episode and triple_barrier).
-With the current 7-day-only data it is a smoke test; wait for the backfill for a
-verdict-grade run. See composite_coincheck.yaml for the data caveat.
+Prints holdout net per threshold for the in-scope exits: fixed_horizon (the pure
+"does the signal predict the next X sec?" baseline), triple_barrier (v1), and
+trailing_stop (v3). All three are anchored to the 300 s (X-sec) horizon. Episode
+exit (v2) is deliberately NOT here — it exits when |z| falls back under threshold
+(~2 s), measuring signal persistence rather than X-sec prediction (see aquila/v2.py).
+See composite_coincheck.yaml for the data caveat.
 """
 
 from __future__ import annotations
@@ -67,18 +70,25 @@ def main() -> None:
     base = yaml.safe_load((_HERE / "composite_coincheck.yaml").read_text())
     out = Path(args.out)
 
-    episode = copy.deepcopy(base)
-    episode["return_calc"] = "episode"
-    episode["max_holds"] = [300]
-    episode["thresholds"] = THRESHOLDS
-    _run(episode, args.start, args.end, out, "episode")
+    fh = copy.deepcopy(base)
+    fh["return_calc"] = "fixed_horizon"
+    fh["horizons"] = [300]
+    fh["thresholds"] = THRESHOLDS
+    _run(fh, args.start, args.end, out, "fixed_horizon")
 
-    tb = copy.deepcopy(base)
+    tb = copy.deepcopy(base)  # v1
     tb["return_calc"] = "triple_barrier"
     tb["barriers"] = [10.0, 20.0]
     tb["time_caps"] = [300]
     tb["thresholds"] = THRESHOLDS
     _run(tb, args.start, args.end, out, "triple_barrier")
+
+    ts = copy.deepcopy(base)  # v3
+    ts["return_calc"] = "trailing_stop"
+    ts["barriers"] = [10.0, 20.0]
+    ts["time_caps"] = [300]
+    ts["thresholds"] = THRESHOLDS
+    _run(ts, args.start, args.end, out, "trailing_stop")
 
 
 if __name__ == "__main__":

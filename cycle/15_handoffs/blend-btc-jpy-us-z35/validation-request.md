@@ -25,7 +25,7 @@ the secondary/comparison venue only.
 | Signal source | BINANCE / BTC_USDT (leader — all 19 factors) + COINCHECK / BTC_SPOT (basis leg `b_mid` only) |
 | Entry signal | **composite** = IC-weighted sum of 19 factors, z-scored (**GMO-fit weights**; baked into `composite_coincheck.yaml`) |
 | Entry rule | fire when **\|composite z\| ≥ 3.5**; direction = sign(composite) |
-| Exit rule | **triple-barrier**: first of +10 bps / −10 bps (on mid) / **300 s** cap. (Also validate the plain **episode** exit — hold while \|z\|>threshold, cap 300 s.) |
+| Exit rule | **triple-barrier (v1)**: first of +10 bps / −10 bps (on mid) / **300 s** cap. Secondary candidate: **trailing stop (v3)** — moving stop ratcheted on each same-side fire, cap 300 s. Both are anchored to the 300 s (X-sec) horizon. **Episode exit (v2) is retired** — it exits when \|z\| falls back under threshold (~2 s), measuring signal *persistence*, not the X-sec prediction this setup tests. |
 | Time filter | **JST hours 22, 23, 0, 1, 2 only** (US session); block all other hours. **No GMO Saturday-maintenance block applies — confirm COINCHECK's own maintenance windows** and block those. |
 | Execution | entry aggressive (ask BUY / bid SELL), exit passive; **+1.0 bp round-trip** latency slippage (0.5 bp/order) — matches Himalaya. **0 fee.** |
 | Windows | train 2025-07-01 … 2026-02-28, **holdout 2026-03-01 … 2026-06-30** (2/3 split) |
@@ -46,20 +46,29 @@ COINCHECK_mid).
 ## Expected numbers (SCAN — uncalibrated, trend-only)
 
 Holdout, **COINCHECK/BTC_SPOT**, US hours, with the drawdown gate. **Indicative, not
-promotion-grade** — expression + triple_barrier/episode is uncalibrated
+promotion-grade** — expression + triple_barrier/trailing_stop is uncalibrated
 (`doc/calibration.md`); only flip + between-signal (ETH) is calibrated today. What
 Himalaya is asked to confirm is the **sign, the magnitude order, and the monthly
 consistency** — not the third decimal.
 
+Numbers below are the **Himalaya-faithful sequential re-entry** figures (one position
+at a time, re-enter on the first fire after the previous exit) — this replaced an
+earlier fixed-time-cap decimation that under-counted trades and *over-stated*
+per-trade net (old v1 X=10 read +3.19; the honest re-entry value is +2.72).
+
 | exit | z=3.5 | z=4.5 | months + |
 |---|---|---|---|
-| episode | **+3.03** (n=1347, hit 0.77) | **+3.93** (n=375, hit 0.71) | 12/12 |
-| **triple-barrier X=10** | **+3.19** (hit 0.72) | **+4.47** (hit 0.76) | 12/12 |
-| triple-barrier X=20 | +4.29 (hit 0.64) | +5.08 (hit 0.65) | 12/12 |
+| **v1 triple-barrier X=10** | **+2.72** (n=1046, hit 0.69) | **+3.89** (n=327, hit 0.73) | 12/12 · 11/12 |
+| v1 triple-barrier X=20 | +4.06 (n=896, hit 0.61) | +4.96 (n=301, hit 0.62) | 12/12 |
+| **v3 trailing X=10** | **+4.22** (n=826, hit 0.52) | **+4.77** (n=276) | 11/12 · 12/12 |
+| v3 trailing X=20 | +4.76 | +5.31 | — |
 
-Trade frequency: z=3.5 ≈ 6/day (episode) / ~4/day (TB); z=4.5 ≈ 2–3/day. For
-reference, the original **GMO BTC_JPY** target is ~half these (episode +1.38/+1.98,
-TB X=10 +1.99/+3.06, 11/12 months) — COINCHECK is the stronger venue.
+v3 leads on per-trade **net** (letting winners run); v1 leads on **hit rate** and
+per-trade **Sharpe** (0.295 vs 0.263 at z=3.5 X=10) — smoother, more consistent. That
+efficiency-vs-smoothness trade-off is exactly what Himalaya should settle.
+
+Trade frequency: z=3.5 ≈ 4/day; z=4.5 ≈ 2–3/day. For reference, the original **GMO
+BTC_JPY** target is ~half these — COINCHECK is the stronger venue.
 
 Supporting signal-quality (the composite is broad, not event-driven —
 `doc/return-distribution-verification.md`): mid-to-mid at z≥1.5 the directional edge

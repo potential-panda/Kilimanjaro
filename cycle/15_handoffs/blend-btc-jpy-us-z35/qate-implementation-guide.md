@@ -150,7 +150,9 @@ Per 1s step, once features are computed:
   - time cap: **300 s** elapsed.
   Close aggressively on the passive side (BUY exits at bid; SELL at ask).
 - **One position at a time**; the non-overlap rule is: do not open a new trade until
-  the previous exited (scan approximates this by spacing entries ≥ time_cap).
+  the previous exited, then re-enter on the **first fire after that exit** (sequential
+  re-entry — the scan now matches this exactly; an early ±10 bps exit at +50 s frees a
+  re-entry at +51 s, not after a fixed time_cap).
 - **Cost**: +0.5 bp/order latency slippage (matches Himalaya / the scan's 1 bp
   round-trip). Bid/ask already carries the spread.
 
