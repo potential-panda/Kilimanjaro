@@ -299,7 +299,30 @@ class TestTrailingStopReturn(unittest.TestCase):
         self.assertEqual(r["exit_reason"], "stop")
         self.assertEqual(r["exit_exec_ts"], 6.0)  # retrace from anchor 105 only at t6
 
-    def test_time_cap(self):
+    def test_no_time_cap_holds_to_stop(self):
+        # v3 has NO time cap (time_cap=None): a slow drift up with no retrace is held
+        # the whole way; exit only when the mid finally retraces the barrier ('stop').
+        out = self._compute([100, 100.1, 100.2, 100.3, 100.4, 100.2],
+                            [{"ts": float(t), "direction": 1.0, "strength": 4.0}
+                             for t in range(5)],
+                            barrier_bps=10, time_cap=None)  # 10bps trailing
+        r = out.iloc[0]
+        self.assertEqual(r["exit_reason"], "stop")
+        self.assertEqual(r["exit_exec_ts"], 5.0)  # anchor 100.4; 100.2 < 100.4*(1-10bps)
+
+    def test_flips_on_opposite_signal(self):
+        # BUY open; an OPPOSITE-side (SELL) fire reverses us out ('flip'), before any stop
+        out = self._compute([100, 100.5, 101, 100.9, 100],
+                            [{"ts": 0.0, "direction": 1.0, "strength": 4.0},
+                             {"ts": 2.0, "direction": -1.0, "strength": 4.0}],
+                            barrier_bps=100, time_cap=None)
+        r = out.iloc[0]
+        self.assertEqual(r["exit_reason"], "flip")
+        self.assertEqual(r["exit_exec_ts"], 2.0)  # SELL fire at t2 flips the BUY
+
+    def test_safety_cap_when_set(self):
+        # time_cap is retained only as a far safety bound: if set and neither stop nor
+        # flip fires, the walk still terminates at the cap ('time').
         out = self._compute([100, 100.1, 100.2, 100.3, 100.4],
                             [{"ts": 0.0, "direction": 1.0, "strength": 4.0}],
                             barrier_bps=1000, time_cap=3)  # 10% barrier never hit

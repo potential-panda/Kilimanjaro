@@ -128,11 +128,10 @@ def _return_calcs(spec: dict) -> list:
             for k in spec["ks"]
             for t in spec.get("time_caps", [300])
         ]
-    if kind == "trailing_stop":  # aquila v3: moving stop ratcheted on same-side signals
+    if kind == "trailing_stop":  # aquila v3: trailing stop + flip exit, NO time cap
         return [
-            TrailingStopReturn(barrier_bps=x, time_cap_seconds=t)
+            TrailingStopReturn(barrier_bps=x, time_cap_seconds=None)
             for x in spec["barriers"]
-            for t in spec.get("time_caps", [300])
         ]
     raise ValueError(
         f"unknown return_calc {kind!r} (want fixed_horizon, episode, "

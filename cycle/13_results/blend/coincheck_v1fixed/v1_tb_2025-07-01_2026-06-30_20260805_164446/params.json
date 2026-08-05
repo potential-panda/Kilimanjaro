@@ -1,0 +1,85 @@
+{
+  "scan_id": "v1_tb_2025-07-01_2026-06-30_20260805_164446",
+  "start": "2025-07-01",
+  "end": "2026-06-30",
+  "split": "2026-03-01",
+  "windows": {
+    "train": [
+      "2025-07-01",
+      "2026-02-28"
+    ],
+    "holdout": [
+      "2026-03-01",
+      "2026-06-30"
+    ]
+  },
+  "spec": {
+    "hypothesis_id": "blend-composite-coincheck",
+    "family": "blend",
+    "markets": {
+      "a": {
+        "exchange": "BINANCE",
+        "symbol": "BTC_USDT",
+        "execution_size": "0.002"
+      },
+      "b": {
+        "exchange": "COINCHECK",
+        "symbol": "BTC_SPOT",
+        "execution_size": "0.002"
+      }
+    },
+    "target": {
+      "exchange": "COINCHECK",
+      "symbol": "BTC_SPOT",
+      "execution_size": "0.002"
+    },
+    "return_calc": "triple_barrier",
+    "expressions": [
+      {
+        "label": "blend",
+        "expr": "zscore(0.028334*(zscore(a_mid / b_mid, 900)) + 0.017288*(zscore(a_mid / b_mid, 3600)) + 0.022945*(zscore(ret(a_mid, 30), 1800)) + 0.012110*(zscore(ret(a_mid, 120), 1800)) + 0.014256*(zscore(ret(a_mid, 300), 1800)) + 0.012885*(zscore(a_obi_ema_k1_30s, 1800)) + 0.010498*(zscore(a_obi_ema_k1_120s, 1800)) + 0.012671*(zscore(a_obi_ema_k5_30s, 1800)) + 0.033593*(zscore(a_ta_imbalance_qty_5s, 1800)) + 0.016954*(zscore(a_ta_imbalance_qty_30s, 1800)) + 0.018265*(zscore(a_ta_net_flow_10s, 1800)) + 0.040650*(zscore(a_mid / a_ta_vwap_10s - 1, 1800)) + 0.022557*(zscore(a_mid / a_ta_vwap_60s - 1, 1800)) + 0.036974*(zscore(a_ta_imbalance_count_10s, 1800)) + 0.016863*(zscore(a_ta_imbalance_count_60s, 1800)) + -0.010421*(sign(a_ta_net_flow_30s) * zscore(a_ta_max_trade_size_30s, 1800)) + -0.012789*(zscore(a_obi_k1 - a_obi_k5, 1800)) + 0.052977*(zscore(a_bs_weighted_imb_k1, 1800)) + 0.054746*(zscore(a_bs_weighted_imb_k5, 1800)), 1800)",
+        "invert": [
+          false
+        ]
+      }
+    ],
+    "thresholds": [
+      3.5,
+      4.5
+    ],
+    "age_windows": [
+      [
+        null,
+        null
+      ]
+    ],
+    "horizons": [
+      300
+    ],
+    "max_holds": [
+      null
+    ],
+    "barriers": [
+      10.0,
+      20.0
+    ],
+    "time_caps": [
+      300
+    ]
+  },
+  "rank_metric": "t_stat",
+  "top_quantile": 0.1,
+  "min_n": 30,
+  "min_month_n": 10,
+  "mt_alpha": 0.1,
+  "n_mt_significant": 4,
+  "n_combos": 4,
+  "costs_bps": 1.0,
+  "gates": [
+    {
+      "rolling_dd_window_seconds": 10800.0,
+      "rolling_dd_threshold_bps": 500.0,
+      "rolling_dd_cooldown_seconds": 21600.0
+    }
+  ]
+}
