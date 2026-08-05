@@ -23,10 +23,14 @@ SELL), exit at the passive side (bid BUY / ask SELL) — spread already inside t
 return; the flat latency slippage is added upstream. The barrier test is on
 **mid**; execution is at bid/ask at the resolving tick.
 
-non_overlapping (default True): decimate fired signals to a time_cap-spaced
-subset first, so trades don't overlap and the plain statistics are honest
-(mirrors FixedHorizonReturn / doc/overlapping-returns.md). Because holding time
-is variable and capped at time_cap, spacing entries by time_cap bounds overlap.
+non_overlapping (default True): **one position at a time, re-entering on the first
+fire AFTER the previous trade's actual exit** — exactly how the live strategy /
+Himalaya behaves (a barrier that hits at +50 s frees a re-entry at +51 s, not after a
+fixed time_cap). Fires that land inside a still-open trade are skipped. This replaced
+the old fixed time_cap decimation, which left the scanner idle for the rest of the cap
+after every early exit and so under-counted trades vs the live strategy. Trades are
+still non-overlapping in time, so the plain statistics stay honest. (non_overlapping=
+False keeps every fire as an overlapping trade, as before.)
 """
 
 from __future__ import annotations
@@ -40,9 +44,17 @@ import pandas as pd
 from kilimanjaro.data.price_cache import load_target_prices
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
-from kilimanjaro.return_calc.fixed_horizon import _nonoverlap_indices
 
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+
+
+def _empty() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "ts", "direction", "strength", "entry_exec_ts", "entry_price",
+            "exit_exec_ts", "exit_price", "return_bps", "holding_seconds",
+        ]
+    )
 
 
 @dataclass(frozen=True)
@@ -81,58 +93,64 @@ class TripleBarrierReturn:
             start_date, end_date, data_root,
         )
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
-        if self.non_overlapping and len(sig) > 1:
-            keep = _nonoverlap_indices(
-                sig["ts"].to_numpy(dtype=float), float(self.time_cap_seconds)
-            )
-            sig = sig.iloc[keep].reset_index(drop=True)
+        n_mp = len(mp.ts)
+        if len(sig) == 0 or n_mp == 0:
+            return add_jst_columns(_empty(), ts_col="entry_exec_ts", date_ts_col="ts")
 
         ts = sig["ts"].to_numpy(dtype=float)
-        direction = sig["direction"].to_numpy()
-        n_mp = len(mp.ts)
+        direction = sig["direction"].to_numpy(dtype=float)
+        strength = sig["strength"].to_numpy()
+        episode = sig["episode"].to_numpy() if "episode" in sig.columns else None
         mid = mp.mid  # materialize once (property recomputes each access)
 
         entry_idx = mp.first_at_or_after(ts)
-        has_entry = entry_idx < n_mp
-        e = np.clip(entry_idx, 0, max(n_mp - 1, 0))
-        cap = np.clip(mp.first_at_or_after(ts + self.time_cap_seconds), 0, max(n_mp - 1, 0))
-
+        cap_idx = np.clip(mp.first_at_or_after(ts + self.time_cap_seconds), 0, n_mp - 1)
         b = self.barrier_bps / 10000.0
         SENT = np.iinfo(np.int64).max
-        exit_i = e.copy()
-        for i in range(len(sig)):
-            lo, hi = int(e[i]), int(cap[i])
-            if not has_entry[i] or hi <= lo:
-                continue
-            wm = mid[lo : hi + 1]
-            m0 = mid[lo]
-            up = np.flatnonzero(wm >= m0 * (1.0 + b))
-            dn = np.flatnonzero(wm <= m0 * (1.0 - b))
-            first_up = up[0] if up.size else SENT
-            first_dn = dn[0] if dn.size else SENT
-            off = min(first_up, first_dn)
-            exit_i[i] = lo + (hi - lo if off == SENT else off)  # time cap else barrier
 
-        entry_price = np.where(
-            has_entry, np.where(direction > 0, mp.ask[e], mp.bid[e]), np.nan
-        )
-        exit_price = np.where(
-            has_entry, np.where(direction > 0, mp.bid[exit_i], mp.ask[exit_i]), np.nan
-        )
-        trades = pd.DataFrame(
-            {
-                "ts": ts,
-                "direction": direction,
-                "strength": sig["strength"].to_numpy(),
-                "entry_exec_ts": np.where(has_entry, mp.ts[e], np.nan),
+        rows: list[dict] = []
+        last_exit_ts = -np.inf
+        for i in range(len(sig)):
+            # ONE position at a time: skip fires inside a still-open trade, then
+            # re-enter on the first fire AFTER the previous exit (matches the live
+            # strategy — an early barrier exit frees an immediate re-entry).
+            if self.non_overlapping and ts[i] <= last_exit_ts:
+                continue
+            e = int(entry_idx[i])
+            if e >= n_mp:
+                continue
+            d = direction[i]
+            hi = int(cap_idx[i])
+            if hi <= e:
+                exit_j = e
+            else:
+                wm = mid[e : hi + 1]
+                m0 = mid[e]
+                up = np.flatnonzero(wm >= m0 * (1.0 + b))
+                dn = np.flatnonzero(wm <= m0 * (1.0 - b))
+                first_up = up[0] if up.size else SENT
+                first_dn = dn[0] if dn.size else SENT
+                off = min(first_up, first_dn)
+                exit_j = e + (hi - e if off == SENT else off)  # time cap else barrier
+
+            entry_price = mp.ask[e] if d > 0 else mp.bid[e]
+            exit_price = mp.bid[exit_j] if d > 0 else mp.ask[exit_j]
+            row = {
+                "ts": ts[i],
+                "direction": d,
+                "strength": strength[i],
+                "entry_exec_ts": mp.ts[e],
                 "entry_price": entry_price,
-                "exit_exec_ts": np.where(has_entry, mp.ts[exit_i], np.nan),
+                "exit_exec_ts": mp.ts[exit_j],
                 "exit_price": exit_price,
-                "return_bps": direction * (exit_price - entry_price) / entry_price * 10000.0,
-                "holding_seconds": np.where(has_entry, mp.ts[exit_i] - mp.ts[e], np.nan),
+                "return_bps": d * (exit_price - entry_price) / entry_price * 10000.0,
+                "holding_seconds": mp.ts[exit_j] - mp.ts[e],
             }
-        )
-        if "episode" in sig.columns:
-            trades["episode"] = sig["episode"].to_numpy()
-        trades = trades[has_entry].reset_index(drop=True)
+            if episode is not None:
+                row["episode"] = episode[i]
+            rows.append(row)
+            if self.non_overlapping:
+                last_exit_ts = mp.ts[exit_j]
+
+        trades = pd.DataFrame(rows) if rows else _empty()
         return add_jst_columns(trades, ts_col="entry_exec_ts", date_ts_col="ts")

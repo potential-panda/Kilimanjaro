@@ -313,3 +313,36 @@ class TestTrailingStopReturn(unittest.TestCase):
                              {"ts": 1.0, "direction": 1.0, "strength": 4.0}],
                             barrier_bps=1000, time_cap=5)
         self.assertEqual(len(out), 1)  # second fire is inside the first trade -> skipped
+
+
+class TestTripleBarrierReentry(unittest.TestCase):
+    """The sequential re-entry fix: after an early barrier exit, re-enter on the next
+    fire (matches the live strategy), instead of the old fixed time_cap decimation."""
+
+    def _compute(self, mids, rows, barrier_bps, time_cap):
+        from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
+        with patch("kilimanjaro.return_calc.triple_barrier.load_target_prices",
+                   return_value=_mp(mids)):
+            return TripleBarrierReturn(barrier_bps=barrier_bps,
+                                      time_cap_seconds=time_cap).compute(
+                _signals(rows), TARGET, "2026-01-01", "2026-01-02")
+
+    def test_reenters_after_early_close(self):
+        # BUY fires at t=0,1,2,3; price hits +1% at t1 (exit), re-enter at t2, exit t3.
+        # OLD decimation (time_cap 100s) would keep ONLY t=0 -> 1 trade; new logic -> 2.
+        out = self._compute([100, 101, 100, 101, 100],
+                            [{"ts": float(t), "direction": 1.0, "strength": 4.0} for t in range(4)],
+                            barrier_bps=100, time_cap=100)
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out.iloc[0]["exit_exec_ts"], 1.0)   # first trade exits at t1 (+1%)
+        self.assertEqual(out.iloc[1]["entry_exec_ts"], 2.0)  # re-enters at t2 (next fire after exit)
+
+    def test_fire_inside_open_trade_skipped(self):
+        # flat price, huge barrier -> first trade times out at cap; fires within skipped
+        out = self._compute([100] * 10,
+                            [{"ts": float(t), "direction": 1.0, "strength": 4.0} for t in range(5)],
+                            barrier_bps=1000, time_cap=3)
+        # entry t0 -> timeout at t3; fires t1,t2,t3 within [0,3] skipped; t4 re-enters
+        self.assertEqual(out.iloc[0]["entry_exec_ts"], 0.0)
+        self.assertEqual(out.iloc[0]["exit_exec_ts"], 3.0)
+        self.assertEqual(out.iloc[1]["entry_exec_ts"], 4.0)
