@@ -42,6 +42,7 @@ from kilimanjaro.framework.gate import (
 from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
 from kilimanjaro.return_calc.episode import EpisodeReturn
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
+from kilimanjaro.return_calc.trailing_stop import TrailingStopReturn
 from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
 from kilimanjaro.return_calc.vol_triple_barrier import VolScaledTripleBarrierReturn
 from kilimanjaro.signal.expression import ExpressionSignal
@@ -127,9 +128,15 @@ def _return_calcs(spec: dict) -> list:
             for k in spec["ks"]
             for t in spec.get("time_caps", [300])
         ]
+    if kind == "trailing_stop":  # aquila v3: moving stop ratcheted on same-side signals
+        return [
+            TrailingStopReturn(barrier_bps=x, time_cap_seconds=t)
+            for x in spec["barriers"]
+            for t in spec.get("time_caps", [300])
+        ]
     raise ValueError(
         f"unknown return_calc {kind!r} (want fixed_horizon, episode, "
-        "triple_barrier, or vol_triple_barrier)"
+        "triple_barrier, vol_triple_barrier, or trailing_stop)"
     )
 
 
@@ -276,6 +283,7 @@ def gates_for_spec(spec: dict, return_calc: str | None = None) -> list:
         "episode",
         "triple_barrier",
         "vol_triple_barrier",
+        "trailing_stop",
     ):  # overlapping -> rolling-sum gate invalid
         return []
     g = spec.get("drawdown_gate", True)

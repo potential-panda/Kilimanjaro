@@ -269,3 +269,47 @@ class TestVolScaledTripleBarrierReturn(unittest.TestCase):
         r = out.iloc[0]
         self.assertAlmostEqual(r["barrier_bps"], 100.0)   # floor, k*sigma=0
         self.assertEqual(r["exit_exec_ts"], 5.0)          # first mid >= 100*1.01
+
+
+class TestTrailingStopReturn(unittest.TestCase):
+    def _compute(self, mids, rows, barrier_bps, time_cap):
+        from kilimanjaro.return_calc.trailing_stop import TrailingStopReturn
+        with patch("kilimanjaro.return_calc.trailing_stop.load_target_prices",
+                   return_value=_mp(mids)):
+            return TrailingStopReturn(barrier_bps=barrier_bps,
+                                      time_cap_seconds=time_cap).compute(
+                _signals(rows), TARGET, "2026-01-01", "2026-01-02")
+
+    def test_ratchets_then_exits_on_retrace(self):
+        # BUY fires t0..2, price 100->101->102 (anchor ratchets to 102), retrace at t3
+        out = self._compute([100, 101, 102, 100.9, 100],
+                            [{"ts": float(t), "direction": 1.0, "strength": 4.0} for t in range(3)],
+                            barrier_bps=100, time_cap=100)
+        self.assertEqual(len(out), 1)
+        r = out.iloc[0]
+        self.assertEqual(r["exit_reason"], "stop")
+        self.assertEqual(r["exit_exec_ts"], 3.0)  # mid 100.9 < anchor 102 * (1-1%) = 100.98
+
+    def test_lets_winner_run_past_fixed_tp(self):
+        # a fixed +100bps TP would exit at t1; trailing holds the whole 100->105 run
+        out = self._compute([100, 101, 102, 103, 104, 105, 103.9],
+                            [{"ts": float(t), "direction": 1.0, "strength": 4.0} for t in range(6)],
+                            barrier_bps=100, time_cap=100)
+        r = out.iloc[0]
+        self.assertEqual(r["exit_reason"], "stop")
+        self.assertEqual(r["exit_exec_ts"], 6.0)  # retrace from anchor 105 only at t6
+
+    def test_time_cap(self):
+        out = self._compute([100, 100.1, 100.2, 100.3, 100.4],
+                            [{"ts": 0.0, "direction": 1.0, "strength": 4.0}],
+                            barrier_bps=1000, time_cap=3)  # 10% barrier never hit
+        r = out.iloc[0]
+        self.assertEqual(r["exit_reason"], "time")
+        self.assertEqual(r["exit_exec_ts"], 3.0)
+
+    def test_non_overlapping(self):
+        out = self._compute([100] * 10,
+                            [{"ts": 0.0, "direction": 1.0, "strength": 4.0},
+                             {"ts": 1.0, "direction": 1.0, "strength": 4.0}],
+                            barrier_bps=1000, time_cap=5)
+        self.assertEqual(len(out), 1)  # second fire is inside the first trade -> skipped
