@@ -146,24 +146,28 @@ class TripleBarrierReturn:
                 off = min(first_up, first_dn)
                 exit_j = e + (hi - e if off == SENT else off)  # time cap else barrier
 
+            # Exit fills at the NEXT available price after the barrier/time cap is
+            # detected (CLOSE order placed on the detecting book event, filled on the
+            # next), mirroring the entry model. fd=0 keeps the certified tick-exact fill.
+            exit_fill = min(exit_j + 1, n_mp - 1) if fd > 0 else exit_j
             entry_price = mp.ask[e] if d > 0 else mp.bid[e]
-            exit_price = mp.bid[exit_j] if d > 0 else mp.ask[exit_j]
+            exit_price = mp.bid[exit_fill] if d > 0 else mp.ask[exit_fill]
             row = {
                 "ts": ts[i],
                 "direction": d,
                 "strength": strength[i],
                 "entry_exec_ts": mp.ts[e],
                 "entry_price": entry_price,
-                "exit_exec_ts": mp.ts[exit_j],
+                "exit_exec_ts": mp.ts[exit_fill],
                 "exit_price": exit_price,
                 "return_bps": d * (exit_price - entry_price) / entry_price * 10000.0,
-                "holding_seconds": mp.ts[exit_j] - mp.ts[e],
+                "holding_seconds": mp.ts[exit_fill] - mp.ts[e],
             }
             if episode is not None:
                 row["episode"] = episode[i]
             rows.append(row)
             if self.non_overlapping:
-                last_exit_ts = mp.ts[exit_j]
+                last_exit_ts = mp.ts[exit_fill]
 
         trades = pd.DataFrame(rows) if rows else _empty()
         return add_jst_columns(trades, ts_col="entry_exec_ts", date_ts_col="ts")
