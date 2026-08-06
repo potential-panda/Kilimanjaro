@@ -68,6 +68,7 @@ class TripleBarrierReturn:
     barrier_bps: float
     time_cap_seconds: int
     non_overlapping: bool = True
+    fill_delay_seconds: float = 0.0
 
     @property
     def overlap_window_s(self) -> float:
@@ -75,7 +76,11 @@ class TripleBarrierReturn:
 
     @property
     def params(self) -> dict:
-        return {"barrier_bps": self.barrier_bps, "time_cap_s": self.time_cap_seconds}
+        return {
+            "barrier_bps": self.barrier_bps,
+            "time_cap_s": self.time_cap_seconds,
+            "fill_delay_s": self.fill_delay_seconds,
+        }
 
     def compute(
         self,
@@ -103,8 +108,16 @@ class TripleBarrierReturn:
         episode = sig["episode"].to_numpy() if "episode" in sig.columns else None
         mid = mp.mid  # materialize once (property recomputes each access)
 
-        entry_idx = mp.first_at_or_after(ts)
-        cap_idx = np.clip(mp.first_at_or_after(ts + self.time_cap_seconds), 0, n_mp - 1)
+        # Fill model: the strategy detects the signal, buffers the order, and the
+        # exchange fills at the NEXT available market price (Himalaya). For a signal
+        # on the 1s composite grid that price is the first tick at/after ts+fill_delay
+        # (the 1s bar closes at ts+1). fill_delay=0 keeps the certified flip behaviour
+        # (fires on a tick, so at-or-after is exact). The time cap is from the entry.
+        fd = self.fill_delay_seconds
+        entry_idx = mp.first_at_or_after(ts + fd)
+        cap_idx = np.clip(
+            mp.first_at_or_after(ts + fd + self.time_cap_seconds), 0, n_mp - 1
+        )
         b = self.barrier_bps / 10000.0
         SENT = np.iinfo(np.int64).max
 
@@ -114,10 +127,10 @@ class TripleBarrierReturn:
             # ONE position at a time: skip fires inside a still-open trade, then
             # re-enter on the first fire AFTER the previous exit (matches the live
             # strategy — an early barrier exit frees an immediate re-entry).
-            if self.non_overlapping and ts[i] <= last_exit_ts:
-                continue
             e = int(entry_idx[i])
             if e >= n_mp:
+                continue
+            if self.non_overlapping and mp.ts[e] <= last_exit_ts:
                 continue
             d = direction[i]
             hi = int(cap_idx[i])

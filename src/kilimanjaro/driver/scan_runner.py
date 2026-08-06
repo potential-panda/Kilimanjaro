@@ -111,9 +111,13 @@ def _return_calcs(spec: dict) -> list:
         ]
     if kind == "fixed_horizon":
         return [FixedHorizonReturn(horizon_seconds=h) for h in spec["horizons"]]
+    # Expression signals fire on the 1s composite grid, so the realistic taker fill is
+    # the next available price after the bar closes: fill_delay_seconds=1.0 (default).
+    # Certified flip mechanism fires on a tick and constructs its calcs directly (delay 0).
+    fd = float(spec.get("fill_delay_seconds", 1.0))
     if kind == "triple_barrier":
         return [
-            TripleBarrierReturn(barrier_bps=x, time_cap_seconds=t)
+            TripleBarrierReturn(barrier_bps=x, time_cap_seconds=t, fill_delay_seconds=fd)
             for x in spec["barriers"]
             for t in spec.get("time_caps", [300])
         ]
