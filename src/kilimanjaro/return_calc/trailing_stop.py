@@ -54,6 +54,7 @@ class TrailingStopReturn:
     barrier_bps: float
     time_cap_seconds: int | None = None  # far safety bound only; stop/flip are the exits
     non_overlapping: bool = True  # trades are one-at-a-time by construction
+    fill_delay_seconds: float = 0.0  # next available price after the 1s bar closes
 
     @property
     def overlap_window_s(self) -> float:
@@ -61,7 +62,11 @@ class TrailingStopReturn:
 
     @property
     def params(self) -> dict:
-        return {"barrier_bps": self.barrier_bps, "time_cap_s": self.time_cap_seconds}
+        return {
+            "barrier_bps": self.barrier_bps,
+            "time_cap_s": self.time_cap_seconds,
+            "fill_delay_s": self.fill_delay_seconds,
+        }
 
     def compute(
         self,
@@ -93,10 +98,13 @@ class TrailingStopReturn:
         buy_fire = set(fire_secs[direction > 0].tolist())
         sell_fire = set(fire_secs[direction < 0].tolist())
 
-        entry_idx = mp.first_at_or_after(ts)
+        # Fill at the next available price after the 1s signal bar closes (see
+        # triple_barrier); fill_delay=0 keeps the certified tick-fired behaviour.
+        fd = self.fill_delay_seconds
+        entry_idx = mp.first_at_or_after(ts + fd)
         capped = self.time_cap_seconds is not None
         cap_idx = (
-            np.clip(mp.first_at_or_after(ts + self.time_cap_seconds), 0, n_mp - 1)
+            np.clip(mp.first_at_or_after(ts + fd + self.time_cap_seconds), 0, n_mp - 1)
             if capped
             else None
         )
@@ -105,10 +113,10 @@ class TrailingStopReturn:
         rows: list[dict] = []
         last_exit_ts = -np.inf
         for i in range(len(sig)):
-            if ts[i] <= last_exit_ts:  # inside a still-open trade -> non-overlap skip
-                continue
             e = int(entry_idx[i])
             if e >= n_mp:
+                continue
+            if mp.ts[e] <= last_exit_ts:  # inside a still-open trade -> non-overlap skip
                 continue
             d = direction[i]
             same = buy_fire if d > 0 else sell_fire  # confirming -> ratchet

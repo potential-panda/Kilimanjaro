@@ -134,7 +134,7 @@ def _return_calcs(spec: dict) -> list:
         ]
     if kind == "trailing_stop":  # aquila v3: trailing stop + flip exit, NO time cap
         return [
-            TrailingStopReturn(barrier_bps=x, time_cap_seconds=None)
+            TrailingStopReturn(barrier_bps=x, time_cap_seconds=None, fill_delay_seconds=fd)
             for x in spec["barriers"]
         ]
     raise ValueError(
