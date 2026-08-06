@@ -93,14 +93,16 @@ class TrailingStopReturn:
         mid = mp.mid  # materialize once
         mp_secs = np.floor(mp.ts).astype(np.int64)
 
-        # seconds carrying a same-side / opposite-side fire
-        fire_secs = np.floor(ts).astype(np.int64)
-        buy_fire = set(fire_secs[direction > 0].tolist())
-        sell_fire = set(fire_secs[direction < 0].tolist())
-
         # Fill at the next available price after the 1s signal bar closes (see
         # triple_barrier); fill_delay=0 keeps the certified tick-fired behaviour.
         fd = self.fill_delay_seconds
+        dsec = int(round(fd))  # a signal at second s is only actionable at s+dsec
+        # seconds on which a same-/opposite-side fire is ACTIONABLE (shifted by the
+        # same delay as the entry, so ratchet + flip register when the signal is known)
+        fire_secs = np.floor(ts).astype(np.int64) + dsec
+        buy_fire = set(fire_secs[direction > 0].tolist())
+        sell_fire = set(fire_secs[direction < 0].tolist())
+
         entry_idx = mp.first_at_or_after(ts + fd)
         capped = self.time_cap_seconds is not None
         cap_idx = (
@@ -142,21 +144,30 @@ class TrailingStopReturn:
                         exit_j, reason = j, "stop"
                         break
 
+            # Exit fills at the NEXT available price after the stop/flip is detected
+            # (the CLOSE order is placed on the detecting book event, filled on the
+            # next one) — mirrors the entry model. The time/eod fallback is a forced
+            # boundary close, not an order, so it fills at that tick.
+            exit_fill = (
+                min(exit_j + 1, n_mp - 1)
+                if (fd > 0 and reason in ("stop", "flip"))
+                else exit_j
+            )
             entry_price = mp.ask[e] if d > 0 else mp.bid[e]
-            exit_price = mp.bid[exit_j] if d > 0 else mp.ask[exit_j]
+            exit_price = mp.bid[exit_fill] if d > 0 else mp.ask[exit_fill]
             rows.append({
                 "ts": ts[i],
                 "direction": d,
                 "strength": strength[i],
                 "entry_exec_ts": mp.ts[e],
                 "entry_price": entry_price,
-                "exit_exec_ts": mp.ts[exit_j],
+                "exit_exec_ts": mp.ts[exit_fill],
                 "exit_price": exit_price,
                 "return_bps": d * (exit_price - entry_price) / entry_price * 10000.0,
-                "holding_seconds": mp.ts[exit_j] - mp.ts[e],
+                "holding_seconds": mp.ts[exit_fill] - mp.ts[e],
                 "exit_reason": reason,
             })
-            last_exit_ts = mp.ts[exit_j]
+            last_exit_ts = mp.ts[exit_fill]
 
         trades = pd.DataFrame(rows) if rows else _empty()
         if "episode" in sig.columns and rows:
