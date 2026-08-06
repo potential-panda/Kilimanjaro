@@ -186,6 +186,15 @@ def _load_market(
     """Load one market's features, bucketed to 1s (last value per bucket).
 
     Returns a DataFrame indexed by integer second ts.
+
+    "Last value per bucket" = the LAST source row of the second in physical (event)
+    order — `last(col ORDER BY ts, file_row_number)`. The `file_row_number` tie-break
+    is essential for venues that timestamp at 1-second resolution (e.g. COINCHECK sends
+    ~3 books/second, all with the same integer ts): ordering by ts alone leaves ties
+    that DuckDB breaks arbitrarily (it picked the FIRST row), whereas the online qate
+    engine snapshots the LAST book seen before the second rolls over. Ordering by the
+    physical row number reproduces that exactly (verified 100% vs aquila's b_mid) — the
+    "last available price at the second boundary" both offline and online must agree on.
     """
     routes = _route(features)
     parts: list[pd.DataFrame] = []
@@ -193,10 +202,10 @@ def _load_market(
     if routes["mp"]:
         if execution_size is None:
             raise ValueError(f"{exchange}/{symbol}: mid/spread need execution_size")
-        cols = ", ".join(f"last({c} ORDER BY ts) AS {c}" for c in routes["mp"])
+        cols = ", ".join(f"last({c} ORDER BY ts, file_row_number) AS {c}" for c in routes["mp"])
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
-            FROM read_parquet('{_mp_glob(exchange, symbol, execution_size, data_root)}', hive_partitioning=true)
+            FROM read_parquet('{_mp_glob(exchange, symbol, execution_size, data_root)}', hive_partitioning=true, file_row_number=true)
             WHERE date >= DATE '{start}' AND date <= DATE '{end}'
             GROUP BY 1
         """).set_index("sec")
@@ -204,11 +213,11 @@ def _load_market(
 
     if routes["obi"]:
         cols = ", ".join(
-            f"last({_obi_source_col(f)} ORDER BY ts) AS {f}" for f in routes["obi"]
+            f"last({_obi_source_col(f)} ORDER BY ts, file_row_number) AS {f}" for f in routes["obi"]
         )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
-            FROM read_parquet('{_obi_glob(exchange, symbol, data_root)}', hive_partitioning=true)
+            FROM read_parquet('{_obi_glob(exchange, symbol, data_root)}', hive_partitioning=true, file_row_number=true)
             WHERE date >= DATE '{start}' AND date <= DATE '{end}'
             GROUP BY 1
         """).set_index("sec")
@@ -216,11 +225,11 @@ def _load_market(
 
     if routes["ta"]:
         cols = ", ".join(
-            f"last({_TA_RE.match(f).group(1)} ORDER BY ts) AS {f}" for f in routes["ta"]
+            f"last({_TA_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}" for f in routes["ta"]
         )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
-            FROM read_parquet('{_ta_glob(exchange, symbol, data_root)}', hive_partitioning=true)
+            FROM read_parquet('{_ta_glob(exchange, symbol, data_root)}', hive_partitioning=true, file_row_number=true)
             WHERE date >= DATE '{start}' AND date <= DATE '{end}'
             GROUP BY 1
         """).set_index("sec")
@@ -228,11 +237,11 @@ def _load_market(
 
     if routes["bs"]:
         cols = ", ".join(
-            f"last({_BS_RE.match(f).group(1)} ORDER BY ts) AS {f}" for f in routes["bs"]
+            f"last({_BS_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}" for f in routes["bs"]
         )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
-            FROM read_parquet('{_bs_glob(exchange, symbol, data_root)}', hive_partitioning=true)
+            FROM read_parquet('{_bs_glob(exchange, symbol, data_root)}', hive_partitioning=true, file_row_number=true)
             WHERE date >= DATE '{start}' AND date <= DATE '{end}'
             GROUP BY 1
         """).set_index("sec")
@@ -240,11 +249,11 @@ def _load_market(
 
     if routes["bc"]:
         cols = ", ".join(
-            f"last({_BC_RE.match(f).group(1)} ORDER BY ts) AS {f}" for f in routes["bc"]
+            f"last({_BC_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}" for f in routes["bc"]
         )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
-            FROM read_parquet('{_bc_glob(exchange, symbol, data_root)}', hive_partitioning=true)
+            FROM read_parquet('{_bc_glob(exchange, symbol, data_root)}', hive_partitioning=true, file_row_number=true)
             WHERE date >= DATE '{start}' AND date <= DATE '{end}'
             GROUP BY 1
         """).set_index("sec")
