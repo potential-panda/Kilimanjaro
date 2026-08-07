@@ -6,4 +6,4 @@ note: RAW volume imbalance k1 (input to book_shape / obi_ema)
 """
 from kilimanjaro.calibration.base import FactorCalib
 
-FACTOR = FactorCalib(name="r_vol_imb_k1", offline_expr="a_obi_k1", status="pending", note="RAW volume imbalance k1 (input to book_shape / obi_ema)")
+FACTOR = FactorCalib(name="r_vol_imb_k1", offline_expr="a_obi_k1", status="calibrated", note="RAW volume imbalance k1 (input to book_shape / obi_ema)")

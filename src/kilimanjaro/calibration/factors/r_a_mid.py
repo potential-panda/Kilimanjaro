@@ -6,4 +6,4 @@ note: RAW BINANCE walked mid
 """
 from kilimanjaro.calibration.base import FactorCalib
 
-FACTOR = FactorCalib(name="r_a_mid", offline_expr="a_mid", status="pending", note="RAW BINANCE walked mid")
+FACTOR = FactorCalib(name="r_a_mid", offline_expr="a_mid", status="calibrated", note="RAW BINANCE walked mid")

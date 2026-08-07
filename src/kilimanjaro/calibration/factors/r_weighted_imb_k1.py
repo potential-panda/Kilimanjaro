@@ -6,4 +6,4 @@ note: RAW weighted_imb k1 (input to wimb_k1) — BookState vs qate compute_weigh
 """
 from kilimanjaro.calibration.base import FactorCalib
 
-FACTOR = FactorCalib(name="r_weighted_imb_k1", offline_expr="a_bs_weighted_imb_k1", status="pending", note="RAW weighted_imb k1 (input to wimb_k1) — BookState vs qate compute_weighted_imbalance")
+FACTOR = FactorCalib(name="r_weighted_imb_k1", offline_expr="a_bs_weighted_imb_k1", status="calibrated", note="RAW weighted_imb k1 (input to wimb_k1) — BookState vs qate compute_weighted_imbalance")

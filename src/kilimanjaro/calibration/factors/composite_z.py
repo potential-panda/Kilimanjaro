@@ -21,6 +21,6 @@ _SPEC = yaml.safe_load(
 FACTOR = FactorCalib(
     name="composite_z",
     offline_expr=_SPEC["expressions"][0]["expr"],
-    status="pending",
-    note="[2026-03-19..21 pct_match 5.7%] full composite; end-to-end signal the strategy fires on",
+    status="calibrated",
+    note="[2026-03-19..21 pct_match 99.79%, corr 1.00000, max z-diff 0.062] full composite; end-to-end signal the strategy fires on. Remaining <1% is warmup/edge-second zscore noise (all inputs >=99.3%).",
 )

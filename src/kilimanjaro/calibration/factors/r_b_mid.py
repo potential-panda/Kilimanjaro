@@ -6,4 +6,4 @@ note: RAW COINCHECK walked mid
 """
 from kilimanjaro.calibration.base import FactorCalib
 
-FACTOR = FactorCalib(name="r_b_mid", offline_expr="b_mid", status="pending", note="RAW COINCHECK walked mid")
+FACTOR = FactorCalib(name="r_b_mid", offline_expr="b_mid", status="calibrated", note="RAW COINCHECK walked mid")

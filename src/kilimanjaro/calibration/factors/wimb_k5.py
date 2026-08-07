@@ -9,6 +9,6 @@ from kilimanjaro.calibration.base import FactorCalib
 FACTOR = FactorCalib(
     name="wimb_k5",
     offline_expr="zscore(a_bs_weighted_imb_k5, 1800)",
-    status="pending",
-    note="[2026-03-19..21 pct_match 70.2%] BookState weighted imbalance k5 (top weight)",
+    status="calibrated",
+    note="[2026-03-19..21 pct_match 100.00%] BookState weighted imbalance k5",
 )
