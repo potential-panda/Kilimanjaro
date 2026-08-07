@@ -47,6 +47,12 @@ FACTOR_NAMES = [
     "large_trade", "book_shape",
     "wimb_k1", "wimb_k5",
     "composite_z",  # the end-to-end signal
+    # RAW inputs (r_ prefix) — diagnostics to localise a mismatch to the raw
+    # book/trade computation vs the zscore. Emitted by aquila alongside the factors.
+    "r_a_mid", "r_b_mid",
+    "r_vol_imb_k1", "r_vol_imb_k5",
+    "r_weighted_imb_k1", "r_weighted_imb_k5",
+    "r_obi_ema_k1_30s",
 ]
 
 
