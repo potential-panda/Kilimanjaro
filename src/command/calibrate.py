@@ -37,6 +37,15 @@ def register(sub: argparse._SubParsersAction) -> None:
                    help="list factors + calibration status and exit")
     p.add_argument("--mismatches", type=int, default=5,
                    help="worst-N mismatching seconds to print for sub-target factors")
+    p.add_argument("--trades", action="store_true",
+                   help="calibrate the TRADE layer (orders + return) instead of factors: "
+                        "run the scan and match its round-trips against Himalaya's ORDER stream")
+    p.add_argument("--px-tol", type=float, default=1.0,
+                   help="[--trades] entry/exit price match tolerance in JPY (default 1.0)")
+    p.add_argument("--ret-tol", type=float, default=0.5,
+                   help="[--trades] per-trade return match tolerance in bps (default 0.5)")
+    p.add_argument("--no-dd-gate", action="store_true",
+                   help="[--trades] drop the rolling-drawdown gate from the scan")
     p.set_defaults(func=_run)
 
 
@@ -50,6 +59,9 @@ def _run(args) -> int:
     if not (args.start and args.end):
         print("error: --start and --end are required (unless --list)")
         return 2
+
+    if args.trades:
+        return _run_trades(args)
 
     names = registry.FACTOR_NAMES if args.factor == "all" else [args.factor]
     print(f"calibrate {len(names)} factor(s) | window {args.start}..{args.end} | bucket {args.bucket}")
@@ -71,4 +83,32 @@ def _run(args) -> int:
             print(f"    {sec}  {off:+.6f}  {on:+.6f}  {d:.6f}")
     if below:
         print(f"\n{len(below)}/{len(names)} factor(s) below target — inspect + fix, then re-run.")
+    return 0
+
+
+def _run_trades(args) -> int:
+    """Trade-layer calibration: scan round-trips vs Himalaya ORDER stream."""
+    from pathlib import Path
+
+    import yaml
+
+    from kilimanjaro.calibration.trades import ScanConfig, TradeCalib
+
+    root = Path(__file__).resolve().parents[2]
+    spec_path = (root / "cycle" / "15_handoffs" / "blend-btc-jpy-us-z35"
+                 / "composite_coincheck.yaml")
+    spec = yaml.safe_load(spec_path.read_text())
+    cfg = ScanConfig.from_bucket(args.bucket, use_dd_gate=not args.no_dd_gate)
+    print(f"calibrate TRADES | window {args.start}..{args.end} | bucket {args.bucket}")
+    print(f"  scan cfg: thr {cfg.threshold} barrier {cfg.barrier_bps} cap {cfg.time_cap_s} "
+          f"fill_delay {cfg.fill_delay_seconds} dd_gate {cfg.use_dd_gate} "
+          f"(win {cfg.dd_window_s:.0f}/thr {cfg.dd_threshold_bps}/cd {cfg.dd_cooldown_s:.0f})")
+    calib = TradeCalib(spec, spec["markets"], cfg)
+    r = calib.calibrate(args.bucket, args.start, args.end,
+                        px_tol=args.px_tol, ret_tol=args.ret_tol)
+    print(r.summary())
+    if r.divergences:
+        print(f"\n  first divergences (max {len(r.divergences)}):")
+        for d in r.divergences:
+            print(f"    {d}")
     return 0
