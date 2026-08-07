@@ -22,5 +22,5 @@ FACTOR = FactorCalib(
     name="composite_z",
     offline_expr=_SPEC["expressions"][0]["expr"],
     status="pending",
-    note="full composite; end-to-end signal the strategy fires on",
+    note="[2026-03-19..21 pct_match 5.7%] full composite; end-to-end signal the strategy fires on",
 )

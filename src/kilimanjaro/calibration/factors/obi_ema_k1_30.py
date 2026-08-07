@@ -10,5 +10,5 @@ FACTOR = FactorCalib(
     name="obi_ema_k1_30",
     offline_expr="zscore(a_obi_ema_k1_30s, 1800)",
     status="pending",
-    note="OBI EMA k1 hl30 — engine OBIEma vs Makalu OBIFeature EMA",
+    note="[2026-03-19..21 pct_match 0.9%] OBI EMA k1 hl30 — engine OBIEma vs Makalu OBIFeature EMA",
 )

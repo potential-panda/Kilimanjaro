@@ -9,6 +9,6 @@ from kilimanjaro.calibration.base import FactorCalib
 FACTOR = FactorCalib(
     name="basis_3600",
     offline_expr="zscore(a_mid / b_mid, 3600)",
-    status="pending",
-    note="as basis_900, longer window",
+    status="calibrated",
+    note="[2026-03-19..21 pct_match 100.0%] as basis_900, longer window",
 )

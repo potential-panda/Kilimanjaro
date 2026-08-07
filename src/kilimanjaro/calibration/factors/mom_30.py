@@ -9,6 +9,6 @@ from kilimanjaro.calibration.base import FactorCalib
 FACTOR = FactorCalib(
     name="mom_30",
     offline_expr="zscore(ret(a_mid, 30), 1800)",
-    status="pending",
-    note="30s BINANCE momentum",
+    status="calibrated",
+    note="[2026-03-19..21 pct_match 100.0%] 30s BINANCE momentum",
 )

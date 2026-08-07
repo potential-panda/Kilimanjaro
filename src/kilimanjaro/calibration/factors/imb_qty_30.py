@@ -9,6 +9,6 @@ from kilimanjaro.calibration.base import FactorCalib
 FACTOR = FactorCalib(
     name="imb_qty_30",
     offline_expr="zscore(a_ta_imbalance_qty_30s, 1800)",
-    status="pending",
-    note="trade imbalance qty 30s",
+    status="calibrated",
+    note="[2026-03-19..21 pct_match 99.7%] trade imbalance qty 30s",
 )
