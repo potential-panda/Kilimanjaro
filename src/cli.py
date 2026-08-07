@@ -29,6 +29,7 @@ logging.basicConfig(
 def main() -> int:
     from command import (
         blend,
+        calibrate,
         factory,
         generate,
         grid,
@@ -55,6 +56,7 @@ def main() -> int:
     generate.register(sub)
     ledger.register(sub)
     factory.register(sub)
+    calibrate.register(sub)
 
     args = parser.parse_args()
     return args.func(args)
