@@ -121,6 +121,7 @@ class TradeCalib:
         from kilimanjaro.driver.scan_runner import gates_for_spec
         from kilimanjaro.framework.protocol import MarketConfig
         from kilimanjaro.framework.schedule import ScheduleFilter
+        from kilimanjaro.calibration.base import _shift_date, _WARMUP_DAYS
         from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
         from kilimanjaro.signal.expression import ExpressionSignal
 
@@ -129,13 +130,17 @@ class TradeCalib:
             markets=self.markets, expr=e["expr"], threshold=self.cfg.threshold,
             min_age=None, max_age=None,
             invert=e.get("invert", [False])[0], label=e.get("label"))
-        data = sig.load_data(start, end, data_root)
+        # Load from start-warmup so the composite's rolling windows converge to the same
+        # state aquila has at the window start (else the first ~hour under-warms); the
+        # extra early trades are dropped by the Himalaya-window restriction in calibrate().
+        load_start = _shift_date(start, _WARMUP_DAYS)
+        data = sig.load_data(load_start, end, data_root)
         t = self.spec["target"]
         tgt = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
         trades = TripleBarrierReturn(
             self.cfg.barrier_bps, self.cfg.time_cap_s,
             fill_delay_seconds=self.cfg.fill_delay_seconds,
-        ).compute(sig.generate(data), tgt, start, end, data_root)
+        ).compute(sig.generate(data), tgt, load_start, end, data_root)
 
         # US-session schedule: allow entries only in jst_hours (any day), no maint block.
         blocked = [h for h in range(24) if h not in self.cfg.jst_hours]

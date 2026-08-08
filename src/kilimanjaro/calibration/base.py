@@ -25,6 +25,19 @@ from kilimanjaro.calibration.compare import CalibResult, compare
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 _TRADING_MEASUREMENT = "TRADING"  # qate create_trading_metric -> Measurement.TRADING
 
+# Warmup the offline rolling windows to the SAME converged state Himalaya has at the
+# window start. The composite's slowest ops are the 3600 s basis + 1800 s z-scores;
+# without prior history the scan's first ~hour is under-converged and diverges from
+# aquila (which warms its engine from the data loaded before the run's from-dt). 2 days
+# is comfortably more than 3600 s. Extra pre-window offline seconds are harmless — the
+# compare intersects offline/online indices and drops the offline-only warmup rows.
+_WARMUP_DAYS = 2
+
+
+def _shift_date(date_str: str, days: int) -> str:
+    from datetime import datetime, timedelta
+    return (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
+
 
 @dataclass(frozen=True)
 class FactorCalib:
@@ -41,13 +54,17 @@ class FactorCalib:
 
     # ---- offline: Kilimanjaro / Makalu parquet --------------------------------
     def offline_series(self, markets: dict, start: str, end: str,
-                       data_root: Path = _DEFAULT_DATA_ROOT) -> pd.Series:
-        """Per-second factor series from the feature frame (index = integer second)."""
+                       data_root: Path = _DEFAULT_DATA_ROOT,
+                       warmup_days: int = _WARMUP_DAYS) -> pd.Series:
+        """Per-second factor series from the feature frame (index = integer second).
+
+        Loads from `start - warmup_days` so the rolling windows converge before the
+        compared window; the extra warmup seconds are dropped by the compare intersect."""
         from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
         sig = ExpressionSignal.create(markets=markets, expr=self.offline_expr,
                                       threshold=0.0, min_age=None, max_age=None,
                                       invert=False, label=self.name)
-        frame = sig.load_data(start, end, data_root)
+        frame = sig.load_data(_shift_date(start, warmup_days), end, data_root)
         ts = frame["ts"].to_numpy() if "ts" in frame.columns else frame.index.to_numpy()
         vals = np.asarray(eval_expr(self.offline_expr, frame), dtype=float)
         s = pd.Series(vals, index=np.floor(ts).astype(np.int64))
