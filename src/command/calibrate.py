@@ -46,6 +46,9 @@ def register(sub: argparse._SubParsersAction) -> None:
                    help="[--trades] per-trade return match tolerance in bps (default 0.5)")
     p.add_argument("--no-dd-gate", action="store_true",
                    help="[--trades] drop the rolling-drawdown gate from the scan")
+    p.add_argument("--variant", default="v3", choices=["v1", "v3"],
+                   help="[--trades] exit mechanism to match the bucket's aquila --variant: "
+                        "v3 trailing stop (default) or v1 triple barrier")
     p.set_defaults(func=_run)
 
 
@@ -98,10 +101,11 @@ def _run_trades(args) -> int:
     spec_path = (root / "cycle" / "15_handoffs" / "blend-btc-jpy-us-z35"
                  / "composite_coincheck.yaml")
     spec = yaml.safe_load(spec_path.read_text())
-    cfg = ScanConfig.from_bucket(args.bucket, use_dd_gate=not args.no_dd_gate)
+    cfg = ScanConfig.from_bucket(args.bucket, use_dd_gate=not args.no_dd_gate,
+                                 variant=args.variant)
     print(f"calibrate TRADES | window {args.start}..{args.end} | bucket {args.bucket}")
-    print(f"  scan cfg: thr {cfg.threshold} barrier {cfg.barrier_bps} cap {cfg.time_cap_s} "
-          f"fill_delay {cfg.fill_delay_seconds} dd_gate {cfg.use_dd_gate} "
+    print(f"  scan cfg: variant {cfg.variant} thr {cfg.threshold} barrier {cfg.barrier_bps} "
+          f"cap {cfg.time_cap_s} fill_delay {cfg.fill_delay_seconds} dd_gate {cfg.use_dd_gate} "
           f"(win {cfg.dd_window_s:.0f}/thr {cfg.dd_threshold_bps}/cd {cfg.dd_cooldown_s:.0f})")
     calib = TradeCalib(spec, spec["markets"], cfg)
     r = calib.calibrate(args.bucket, args.start, args.end,

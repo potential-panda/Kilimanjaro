@@ -44,6 +44,10 @@ class ScanConfig:
     threshold: float = 3.5
     barrier_bps: float = 10.0
     time_cap_s: float = 300.0
+    variant: str = "v3"                    # EXIT mechanism: "v3" trailing stop (default,
+                                           # matches the promoted aquila run) or "v1" triple
+                                           # barrier. MUST match the --variant the bucket was
+                                           # generated with, or exits diverge by mechanism.
     fill_delay_seconds: float = 1.0        # next-available-price fill (the certified model)
     jst_hours: tuple[int, ...] = US_JST_HOURS
     dd_window_s: float = 21600.0           # aquila dd_window_s (6h)
@@ -122,7 +126,6 @@ class TradeCalib:
         from kilimanjaro.framework.protocol import MarketConfig
         from kilimanjaro.framework.schedule import ScheduleFilter
         from kilimanjaro.calibration.base import _shift_date, _WARMUP_DAYS
-        from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
         from kilimanjaro.signal.expression import ExpressionSignal
 
         e = self.spec["expressions"][0]
@@ -137,10 +140,16 @@ class TradeCalib:
         data = sig.load_data(load_start, end, data_root)
         t = self.spec["target"]
         tgt = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
-        trades = TripleBarrierReturn(
-            self.cfg.barrier_bps, self.cfg.time_cap_s,
-            fill_delay_seconds=self.cfg.fill_delay_seconds,
-        ).compute(sig.generate(data), tgt, load_start, end, data_root)
+        # Pick the EXIT mechanism to match the aquila variant that filled the bucket.
+        if self.cfg.variant == "v1":
+            from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
+            rc = TripleBarrierReturn(self.cfg.barrier_bps, self.cfg.time_cap_s,
+                                     fill_delay_seconds=self.cfg.fill_delay_seconds)
+        else:  # v3 — trailing stop, no binding time cap (aquila v3 holds past 300s)
+            from kilimanjaro.return_calc.trailing_stop import TrailingStopReturn
+            rc = TrailingStopReturn(self.cfg.barrier_bps, time_cap_seconds=None,
+                                    fill_delay_seconds=self.cfg.fill_delay_seconds)
+        trades = rc.compute(sig.generate(data), tgt, load_start, end, data_root)
 
         # US-session schedule: allow entries only in jst_hours (any day), no maint block.
         blocked = [h for h in range(24) if h not in self.cfg.jst_hours]
