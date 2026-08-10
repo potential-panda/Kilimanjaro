@@ -389,6 +389,7 @@ def scan_blends(
     end: str,
     horizon: int,
     ridge: float = 0.2,
+    use_lgbm: bool = False,
     data_root: Path = _DEFAULT_DATA_ROOT,
 ) -> dict:
     """Build + rank candidate blends of `factors`. Methods (all fit on TRAIN):
@@ -396,6 +397,7 @@ def scan_blends(
       ic_weighted  — w = IC          (Σ=I diagonal baseline)
       ic_decorr    — w = (Σ+ridge·I)⁻¹·IC   (max-IC portfolio; down-weights redundancy)
       greedy       — forward-select factors that improve the train blend IC
+      lgbm         — (use_lgbm) gradient-boosted nonlinear capacity ceiling; not a formula
     Each is evaluated on the untouched HOLDOUT. Returns ranked results + per-factor IC.
     """
     tr_s, tr_e, ho_s, ho_e = split_windows(start, split, end)
@@ -431,6 +433,16 @@ def scan_blends(
             "div_ratio": round(abs(ho_ic) / best_single_ho, 3) if best_single_ho else float("nan"),
             "weights": used,
         })
+    lgbm_importances = None
+    if use_lgbm:
+        lg = _lgbm_blend(train, holdout, names)  # nonlinear capacity, no linear weights
+        lgbm_importances = lg["importances"]
+        results.append({
+            "method": "lgbm", "n_factors": len(names),
+            "train_ic": round(lg["train_ic"], 5), "holdout_ic": round(lg["holdout_ic"], 5),
+            "div_ratio": round(abs(lg["holdout_ic"]) / best_single_ho, 3) if best_single_ho else float("nan"),
+            "weights": {},  # a tree model, not a formula — importances stored separately
+        })
     results.sort(key=lambda r: -abs(r["holdout_ic"]))
     per_factor = sorted(
         [{"factor": names[i], "train_ic": round(float(ic_tr[i]), 5),
@@ -441,5 +453,34 @@ def scan_blends(
     return {
         "results": results, "per_factor": per_factor, "names": names,
         "horizon": horizon, "train_n": int(len(train)), "holdout_n": int(len(holdout)),
-        "best_single_holdout_ic": best_single_ho,
+        "best_single_holdout_ic": best_single_ho, "lgbm_importances": lgbm_importances,
+    }
+
+
+def _lgbm_blend(train: pd.DataFrame, holdout: pd.DataFrame, names: list[str],
+                seed: int = 0) -> dict:
+    """LGBM capacity layer: a heavily-regularized gradient-boosted regression of the
+    factors onto the forward return, fit on TRAIN, scored by holdout IC. This is NOT a
+    tradeable formula — it measures the *nonlinear* predictive ceiling, so we can see how
+    much (if any) edge sits beyond the linear decorrelated blend. LGBM handles NaN natively,
+    so factors are fed raw (no neutral imputation). Returns train/holdout IC + importances."""
+    import lightgbm as lgb
+
+    Xtr, ytr = train[names].to_numpy(dtype=float), train["fwd_ret"].to_numpy(dtype=float)
+    Xho, yho = holdout[names].to_numpy(dtype=float), holdout["fwd_ret"].to_numpy(dtype=float)
+    # Strong regularization + big leaves so it can't memorize the ~0.01-R² return noise:
+    # small trees, tiny learning rate, huge min_child_samples, row/col subsampling.
+    m = lgb.LGBMRegressor(
+        objective="regression", n_estimators=200, learning_rate=0.02,
+        num_leaves=15, min_child_samples=5000, subsample=0.7, subsample_freq=1,
+        colsample_bytree=0.8, reg_lambda=1.0, max_depth=4,
+        random_state=seed, n_jobs=-1, verbosity=-1,
+    )
+    m.fit(Xtr, ytr)
+    imp = m.feature_importances_.astype(float)
+    imp = imp / imp.sum() if imp.sum() else imp
+    return {
+        "train_ic": _ic(m.predict(Xtr), ytr),
+        "holdout_ic": _ic(m.predict(Xho), yho),
+        "importances": {names[i]: round(float(imp[i]), 4) for i in range(len(names))},
     }

@@ -43,6 +43,8 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--split", default=None, help="train/holdout split date (default: last third)")
     p.add_argument("--horizon", type=int, default=30, help="forward-return horizon seconds (default 30)")
     p.add_argument("--ridge", type=float, default=0.2, help="decorr ridge (default 0.2)")
+    p.add_argument("--lgbm", action="store_true",
+                   help="also fit an LGBM capacity ceiling (nonlinear headroom vs the linear blend)")
     p.set_defaults(func=_run)
 
 
@@ -79,7 +81,7 @@ def _run(args) -> int:
               f"{len(factors)} factors | h={args.horizon}s | train {args.start}..{split} "
               f"holdout {split}..{args.end} =====")
         res = scan_blends(factors, target, args.start, split, args.end,
-                          args.horizon, ridge=args.ridge)
+                          args.horizon, ridge=args.ridge, use_lgbm=args.lgbm)
         if not res["results"]:
             print("  (no overlapping panel — skipped)")
             continue
@@ -88,8 +90,13 @@ def _run(args) -> int:
               f"(train n={res['train_n']}, holdout n={res['holdout_n']})")
         print(f"  {'method':<13} {'nFac':>4} {'trainIC':>8} {'holdoutIC':>10} {'div×':>6}")
         for r in res["results"]:
+            tag = "  ← nonlinear ceiling (not a formula)" if r["method"] == "lgbm" else ""
             print(f"  {r['method']:<13} {r['n_factors']:>4} {r['train_ic']:>+8.4f} "
-                  f"{r['holdout_ic']:>+10.4f} {r['div_ratio']:>6}")
+                  f"{r['holdout_ic']:>+10.4f} {r['div_ratio']:>6}{tag}")
+        if res.get("lgbm_importances"):
+            top = sorted(res["lgbm_importances"].items(), key=lambda kv: -kv[1])[:6]
+            print("  LGBM top feature importances: "
+                  + ", ".join(f"{n} {w:.2f}" for n, w in top))
 
         import pandas as pd
         out = _RESULTS / f"{args.families}_{vs.replace(':', '_')}"
@@ -98,8 +105,9 @@ def _run(args) -> int:
                      ).to_csv(out / "blends.csv", index=False)
         pd.DataFrame(res["per_factor"]).to_csv(out / "per_factor.csv", index=False)
 
-        # emit the top blend as a stage-15 spec (weights from the winning method)
-        top = res["results"][0]
+        # emit the top LINEAR blend as a stage-15 spec (LGBM is a model, not a formula)
+        linear = [r for r in res["results"] if r["method"] != "lgbm"]
+        top = linear[0]
         wf = [f for f in factors if f.name in top["weights"]] or factors
         base = {"markets": wf[0].markets_dict,
                 "target": {"exchange": venue["exchange"], "symbol": venue["symbol"],
