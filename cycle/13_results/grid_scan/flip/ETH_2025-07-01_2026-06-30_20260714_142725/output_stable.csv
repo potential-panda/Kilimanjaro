@@ -1,2 +1,0 @@
-box,step,schedule,train_n_trades,train_avg_net,train_total_net_bps,train_t_stat,train_p_value_bootstrap,train_n_dd_blocked,train_rank_pct,holdout_n_trades,holdout_avg_net,holdout_total_net_bps,holdout_t_stat,holdout_p_value_bootstrap,holdout_n_dd_blocked,holdout_rank_pct,train_pos_month_share,holdout_pos_month_share,train_plateau,verdict,stable,n_combos_tested,train_status,holdout_status
-0.0025,0.02,weekday,6474,3.69253,23901.72883,4.82266,0.002,53,1.0,2232,1.11001,2476.42355,0.87461,0.2016,0,0.95102,1.0,0.5,1.0,stable,True,245,ok,ok

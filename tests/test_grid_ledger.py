@@ -40,7 +40,7 @@ class TestRecordGridScan(unittest.TestCase):
                 hypothesis_id="hyp-20260703-002",
                 actor_id="grid-scan-flip",
                 scan_id="ETH_2025-07-01_2026-06-30_x",
-                out_dir=Path("cycle/13_results/grid_scan/flip/ETH_x"),
+                out_dir=Path("cycle/15_return_eval/grid_scan/flip/ETH_x"),
                 market="eth",
                 res=res,
                 ledger_path=path,

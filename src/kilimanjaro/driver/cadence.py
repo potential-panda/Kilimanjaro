@@ -30,7 +30,7 @@ from kilimanjaro.driver.loop import run_once
 
 LOG = logging.getLogger("kilimanjaro.driver.cadence")
 
-_DEFAULT_RESULTS_ROOT = Path("cycle/13_results/grid_scan/expr")
+_DEFAULT_RESULTS_ROOT = Path("cycle/15_return_eval/grid_scan/expr")
 # After a cycle raises, wait at least this long before the next one so a
 # persistent failure can't hot-spin (the stop signal is still honoured during it).
 _ERROR_BACKOFF_SECONDS = 5.0

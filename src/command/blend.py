@@ -26,7 +26,7 @@ import yaml
 from kilimanjaro.framework import MarketConfig, default_split, write_csv
 from kilimanjaro.framework.schedule import ScheduleFilter
 
-_RESULTS = Path("cycle/13_results/blend")
+_RESULTS = Path("cycle/14_blend_corr")
 
 
 def register(sub: argparse._SubParsersAction) -> None:
@@ -50,12 +50,12 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--barrier-bps", type=float, default=5.0,
                    help="triple_barrier: symmetric take-profit/stop distance (bps)")
     p.add_argument("--out", default=None, help="Output dir (default under "
-                   "cycle/13_results/blend/)")
+                   "cycle/14_blend_corr/)")
     p.set_defaults(func=_run_blend)
 
 
 def _run_blend(args: argparse.Namespace) -> int:
-    from kilimanjaro.driver.blend import blend, factors_from_specs
+    from kilimanjaro.driver.blend_corr import blend, factors_from_specs
 
     specs = [yaml.safe_load(Path(s).read_text()) for s in args.specs]
     targets = {(s["target"]["exchange"], s["target"]["symbol"]) for s in specs}
@@ -101,7 +101,7 @@ def _run_blend(args: argparse.Namespace) -> int:
 
 def _run_step2(specs, factors, res, target, split, args, out_dir) -> None:
     """Run the IC-weighted composite through the realistic episode sim."""
-    from kilimanjaro.driver.blend import composite_spec
+    from kilimanjaro.driver.blend_corr import composite_spec
     from kilimanjaro.driver.scan_runner import run_spec
 
     weights = {p["factor"]: p["weight"] for p in res["per_factor"]}

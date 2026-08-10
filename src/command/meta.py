@@ -26,7 +26,7 @@ import yaml
 
 from kilimanjaro.framework import MarketConfig, default_split, split_windows, write_csv
 
-_RESULTS = Path("cycle/13_results/meta")
+_RESULTS = Path("cycle/15_return_eval/meta")
 
 
 def register(sub: argparse._SubParsersAction) -> None:
@@ -57,12 +57,12 @@ def register(sub: argparse._SubParsersAction) -> None:
                         "(e.g. COINCHECK/BTC_SPOT/0.002); keeps the composite + "
                         "its weights, swaps only the execution/basis leg")
     p.add_argument("--out", default=None, help="Output dir (default under "
-                   "cycle/13_results/meta/)")
+                   "cycle/15_return_eval/meta/)")
     p.set_defaults(func=_run_meta)
 
 
 def _run_meta(args: argparse.Namespace) -> int:
-    from kilimanjaro.driver.blend import blend, composite_spec, factors_from_specs
+    from kilimanjaro.driver.blend_corr import blend, composite_spec, factors_from_specs
     from kilimanjaro.driver.meta_label import (
         build_candidate_table,
         compare_rankings,

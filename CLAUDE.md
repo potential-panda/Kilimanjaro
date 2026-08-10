@@ -97,10 +97,13 @@ concentration) — the "is the edge broad or event-driven?" check
 
 Code/infra live at the root (`src/`, `tests/`, `tools/`, `web/`, `doc/`). All
 research-cycle **data** lives under `cycle/`, numbered in pipeline order —
-`0x` = foundation inputs (`01_schemas`, `03_inventory`), `1x` = the loop
-(`11_hypotheses` → `12_specs` → `13_results` → `14_ledger` → `15_handoffs`).
-See `cycle/README.md`. When code needs one of these, build the
-path from the repo root (e.g. `_ROOT / "cycle" / "14_ledger" / "events.jsonl"`).
+`0x` = foundation inputs (`01_schemas`, `03_inventory`), `1x` = the loop, a
+cost-shaped funnel: `11_hypotheses` → `12_specs` → `13_signal_corr` (per-factor
+correlation/IC) → `14_blend_corr` (weighted-blend IC) → `15_return_eval` (episode
+return on top blends) → `16_calibration` (scan↔Himalaya) → `17_ledger` →
+`18_handoffs`. Full design in `doc/research-pipeline.md`; see `cycle/README.md`.
+When code needs one of these, build the path from the repo root (e.g.
+`_ROOT / "cycle" / "17_ledger" / "events.jsonl"`).
 
 ## Data paths
 

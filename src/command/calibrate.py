@@ -49,6 +49,9 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--variant", default="v3", choices=["v1", "v3"],
                    help="[--trades] exit mechanism to match the bucket's aquila --variant: "
                         "v3 trailing stop (default) or v1 triple barrier")
+    p.add_argument("--spec", default="composite_coincheck.yaml",
+                   help="[--trades] spec filename in cycle/18_handoffs/blend-btc-jpy-us-z35/ "
+                        "(default composite_coincheck.yaml; use composite.yaml for GMO BTC_JPY)")
     p.set_defaults(func=_run)
 
 
@@ -98,8 +101,7 @@ def _run_trades(args) -> int:
     from kilimanjaro.calibration.trades import ScanConfig, TradeCalib
 
     root = Path(__file__).resolve().parents[2]
-    spec_path = (root / "cycle" / "15_handoffs" / "blend-btc-jpy-us-z35"
-                 / "composite_coincheck.yaml")
+    spec_path = (root / "cycle" / "18_handoffs" / "blend-btc-jpy-us-z35" / args.spec)
     spec = yaml.safe_load(spec_path.read_text())
     cfg = ScanConfig.from_bucket(args.bucket, use_dd_gate=not args.no_dd_gate,
                                  variant=args.variant)

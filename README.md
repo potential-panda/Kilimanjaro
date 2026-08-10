@@ -110,7 +110,7 @@ Everything runs through `python src/cli.py <command>`:
 
 Promotion (steps 5–7) stays human: the loop parks survivors at a `REVIEW_PACKET.md`
 stamped CALIBRATED / TREND-ONLY; a human records the `human_approval` and drafts a
-handoff (`cycle/15_handoffs/`). See `doc/requirements/agent-loop-design.md` for the state
+handoff (`cycle/18_handoffs/`). See `doc/requirements/agent-loop-design.md` for the state
 machine.
 
 ## Artifacts
@@ -121,9 +121,9 @@ All research-cycle data lives under `cycle/`, numbered in pipeline order (see
 
 - `cycle/11_hypotheses/` — hypothesis specs (`hyp-YYYYMMDD-NNN.yaml`)
 - `cycle/12_specs/` — the loop's working scan specs (expression formulas + sweeps)
-- `cycle/13_results/grid_scan/{flip,expr,horizon}/` — grid-scan outputs (`output.csv`, `output_stable.csv`, `params.json`, …)
-- `cycle/14_ledger/` — append-only research memory (`events.jsonl`)
-- `cycle/15_handoffs/` — human-approved backtest handoff packages (`hyp-YYYYMMDD-NNN.yaml`/`.md`)
+- `cycle/15_return_eval/grid_scan/{flip,expr,horizon}/` — grid-scan outputs (`output.csv`, `output_stable.csv`, `params.json`, …)
+- `cycle/17_ledger/` — append-only research memory (`events.jsonl`)
+- `cycle/18_handoffs/` — human-approved backtest handoff packages (`hyp-YYYYMMDD-NNN.yaml`/`.md`)
 - `cycle/03_inventory/` — Makalu data inventory snapshots (`inventory-YYYYMMDDTHHMMSSZ.yaml`)
 - `cycle/01_schemas/` — JSON Schemas (hypothesis spec + ledger event)
 
@@ -182,7 +182,7 @@ decision, not a blocker.
 step) -- the same file layout convention as Makalu's own `src/api.py`/`web/`.
 Read-only, two views:
 
-- **Scans** (`#/scans`) -- every grid-scan run under `cycle/13_results/grid_scan/`
+- **Scans** (`#/scans`) -- every grid-scan run under `cycle/15_return_eval/grid_scan/`
   (flip / horizon / expr), newest first, with verdict counts. A run's
   detail view renders each CSV (`output.csv`, `output_stable.csv`,
   `output_monthly.csv`, ...) as a table sortable by any column (click a

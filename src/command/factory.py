@@ -29,7 +29,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--gen-per-cycle", type=int, default=5, help="New specs generated per cycle")
     p.add_argument("--interval-seconds", type=float, default=0.0, help="Sleep between cycles")
     p.add_argument("--split", default=None, help="Holdout split date (default: last third)")
-    p.add_argument("--results-root", default="cycle/13_results/grid_scan/expr")
+    p.add_argument("--results-root", default="cycle/15_return_eval/grid_scan/expr")
     p.add_argument("--dry-run", action="store_true", help="Generate/validate only; no scan or ledger")
     p.add_argument("--daemon", action="store_true",
                    help="Run unattended until stopped (--stop); handles SIGTERM/SIGINT gracefully")

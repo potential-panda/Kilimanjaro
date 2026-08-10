@@ -14,7 +14,7 @@ from kilimanjaro.calibration.base import FactorCalib
 
 _SPEC = yaml.safe_load(
     (Path(__file__).resolve().parents[4]
-     / "cycle" / "15_handoffs" / "blend-btc-jpy-us-z35"
+     / "cycle" / "18_handoffs" / "blend-btc-jpy-us-z35"
      / "composite_coincheck.yaml").read_text()
 )
 

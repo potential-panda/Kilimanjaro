@@ -173,7 +173,7 @@ already handles the asymmetry from §1 sensibly, and gets one concrete addition:
   true holding-period distribution. This is where an acceptance actually earns
   its confidence, and it feeds the grid scan / Himalaya decision.
 
-This tier is now **automated** in the scanner loop (`driver/episode_retest.py`,
+This tier is now **automated** in the scanner loop (`driver/return_eval.py`,
 steps 9b/9c): the screening scan nominates its rank-stable combos, they are
 re-measured on non-overlapping episodes, and the pass/fail verdict is decided on
 those honest numbers — positive in both windows + FDR on the holdout episode
@@ -196,6 +196,6 @@ holdout split and washed out entirely once a survivor is re-measured per episode
 | Event sampling (`age == 0`) | **available** via `ExpressionSignal` age gate |
 | Episode id on signal rows | **built** (`op/age.py::threshold_episode`; emitted by ExpressionSignal) |
 | `EpisodeReturn` calc + bid/ask execution | **built** (`return_calc/episode.py`; `cli.py grid horizon` spec `return_calc: episode`) |
-| Automated candidate tier (episode re-test in the loop) | **built** (`driver/episode_retest.py`; loop steps 9b/9c; verdict via `policy.evaluate_episode`) |
+| Automated candidate tier (episode re-test in the loop) | **built** (`driver/return_eval.py`; loop steps 9b/9c; verdict via `policy.evaluate_episode`) |
 | `n_episodes` + `n_eff` columns in per-second output | **built** — distinct episode count and effective sample size (`stats.py`); n=930k with n_eff=20k flags an overlap-inflated sample |
 | Newey–West / HAC closed-form SE | optional; bootstrap covers it for now |

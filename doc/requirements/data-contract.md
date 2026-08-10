@@ -26,18 +26,18 @@ Kilimanjaro v1 must use one canonical machine-readable source format per record 
 |---|---|---|
 | inventory snapshot | YAML | `cycle/03_inventory/inventory-YYYYMMDDTHHMMSSZ.yaml` |
 | hypothesis spec | YAML | `cycle/11_hypotheses/hyp-YYYYMMDD-NNN.yaml` |
-| ledger event stream | JSON Lines | `cycle/14_ledger/events.jsonl` |
-| scan output | CSV + `params.json` | `cycle/13_results/grid_scan/{flip,horizon}/<scan_id>/` |
-| human approval/waiver | JSON Lines event in ledger | `cycle/14_ledger/events.jsonl` |
-| handoff source | YAML | `cycle/15_handoffs/hyp-YYYYMMDD-NNN.yaml` |
-| human-readable handoff view | Markdown generated from YAML | `cycle/15_handoffs/hyp-YYYYMMDD-NNN.md` |
+| ledger event stream | JSON Lines | `cycle/17_ledger/events.jsonl` |
+| scan output | CSV + `params.json` | `cycle/15_return_eval/grid_scan/{flip,horizon}/<scan_id>/` |
+| human approval/waiver | JSON Lines event in ledger | `cycle/17_ledger/events.jsonl` |
+| handoff source | YAML | `cycle/18_handoffs/hyp-YYYYMMDD-NNN.yaml` |
+| human-readable handoff view | Markdown generated from YAML | `cycle/18_handoffs/hyp-YYYYMMDD-NNN.md` |
 
 Markdown is allowed only as generated human-readable output. It is not the source of truth for specs, scan reports, ledger decisions, or approvals.
 
 Atomicity rules:
 
 - New artifact files are written to a temporary file, schema-validated, then atomically renamed.
-- `cycle/14_ledger/events.jsonl` is append-only; corrections are new events, not in-place edits.
+- `cycle/17_ledger/events.jsonl` is append-only; corrections are new events, not in-place edits.
 - Under version control conflict, implementer must preserve both valid events and resolve ordering by `created_at`; duplicate event ids are invalid.
 
 ## Makalu Discovery Inputs
@@ -251,7 +251,7 @@ target:
 
 ## Ledger Event Contract
 
-`cycle/14_ledger/events.jsonl` is append-only. Each line is one JSON object:
+`cycle/17_ledger/events.jsonl` is append-only. Each line is one JSON object:
 
 ```json
 {
@@ -298,7 +298,7 @@ Allowed `event_type` values:
 
 > **Superseded (2026-07).** The single-JSON scan-report format below was produced
 > by the retired `scanner.py`/`threshold_evaluator.py` pipeline. Grid scans now
-> write a folder per run under `cycle/13_results/grid_scan/<kind>/<scan_id>/`
+> write a folder per run under `cycle/15_return_eval/grid_scan/<kind>/<scan_id>/`
 > (`output.csv`, `output_stable.csv`, `output_monthly.csv`, `params.json`) and a
 > `scan_attached` ledger event. The JSON schema below is kept only as the historical
 > contract for that older format.

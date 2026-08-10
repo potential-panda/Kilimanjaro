@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Append to and search Kilimanjaro's research ledger (cycle/14_ledger/events.jsonl).
+"""Append to and search Kilimanjaro's research ledger (cycle/17_ledger/events.jsonl).
 
 Per requirements/hypothesis-contract.md's "Duplicate Detection", finding
 prior work means searching both the ledger (status/decision history) and
@@ -33,7 +33,7 @@ def _find_repo_root(start: Path) -> Path:
 _ROOT = _find_repo_root(Path(__file__).resolve())
 _CYCLE = _ROOT / "cycle"
 _SCHEMAS_DIR = _CYCLE / "01_schemas"
-_DEFAULT_LEDGER_PATH = _CYCLE / "14_ledger" / "events.jsonl"
+_DEFAULT_LEDGER_PATH = _CYCLE / "17_ledger" / "events.jsonl"
 _DEFAULT_HYPOTHESES_DIR = _CYCLE / "11_hypotheses"
 
 _REJECTION_STATUSES = {

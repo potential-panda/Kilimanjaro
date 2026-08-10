@@ -8,7 +8,7 @@ returns on an overlapping per-second grid and so cannot supply an honest p-value
    `select_candidates` returns the rank-stable combos. FDR is NOT applied here;
    correcting overlap-inflated p-values would be correcting the wrong quantity.
 2. **Candidate (episode).** The rank-stable combos are re-measured on
-   non-overlapping episode returns (driver/episode_retest). Now the plain
+   non-overlapping episode returns (driver/return_eval). Now the plain
    significance test is legitimate, so the FDR gate runs here. `evaluate_episode`
    PASSES a spec when at least one candidate is positive in BOTH windows AND
    survives Benjamini-Hochberg on the holdout episode p-value — with the family

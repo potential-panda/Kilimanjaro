@@ -20,7 +20,7 @@ import yaml
 
 from kilimanjaro.framework import write_csv
 
-_RESULTS = Path("cycle/13_results/learn")
+_RESULTS = Path("cycle/13_signal_corr/learn")
 
 _OPS = ("age", "return_dist", "exit_mode")
 
@@ -45,7 +45,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--jst-hours", default=None,
                    help="exit_mode: restrict to these JST hours (e.g. 22,23,0,1,2)")
     p.add_argument("--out", default=None, help="Output directory (default under "
-                   "cycle/13_results/learn/<op>/)")
+                   "cycle/13_signal_corr/learn/<op>/)")
     p.set_defaults(func=_run_learn)
 
 

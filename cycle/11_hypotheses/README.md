@@ -12,7 +12,7 @@ Naming:
 `hypothesis.id` field must match its filename.
 
 This directory is the **hypothesis registry** — the durable memory of every idea
-tried, including rejected and parked ones. The ledger (`../14_ledger/`) joins to it
+tried, including rejected and parked ones. The ledger (`../17_ledger/`) joins to it
 by `hypothesis_id` for duplicate-detection search and for the viewer's Hypotheses
 tab, so entries stay even after an idea is retired: that is what lets a later
 session avoid re-proposing a dead idea. The `status:` field inside a file is its

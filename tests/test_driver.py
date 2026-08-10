@@ -15,7 +15,7 @@ from kilimanjaro.driver import ledger_io  # noqa: E402
 from kilimanjaro.driver.loop import process_spec  # noqa: E402
 from kilimanjaro.driver.policy import evaluate  # noqa: E402
 from kilimanjaro.driver.validate import validate_scan_spec  # noqa: E402
-from kilimanjaro.driver import blend as blend_mod  # noqa: E402
+from kilimanjaro.driver import blend_corr as blend_mod  # noqa: E402
 
 _GOOD_SPEC = {
     "hypothesis_id": "hyp-20260716-999",

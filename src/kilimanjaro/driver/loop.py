@@ -18,7 +18,7 @@ from pathlib import Path
 import yaml
 
 from kilimanjaro.driver import ledger_io
-from kilimanjaro.driver.episode_retest import run_episode_retest
+from kilimanjaro.driver.return_eval import run_episode_retest
 from kilimanjaro.driver.policy import (
     Outcome,
     evaluate_episode,
@@ -30,7 +30,7 @@ from kilimanjaro.driver.validate import validate_scan_spec
 
 LOG = logging.getLogger("kilimanjaro.driver")
 
-_DEFAULT_RESULTS_ROOT = Path("cycle/13_results/grid_scan/horizon")
+_DEFAULT_RESULTS_ROOT = Path("cycle/15_return_eval/grid_scan/horizon")
 
 
 def process_spec(

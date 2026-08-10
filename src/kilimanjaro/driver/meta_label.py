@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from kilimanjaro.driver.blend import Factor
+from kilimanjaro.driver.blend_corr import Factor
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn

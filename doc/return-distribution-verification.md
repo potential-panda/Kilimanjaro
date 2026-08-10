@@ -64,13 +64,13 @@ python src/cli.py learn --op return_dist \
 
 # 2) the IC-weighted composite of a whole family — blend writes composite_spec.yaml
 python src/cli.py blend --horizon 300 --step2 --start 2025-07-01 --end 2026-06-30 \
-    --out cycle/13_results/blend/BTC_JPY $(ls cycle/12_specs/*BTC_JPY.yaml)
+    --out cycle/14_blend_corr/BTC_JPY $(ls cycle/12_specs/*BTC_JPY.yaml)
 python src/cli.py learn --op return_dist \
-    --spec cycle/13_results/blend/BTC_JPY/composite_spec.yaml \
+    --spec cycle/14_blend_corr/BTC_JPY/composite_spec.yaml \
     --thresholds 0.5,1.0,1.5,2.0 --start 2025-07-01 --end 2026-06-30
 ```
 
-Output columns (`cycle/13_results/learn/return_dist/.../return_dist.csv`):
+Output columns (`cycle/13_signal_corr/learn/return_dist/.../return_dist.csv`):
 `n_trades, trades_per_day, mean_bps, pos_day_share, max_day_share_pct,
 top10_day_share_pct, pos_month_share`. A healthy signal shows a high
 `pos_day_share` / `pos_month_share` and a small `max_day_share_pct` /

@@ -23,10 +23,10 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--actor-id", default="scan-loop", help="Ledger actor_id for events")
     p.add_argument("--limit", type=int, default=None,
                    help="Process at most N new specs this pass")
-    p.add_argument("--results-root", default="cycle/13_results/grid_scan/horizon",
+    p.add_argument("--results-root", default="cycle/15_return_eval/grid_scan/horizon",
                    help="Where scan output folders are written")
     p.add_argument("--ledger-path", default=None,
-                   help="Ledger events file (default: repo cycle/14_ledger/events.jsonl). "
+                   help="Ledger events file (default: repo cycle/17_ledger/events.jsonl). "
                         "Point elsewhere to isolate a test run.")
     p.add_argument("--dry-run", action="store_true",
                    help="Validate + dedup only; do not scan or write ledger events")

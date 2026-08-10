@@ -24,7 +24,7 @@ from kilimanjaro.driver import flip_grid, ledger_io
 from kilimanjaro.driver.scan_runner import build_combos, run_grid_scan, run_spec
 from kilimanjaro.framework import MarketConfig, RollingDrawdownGate
 
-_RESULTS = Path("cycle/13_results/grid_scan")
+_RESULTS = Path("cycle/15_return_eval/grid_scan")
 _FLIP_HYP = "hyp-20260703-002"  # schedule-adaptive flip-scan spec (box×step×sched)
 
 

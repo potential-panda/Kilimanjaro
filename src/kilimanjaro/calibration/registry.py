@@ -24,7 +24,7 @@ import yaml
 
 _ROOT = Path(__file__).resolve().parents[3]  # repo root
 _SPEC = yaml.safe_load(
-    (_ROOT / "cycle" / "15_handoffs" / "blend-btc-jpy-us-z35"
+    (_ROOT / "cycle" / "18_handoffs" / "blend-btc-jpy-us-z35"
      / "composite_coincheck.yaml").read_text()
 )
 

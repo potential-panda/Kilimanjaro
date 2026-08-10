@@ -15,7 +15,7 @@ from kilimanjaro.ledger.core import append_event, load_events
 from kilimanjaro.ledger.grid import record_grid_scan
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_LEDGER_PATH = _REPO_ROOT / "cycle" / "14_ledger" / "events.jsonl"
+DEFAULT_LEDGER_PATH = _REPO_ROOT / "cycle" / "17_ledger" / "events.jsonl"
 
 
 def scan_fingerprint(spec: dict, start: str, end: str) -> str:
