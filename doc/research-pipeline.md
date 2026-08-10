@@ -87,9 +87,11 @@ performance, verify), `driver/loop.py` / `driver/cadence.py` (orchestration).
 
 - **Structural** (folders, numbering, module names, path refs, docs): implemented.
 - **Stage logic**:
-  - `return_eval` (15): implemented — episode re-test on the shared scan engine.
+  - `signal_corr` (13): **implemented** — `cli.py signal-corr` / `driver/signal_corr.py`.
+    Per-factor IC (Pearson + rank, across horizons) vs the target's forward return, plus the
+    cross-factor correlation matrix; `factors_from_blend_expr` splits any composite into its
+    terms. Writes `cycle/13_signal_corr/<spec>/{ic.csv,corr_matrix.csv}`.
   - `blend_corr` (14): baseline `cli.py blend` present; ranking-by-blend-IC + construction
-    search is the build-out.
-  - `signal_corr` (13): the per-factor scan exists (`calibration/rescan`-style); emitting
-    IC + the correlation matrix as the stage's durable artifact is the build-out.
+    search (subset/weight optimization, LGBM capacity layer) is the build-out.
+  - `return_eval` (15): implemented — episode re-test on the shared scan engine.
   - `calibration` (16): implemented (`cli.py calibrate`, factor + trade layers).

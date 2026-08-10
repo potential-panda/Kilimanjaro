@@ -12,3 +12,9 @@ __pycache__/
 # actual results (output*.csv, params.json, review packets) stay tracked; these
 # large per-combo diagnostics regenerate on the next `grid obi` run.
 cycle/15_return_eval/**/age_hist/
+
+# stage output runs (regenerable diagnostics; the ledger is the durable record)
+cycle/13_signal_corr/*/
+cycle/14_blend_corr/*/
+cycle/15_return_eval/*/
+cycle/16_calibration/*/
