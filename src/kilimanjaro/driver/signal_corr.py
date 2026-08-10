@@ -35,6 +35,7 @@ _WARMUP_DAYS = 2  # converge the factors' rolling windows before the compared wi
 class Factor:
     name: str
     expr: str
+    family: str = ""
 
 
 # ── blend-term extraction ─────────────────────────────────────────────────────
@@ -98,7 +99,8 @@ def factors_from_blend_expr(expr: str) -> list[Factor]:
 
 @dataclass
 class SignalCorrResult:
-    ic: pd.DataFrame          # [factor, expr, horizon, n, ic, rank_ic]
+    ic: pd.DataFrame          # [family, factor, expr, horizon, n, ic, rank_ic]
+    dist: pd.DataFrame        # one row/factor: best horizon, value distribution, IC stability
     corr: pd.DataFrame        # factor × factor value-correlation matrix
     horizons: list[int]
 
@@ -108,6 +110,12 @@ class SignalCorrResult:
         d = self.ic[self.ic.horizon == h].copy()
         d["abs_rank_ic"] = d.rank_ic.abs()
         return d.sort_values("abs_rank_ic", ascending=False).drop(columns="abs_rank_ic")
+
+    def summary(self) -> pd.DataFrame:
+        """dist rows sorted by |best_rank_ic| — the standardized per-factor scorecard."""
+        d = self.dist.copy()
+        d["abs"] = d.best_rank_ic.abs()
+        return d.sort_values("abs", ascending=False).drop(columns="abs")
 
 
 def compute(
@@ -139,6 +147,7 @@ def compute(
     ts = frame["ts"].to_numpy(dtype=float)
     sec = np.floor(ts).astype(np.int64)
     in_win = sec >= int(datetime.strptime(start, "%Y-%m-%d").timestamp())
+    month = pd.PeriodIndex(pd.to_datetime(sec, unit="s"), freq="M")  # for IC stability
 
     mid = np.asarray(eval_expr(target_mid_expr, frame), dtype=float)
     # Forward return over h seconds on the ~1s grid (shift by h rows). Gross mid-to-mid.
@@ -146,12 +155,22 @@ def compute(
 
     values = {f.name: np.asarray(eval_expr(f.expr, frame), dtype=float) for f in factors}
 
-    rows = []
+    # Subsample the in-window rows for the correlation estimates. Adjacent-second forward
+    # returns overlap heavily (autocorrelated), so a strided subsample to ~1.5M points is
+    # a statistically equivalent (less overcounted) IC estimate that keeps a full-year scan
+    # tractable. The value distribution is measured on the same subsample.
+    win_idx = np.flatnonzero(in_win)
+    cap = 1_500_000
+    if len(win_idx) > cap:
+        win_idx = win_idx[:: max(1, len(win_idx) // cap)]
+
+    ic_rows, dist_rows = [], []
     for f in factors:
-        v = values[f.name]
+        v = values[f.name][win_idx]
+        per_h = {}
         for h in horizons:
-            r = fwd[h]
-            ok = in_win & np.isfinite(v) & np.isfinite(r)
+            r = fwd[h][win_idx]
+            ok = np.isfinite(v) & np.isfinite(r)
             n = int(ok.sum())
             if n < 30 or np.nanstd(v[ok]) == 0 or np.nanstd(r[ok]) == 0:
                 ic = rank_ic = float("nan")
@@ -159,14 +178,53 @@ def compute(
                 a, b = pd.Series(v[ok]), pd.Series(r[ok])
                 ic = float(a.corr(b))
                 rank_ic = float(a.corr(b, method="spearman"))
-            rows.append(dict(factor=f.name, expr=f.expr, horizon=h, n=n,
-                             ic=round(ic, 5), rank_ic=round(rank_ic, 5)))
-    ic_df = pd.DataFrame(rows)
+            per_h[h] = rank_ic
+            ic_rows.append(dict(family=f.family, factor=f.name, expr=f.expr, horizon=h,
+                                n=n, ic=round(ic, 5), rank_ic=round(rank_ic, 5)))
+        dist_rows.append(_factor_dist(f, values[f.name], win_idx, per_h, fwd, month))
+    ic_df = pd.DataFrame(ic_rows)
+    dist_df = pd.DataFrame(dist_rows)
 
-    # Cross-factor value-correlation matrix (in-window, pairwise-complete).
-    vdf = pd.DataFrame({f.name: values[f.name] for f in factors})[in_win]
+    # Cross-factor value-correlation matrix (subsampled in-window, pairwise-complete).
+    vdf = pd.DataFrame({f.name: values[f.name][win_idx] for f in factors})
     corr_df = vdf.corr().round(4)
-    return SignalCorrResult(ic=ic_df, corr=corr_df, horizons=list(horizons))
+    return SignalCorrResult(ic=ic_df, dist=dist_df, corr=corr_df, horizons=list(horizons))
+
+
+def _factor_dist(f: "Factor", v_full: np.ndarray, win_idx, per_h: dict, fwd: dict, month) -> dict:
+    """Per-factor scorecard: value distribution + best-horizon IC + monthly IC stability.
+    Operates on the subsampled in-window rows (`win_idx` = integer positions)."""
+    v = v_full[win_idx]
+    s = pd.Series(v[np.isfinite(v)])
+    # best horizon = max |rank_ic|
+    valid = {h: r for h, r in per_h.items() if r == r}
+    best_h = max(valid, key=lambda h: abs(valid[h])) if valid else max(per_h)
+    best_ic = per_h.get(best_h, float("nan"))
+    # monthly IC at best horizon → fraction of months matching the overall sign.
+    # Vectorized Pearson per month (fast: grouped means of v, r, v·r, v², r²).
+    r = fwd[best_h][win_idx]
+    mo = month[win_idx]
+    ok = np.isfinite(v) & np.isfinite(r)
+    g = pd.DataFrame({"m": mo[ok].astype(str), "v": v[ok], "r": r[ok]})
+    g["vr"] = g.v * g.r; g["v2"] = g.v ** 2; g["r2"] = g.r ** 2
+    gm = g.groupby("m").agg(["mean", "size"])
+    n_m = gm[("v", "size")]
+    mv, mr, mvr = gm[("v", "mean")], gm[("r", "mean")], gm[("vr", "mean")]
+    denom = np.sqrt((gm[("v2", "mean")] - mv ** 2) * (gm[("r2", "mean")] - mr ** 2))
+    mic = ((mvr - mv * mr) / denom).where(n_m > 30).dropna()
+    sign = np.sign(best_ic) if best_ic == best_ic else 0
+    pos_frac = float((np.sign(mic) == sign).mean()) if len(mic) and sign else float("nan")
+    return dict(
+        family=f.family, factor=f.name, expr=f.expr,
+        best_h=best_h, best_rank_ic=round(best_ic, 5),
+        val_mean=round(float(s.mean()), 4), val_std=round(float(s.std()), 4),
+        val_skew=round(float(s.skew()), 3),
+        p01=round(float(s.quantile(0.01)), 3), p50=round(float(s.quantile(0.50)), 3),
+        p99=round(float(s.quantile(0.99)), 3),
+        active_frac=round(float((s.abs() >= 2.0).mean()), 4),  # |z|>=2 share
+        n_months=int(len(mic)), ic_month_pos=round(pos_frac, 3),
+        ic_month_mean=round(float(mic.mean()), 5) if len(mic) else float("nan"),
+    )
 
 
 def _shift_ratio(mid: np.ndarray, h: int) -> np.ndarray:
