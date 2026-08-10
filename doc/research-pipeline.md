@@ -91,7 +91,9 @@ performance, verify), `driver/loop.py` / `driver/cadence.py` (orchestration).
     Per-factor IC (Pearson + rank, across horizons) vs the target's forward return, plus the
     cross-factor correlation matrix; `factors_from_blend_expr` splits any composite into its
     terms. Writes `cycle/13_signal_corr/<spec>/{ic.csv,corr_matrix.csv}`.
-  - `blend_corr` (14): baseline `cli.py blend` present; ranking-by-blend-IC + construction
-    search (subset/weight optimization, LGBM capacity layer) is the build-out.
+  - `blend_corr` (14): **implemented** — `cli.py blend-corr` / `driver/blend_corr.py::scan_blends`.
+    Builds candidate blends (single_best / ic_weighted / ic_decorr / greedy, all fit on TRAIN)
+    and ranks by honest HOLDOUT IC; emits the top blend as a stage-15 spec. Weight optimization
+    beyond ridge-decorrelation + an LGBM capacity layer remain the build-out.
   - `return_eval` (15): implemented — episode re-test on the shared scan engine.
   - `calibration` (16): implemented (`cli.py calibrate`, factor + trade layers).

@@ -335,3 +335,111 @@ def blend(
         ),
         "per_factor": per_factor,
     }
+
+
+# ── stage 14: multi-method blend construction + ranking ───────────────────────
+# The baseline `blend()` above is one method (IC-weighted, Σ=I). Stage 14 builds
+# SEVERAL candidate blends from the same factor set and ranks them by honest
+# HOLDOUT IC — every weight is fit on train, so the holdout number has nothing
+# fitted to it. A strong single factor competes as `single_best` (a blend of one).
+
+def _standardize(train: pd.DataFrame, holdout: pd.DataFrame, names: list[str]):
+    """z-standardize each factor on TRAIN stats → (Z_tr, Z_ho matrices, ic_tr, ic_ho,
+    r_tr, r_ho). NaN (silent second) → 0 (neutral) so it never drops a row."""
+    r_tr = train["fwd_ret"].to_numpy(dtype=float)
+    r_ho = holdout["fwd_ret"].to_numpy(dtype=float)
+    Ztr, Zho, ic_tr, ic_ho = [], [], [], []
+    for name in names:
+        xt, xh = train[name].to_numpy(dtype=float), holdout[name].to_numpy(dtype=float)
+        mu = float(np.nanmean(xt)); mu = 0.0 if not np.isfinite(mu) else mu
+        sd = float(np.nanstd(xt)); sd = sd if (sd > 0 and np.isfinite(sd)) else 1.0
+        zt = np.nan_to_num((xt - mu) / sd, nan=0.0)
+        zh = np.nan_to_num((xh - mu) / sd, nan=0.0)
+        Ztr.append(zt); Zho.append(zh)
+        ic_tr.append(_ic(zt, r_tr)); ic_ho.append(_ic(zh, r_ho))
+    return (np.array(Ztr).T, np.array(Zho).T,
+            np.array(ic_tr), np.array(ic_ho), r_tr, r_ho)
+
+
+def _greedy_weights(Ztr: np.ndarray, ic_tr: np.ndarray, r_tr: np.ndarray,
+                    min_gain: float = 1e-4) -> np.ndarray:
+    """Forward-select factors (each added at its IC weight) while the TRAIN blend IC
+    keeps improving — drops redundant/noise factors that a full IC-weighted sum keeps."""
+    k = Ztr.shape[1]
+    w = np.zeros(k)
+    remaining = set(range(k))
+    best = 0.0
+    while remaining:
+        gains = {}
+        for j in remaining:
+            w2 = w.copy(); w2[j] = ic_tr[j]
+            gains[j] = abs(_ic(Ztr @ w2, r_tr))
+        j = max(gains, key=gains.get)
+        if gains[j] <= best + min_gain:
+            break
+        w[j] = ic_tr[j]; remaining.discard(j); best = gains[j]
+    return w
+
+
+def scan_blends(
+    factors: list[Factor],
+    target: MarketConfig,
+    start: str,
+    split: str,
+    end: str,
+    horizon: int,
+    ridge: float = 0.2,
+    data_root: Path = _DEFAULT_DATA_ROOT,
+) -> dict:
+    """Build + rank candidate blends of `factors`. Methods (all fit on TRAIN):
+      single_best  — the top-|IC| single factor (the blend-of-one to beat)
+      ic_weighted  — w = IC          (Σ=I diagonal baseline)
+      ic_decorr    — w = (Σ+ridge·I)⁻¹·IC   (max-IC portfolio; down-weights redundancy)
+      greedy       — forward-select factors that improve the train blend IC
+    Each is evaluated on the untouched HOLDOUT. Returns ranked results + per-factor IC.
+    """
+    tr_s, tr_e, ho_s, ho_e = split_windows(start, split, end)
+    train = build_panel(factors, target, tr_s, tr_e, horizon, data_root)
+    holdout = build_panel(factors, target, ho_s, ho_e, horizon, data_root)
+    names = [f.name for f in factors]
+    if train.empty or holdout.empty:
+        return {"results": [], "names": names, "train_n": len(train), "holdout_n": len(holdout)}
+
+    Ztr, Zho, ic_tr, ic_ho, r_tr, r_ho = _standardize(train, holdout, names)
+    k = len(names)
+    Sigma = np.corrcoef(Ztr.T) if k > 1 else np.array([[1.0]])
+    Sigma = np.nan_to_num(Sigma, nan=0.0)
+    np.fill_diagonal(Sigma, 1.0)
+
+    cand: dict[str, np.ndarray] = {}
+    jb = int(np.argmax(np.abs(ic_tr)))
+    cand["single_best"] = np.eye(k)[jb] * ic_tr[jb]
+    cand["ic_weighted"] = ic_tr.copy()
+    cand["ic_decorr"] = np.linalg.solve(Sigma + ridge * np.eye(k), ic_tr)
+    cand["greedy"] = _greedy_weights(Ztr, ic_tr, r_tr)
+
+    best_single_ho = float(np.max(np.abs(ic_ho))) if k else 0.0
+    results = []
+    for method, w in cand.items():
+        used = {names[i]: float(w[i]) for i in range(k) if abs(w[i]) >= 1e-9}
+        ho_ic = _ic(Zho @ w, r_ho)
+        results.append({
+            "method": method,
+            "n_factors": len(used),
+            "train_ic": round(_ic(Ztr @ w, r_tr), 5),
+            "holdout_ic": round(ho_ic, 5),
+            "div_ratio": round(abs(ho_ic) / best_single_ho, 3) if best_single_ho else float("nan"),
+            "weights": used,
+        })
+    results.sort(key=lambda r: -abs(r["holdout_ic"]))
+    per_factor = sorted(
+        [{"factor": names[i], "train_ic": round(float(ic_tr[i]), 5),
+          "holdout_ic": round(float(ic_ho[i]), 5),
+          "stable": bool(np.sign(ic_tr[i]) == np.sign(ic_ho[i]) and abs(ic_ho[i]) > 0.005)}
+         for i in range(k)],
+        key=lambda p: -abs(p["holdout_ic"]))
+    return {
+        "results": results, "per_factor": per_factor, "names": names,
+        "horizon": horizon, "train_n": int(len(train)), "holdout_n": int(len(holdout)),
+        "best_single_holdout_ic": best_single_ho,
+    }

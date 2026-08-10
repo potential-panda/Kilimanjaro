@@ -34,6 +34,7 @@ def main() -> int:
         generate,
         grid,
         ledger,
+        blend_corr,
         signal_corr,
         learn,
         loop,
@@ -59,6 +60,7 @@ def main() -> int:
     factory.register(sub)
     calibrate.register(sub)
     signal_corr.register(sub)
+    blend_corr.register(sub)
 
     args = parser.parse_args()
     return args.func(args)

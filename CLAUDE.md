@@ -19,8 +19,10 @@ covers normal commit/push, not those.
 python src/cli.py populate chart-range-sar   # precompute SAR flip events
 python src/cli.py verify  chart-range-sar    # compare bars/SAR vs backtest InfluxDB BAR
 python src/cli.py grid flip --market btc ...  # flip-anchored signal scan (always a grid)
-python src/cli.py signal-corr --spec ... --start ... --end ...
+python src/cli.py signal-corr --families BTC --start ... --end ...
                                              # stage 13: per-factor IC + cross-factor corr matrix
+python src/cli.py blend-corr  --families BTC --start ... --end ...
+                                             # stage 14: build + rank weighted blends by holdout IC
 python src/cli.py verify-scan                # compare scan vs backtest ORDER + EVAL
 python src/cli.py generate --queue cycle/12_specs --limit 5
                                              # propose new formula specs (stage B)
