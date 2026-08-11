@@ -40,6 +40,7 @@ def main() -> int:
         loop,
         meta,
         populate,
+        return_eval,
         verify,
         verify_scan,
     )
@@ -48,6 +49,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     populate.register(sub)
+    return_eval.register(sub)
     verify.register(sub)
     verify_scan.register(sub)
     grid.register(sub)
