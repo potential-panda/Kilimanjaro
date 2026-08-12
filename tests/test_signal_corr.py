@@ -77,3 +77,43 @@ class TestDecayTable(unittest.TestCase):
         d = decay_table(ic, "A", "B").set_index("factor")
         self.assertEqual(d.loc["fast", "peak_h"], 5)
         self.assertLess(d.loc["fast", "peak_ic"], 0)
+
+
+class TestExecutableBps(unittest.TestCase):
+    """gross/net bps: the magnitude question IC cannot answer (corr is shift-invariant)."""
+
+    def setUp(self):
+        import numpy as np
+        # flat 10 bps spread around a mid that rises 20 bps from t=0 to t=1
+        self.mid = np.array([10000.0, 10020.0])
+        self.bid = np.array([9995.0, 10015.0])
+        self.ask = np.array([10005.0, 10025.0])
+        self.win = np.array([0])
+
+    def _call(self, v, cost=1.0, thr=2.0):
+        from kilimanjaro.driver.signal_corr import _executable_bps
+        import numpy as np
+        return _executable_bps(np.array(v), self.win, 1, 2,
+                               self.mid, self.bid, self.ask, thr, cost)
+
+    def test_long_pays_the_spread(self):
+        gross, net, n = self._call([3.0])  # BUY fires
+        self.assertEqual(n, 1)
+        self.assertAlmostEqual(gross, 20.0, places=1)   # mid-to-mid +20 bps
+        # buy at ask 10005, sell at bid 10015 -> +9.995 bps, minus 1 bp cost
+        self.assertAlmostEqual(net, 8.99, places=1)
+        self.assertLess(net, gross)  # the spread is the gap IC hides
+
+    def test_short_direction_flips_both_legs(self):
+        gross, net, _ = self._call([-3.0])  # SELL fires into a rising market
+        self.assertAlmostEqual(gross, -20.0, places=1)
+        # sell at bid 9995, buy back at ask 10025 -> -30.0 bps, minus 1 bp
+        self.assertAlmostEqual(net, -31.02, places=1)
+
+    def test_below_threshold_is_not_a_fire(self):
+        self.assertEqual(self._call([1.0])[2], 0)
+
+    def test_cost_is_subtracted_once_per_round_trip(self):
+        _, net_free, _ = self._call([3.0], cost=0.0)
+        _, net_paid, _ = self._call([3.0], cost=1.0)
+        self.assertAlmostEqual(net_free - net_paid, 1.0, places=6)

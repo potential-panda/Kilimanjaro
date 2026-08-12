@@ -65,6 +65,9 @@ def register(sub: argparse._SubParsersAction) -> None:
                    help="forward-return horizons in seconds")
     p.add_argument("--target-mid", default="b_mid",
                    help="feature-frame expr for the execution venue mid (default b_mid)")
+    p.add_argument("--fire-threshold", type=float, default=2.0,
+                   help="|factor| level counted as a fire for the gross/net bps columns "
+                        "(default 2.0; factors are z-scored)")
     p.set_defaults(func=_run)
 
 
@@ -121,10 +124,11 @@ def _run(args) -> int:
         for a, b in pairs:
             ma, mb = f"{a['exchange']}:{a['symbol']}", f"{b['exchange']}:{b['symbol']}"
             res = compute({"a": dict(a), "b": dict(b)}, factors,
-                          args.target_mid, args.start, args.end, horizons)
+                          args.target_mid, args.start, args.end, horizons,
+                          fire_threshold=args.fire_threshold)
             tag = f"{ma}_{mb}".replace(":", "_")
             _write(res, _RESULTS / f"{args.families}_{tag}")
-            d = decay_table(res.ic, ma, mb)
+            d = decay_table(res.ic, ma, mb, args.fire_threshold)
             d.to_csv(_RESULTS / f"{args.families}_{tag}" / "decay.csv", index=False)
             decays.append(d)
             _print_decay(ma, mb, d, horizons)
@@ -141,12 +145,13 @@ def _run(args) -> int:
     factors = _spec_factors(spec, spec.get("family", ""))
     print(f"signal-corr: {Path(args.spec).stem} — {len(factors)} factors × "
           f"{len(horizons)} horizons | {args.start}..{args.end}")
-    res = compute(spec["markets"], factors, args.target_mid, args.start, args.end, horizons)
+    res = compute(spec["markets"], factors, args.target_mid, args.start, args.end, horizons,
+                  fire_threshold=args.fire_threshold)
     out = _RESULTS / Path(args.spec).stem
     _write(res, out)
     ma = "{exchange}:{symbol}".format(**spec["markets"]["a"])
     mb = "{exchange}:{symbol}".format(**spec["markets"].get("b", spec["target"]))
-    d = decay_table(res.ic, ma, mb)
+    d = decay_table(res.ic, ma, mb, args.fire_threshold)
     d.to_csv(out / "decay.csv", index=False)
     _print_decay(ma, mb, d, horizons)
     _print_scorecard(spec["target"]["symbol"], res)
@@ -174,6 +179,17 @@ def _print_decay(market_a: str, market_b: str, d, horizons: list[int]) -> None:
         # that is all-NaN on this market pair) — show it rather than crashing on it.
         peak = f"{int(r.peak_h)}" if pd.notna(r.peak_h) else "-"
         print(f"  {r.factor:<30} {peak:>6}{cells}")
+
+    if "net5" not in d.columns and not any(c.startswith("net") for c in d.columns):
+        return
+    print(f"\n===== {market_a} -> {market_b} — NET bps/trade at bid/ask "
+          f"(fires only; >0 = clears the spread) =====")
+    print(f"  {'factor':<30} {'nFire':>8} {'best@':>6} " + "".join(f"{('h'+str(h)):>9}" for h in horizons))
+    for _, r in d.sort_values("best_net", ascending=False).iterrows():
+        cells = "".join(f"{r[f'net{h}']:>+9.2f}" if pd.notna(r.get(f"net{h}")) else f"{'-':>9}"
+                        for h in horizons)
+        best = f"{int(r.best_net_h)}" if pd.notna(r.best_net_h) else "-"
+        print(f"  {r.factor:<30} {int(r.n_fire):>8} {best:>6}{cells}")
 
 
 def _print_scorecard(venue: str, res) -> None:

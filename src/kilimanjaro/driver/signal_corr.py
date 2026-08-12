@@ -127,19 +127,35 @@ def compute(
     horizons: list[int],
     data_root: Path = _DEFAULT_DATA_ROOT,
     warmup_days: int = _WARMUP_DAYS,
+    fire_threshold: float = 2.0,
+    target_alias: str = "b",
 ) -> SignalCorrResult:
-    """Per-factor IC (vs `target_mid_expr` forward return) + factor-value corr matrix.
+    """Per-factor IC (vs `target_mid_expr` forward return) + factor-value corr matrix,
+    plus per-horizon EXECUTABLE economics at bid/ask.
 
     `target_mid_expr` is the execution venue's mid on the feature frame (e.g. "b_mid").
+
+    IC answers "does it predict?"; it is scale- and shift-invariant, so executing at
+    bid/ask instead of mid would barely move it (the spread is very nearly a constant
+    offset). The question "can it CROSS the spread?" is therefore a MAGNITUDE question,
+    answered by `gross<h>`/`net<h>`: the mean signed move in bps on the factor's fires
+    (|value| >= `fire_threshold`), measured mid-to-mid (gross) and at the real
+    executable prices — enter aggressive (ask to buy / bid to sell), exit passive —
+    minus the flat latency cost (framework.costs). net > 0 is the step-1 gate that IC
+    alone cannot express.
     """
     from datetime import datetime, timedelta
 
+    from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
     from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
 
     load_start = (datetime.strptime(start, "%Y-%m-%d")
                   - timedelta(days=warmup_days)).strftime("%Y-%m-%d")
-    # Load the frame once with an expr referencing every column the factors need.
-    load_expr = " + ".join(f"({f.expr})" for f in factors) + f" + ({target_mid_expr})"
+    # Load the frame once with an expr referencing every column the factors need —
+    # including the target's bid/ask, so executable fills come from real quotes.
+    bid_expr, ask_expr = f"{target_alias}_bid", f"{target_alias}_ask"
+    load_expr = (" + ".join(f"({f.expr})" for f in factors)
+                 + f" + ({target_mid_expr}) + ({bid_expr}) + ({ask_expr})")
     frame = ExpressionSignal.create(
         markets=markets, expr=load_expr, threshold=0.0, min_age=None, max_age=None,
         invert=False, label="signal_corr").load_data(load_start, end, data_root)
@@ -150,6 +166,9 @@ def compute(
     month = pd.PeriodIndex(pd.to_datetime(sec, unit="s"), freq="M")  # for IC stability
 
     mid = np.asarray(eval_expr(target_mid_expr, frame), dtype=float)
+    bid = np.asarray(eval_expr(bid_expr, frame), dtype=float)
+    ask = np.asarray(eval_expr(ask_expr, frame), dtype=float)
+    n_rows = len(mid)
     # Forward return over h seconds on the ~1s grid (shift by h rows). Gross mid-to-mid.
     fwd = {h: _shift_ratio(mid, h) - 1.0 for h in horizons}
 
@@ -179,8 +198,11 @@ def compute(
                 ic = float(a.corr(b))
                 rank_ic = float(a.corr(b, method="spearman"))
             per_h[h] = rank_ic
+            gross_bps, net_bps, n_fire = _executable_bps(
+                v, win_idx, h, n_rows, mid, bid, ask, fire_threshold, ROUND_TRIP_COST_BPS)
             ic_rows.append(dict(family=f.family, factor=f.name, expr=f.expr, horizon=h,
-                                n=n, ic=round(ic, 5), rank_ic=round(rank_ic, 5)))
+                                n=n, ic=round(ic, 5), rank_ic=round(rank_ic, 5),
+                                n_fire=n_fire, gross_bps=gross_bps, net_bps=net_bps))
         dist_rows.append(_factor_dist(f, values[f.name], win_idx, per_h, fwd, month))
     ic_df = pd.DataFrame(ic_rows)
     dist_df = pd.DataFrame(dist_rows)
@@ -191,7 +213,41 @@ def compute(
     return SignalCorrResult(ic=ic_df, dist=dist_df, corr=corr_df, horizons=list(horizons))
 
 
-def decay_table(ic: pd.DataFrame, market_a: str, market_b: str) -> pd.DataFrame:
+def _executable_bps(v, win_idx, h, n_rows, mid, bid, ask, fire_threshold, cost_bps):
+    """Mean signed move in bps on this factor's fires, gross (mid) and net (bid/ask).
+
+    Fire = |factor| >= fire_threshold, direction = its sign. Execution follows the base
+    cost policy: enter AGGRESSIVE (buy the ask / sell the bid) at t, exit PASSIVE at t+h,
+    so the spread is paid inside the price — then subtract the flat latency cost. No
+    separate spread estimate is added (that would double-count it).
+
+    Returns (gross_bps, net_bps, n_fire). The gap between the two IS the spread: it is
+    what a correlation cannot show you, because corr is invariant to that offset.
+    """
+    fire = np.isfinite(v) & (np.abs(v) >= fire_threshold)
+    if not fire.any():
+        return float("nan"), float("nan"), 0
+    src = win_idx[fire]                      # positions at t
+    dst = src + h                            # positions at t+h
+    keep = dst < n_rows
+    src, dst = src[keep], dst[keep]
+    if len(src) == 0:
+        return float("nan"), float("nan"), 0
+    d = np.sign(v[fire][keep])
+    entry = np.where(d > 0, ask[src], bid[src])      # aggressive side at entry
+    exit_ = np.where(d > 0, bid[dst], ask[dst])      # passive side at exit
+    gross_mid = d * (mid[dst] / mid[src] - 1.0) * 1e4
+    exec_bps = d * (exit_ - entry) / entry * 1e4
+    ok = np.isfinite(gross_mid) & np.isfinite(exec_bps)
+    if not ok.any():
+        return float("nan"), float("nan"), 0
+    return (round(float(gross_mid[ok].mean()), 3),
+            round(float(exec_bps[ok].mean() - cost_bps), 3),
+            int(ok.sum()))
+
+
+def decay_table(ic: pd.DataFrame, market_a: str, market_b: str,
+                fire_threshold: float | None = None) -> pd.DataFrame:
     """Reshape the long IC table into one row per factor, two columns per horizon.
 
     `compute()` emits [factor, horizon, ic, rank_ic] long — good for machines, poor for
@@ -215,14 +271,25 @@ def decay_table(ic: pd.DataFrame, market_a: str, market_b: str) -> pd.DataFrame:
         g = g.set_index("horizon")
         row = {"market_a": market_a, "market_b": market_b, "family": fam, "factor": factor,
                "n": int(g.n.min())}
+        if fire_threshold is not None:  # gross/net depend on it — keep the file self-describing
+            row["fire_threshold"] = fire_threshold
         # peak of the decay curve: where |rank IC| is largest (a factor that peaks at the
         # shortest horizon and decays monotonically is the classic lead-lag shape).
         valid = {h: g.rank_ic.get(h) for h in horizons if pd.notna(g.rank_ic.get(h))}
         row["peak_h"] = max(valid, key=lambda h: abs(valid[h])) if valid else None
         row["peak_ic"] = valid.get(row["peak_h"]) if valid else float("nan")
+        row["n_fire"] = int(g.n_fire.max()) if "n_fire" in g else 0
         for h in horizons:
             row[f"corr{h}"] = g.ic.get(h, float("nan"))
             row[f"ic{h}"] = g.rank_ic.get(h, float("nan"))
+            if "gross_bps" in g:
+                row[f"gross{h}"] = g.gross_bps.get(h, float("nan"))
+                row[f"net{h}"] = g.net_bps.get(h, float("nan"))
+        # best NET horizon — the tradability peak, which need not be the IC peak (IC
+        # peaks short, where moves are smallest relative to the spread).
+        nets = {h: row.get(f"net{h}") for h in horizons if pd.notna(row.get(f"net{h}"))}
+        row["best_net_h"] = max(nets, key=lambda h: nets[h]) if nets else None
+        row["best_net"] = nets.get(row["best_net_h"]) if nets else float("nan")
         row["expr"] = expr
         rows.append(row)
     out = pd.DataFrame(rows)

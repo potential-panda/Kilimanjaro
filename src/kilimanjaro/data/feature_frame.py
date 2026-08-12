@@ -7,8 +7,9 @@ new expression, not a new loader.
 
 Feature name → source routing (per market):
 
-    mid, spread_bps          silver MarketPrice (needs execution_size),
-                             last tick in each 1s bucket
+    mid, spread_bps,         silver MarketPrice (needs execution_size),
+    bid, ask                 last tick in each 1s bucket. bid/ask are size-walked
+                             executable prices; mid == (bid+ask)/2 at that size.
     obi_k{d}                 feature OBIFeature vol_imb_k{d}   (d ∈ 1,3,5,10)
     obi_ema_k{d}_{hl}s       feature OBIFeature ema_k{d}_{hl}s (hl ∈ 10..300)
     ta_{column}              silver TradeAggression {column}, 1s buckets
@@ -45,7 +46,10 @@ _TA_RE = re.compile(r"^ta_(\w+)$")
 _BS_RE = re.compile(r"^bs_(\w+)$")
 # BookChange: bc_<column>, e.g. bc_pull_ask_rate_k1, bc_delta_depth_bid_rate_k1.
 _BC_RE = re.compile(r"^bc_(\w+)$")
-_MP_FEATURES = {"mid", "spread_bps"}
+# bid/ask are the EXECUTABLE prices at execution_size (size-walked, not top-of-book),
+# so `mid` == (bid+ask)/2 at that size. Exposed so a study can measure what a trade
+# actually gets — entering aggressive / exiting passive — instead of mid-to-mid.
+_MP_FEATURES = {"mid", "spread_bps", "bid", "ask"}
 
 
 def obi_column(depth: int, halflife: int | None, alias: str | None = None) -> str:
@@ -161,7 +165,7 @@ def _route(features: list[str]) -> dict[str, list[str]]:
             routes["ta"].append(f)
         else:
             raise ValueError(
-                f"unknown feature '{f}' — expected mid, spread_bps, obi_k*,"
+                f"unknown feature '{f}' — expected mid, spread_bps, bid, ask, obi_k*,"
                 f" obi_ema_k*_*s, ta_<column>, bs_<column>, or bc_<column>"
             )
     return routes
