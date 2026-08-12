@@ -137,9 +137,17 @@ def _return_calcs(spec: dict) -> list:
             TrailingStopReturn(barrier_bps=x, time_cap_seconds=None, fill_delay_seconds=fd)
             for x in spec["barriers"]
         ]
+    if kind == "maker_fep":  # resting limit-order economics (fees baked in; mirrors qate)
+        from kilimanjaro.return_calc.maker_fep import MakerFEPReturn
+        m = spec.get("maker", {})
+        return [MakerFEPReturn(
+            offset_bps=m.get("offset_bps", 0.0), fill_window_s=m.get("fill_window_s", 30.0),
+            hold_s=m.get("hold_s", 30.0), exit_window_s=m.get("exit_window_s", 60.0),
+            maker_fee_bps=m.get("maker_fee_bps", 0.0), taker_fee_bps=m.get("taker_fee_bps", 5.0),
+            long_only=m.get("long_only", False), price_unit=m.get("price_unit", 0.0))]
     raise ValueError(
         f"unknown return_calc {kind!r} (want fixed_horizon, episode, "
-        "triple_barrier, vol_triple_barrier, or trailing_stop)"
+        "triple_barrier, vol_triple_barrier, trailing_stop, or maker_fep)"
     )
 
 

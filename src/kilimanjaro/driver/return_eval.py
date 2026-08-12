@@ -151,6 +151,7 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
     from kilimanjaro.framework.gate import RollingDrawdownGate
     from kilimanjaro.framework.protocol import MarketConfig
     from kilimanjaro.framework.schedule import ScheduleFilter
+    from kilimanjaro.return_calc.maker_fep import MakerFEPReturn
     from kilimanjaro.return_calc.trailing_stop import TrailingStopReturn
     from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
 
@@ -161,6 +162,9 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
     barrier = spec.get("barriers", [10.0])[0]
     cap = spec.get("time_caps", [300])[0]
     rc_name = spec.get("return_calc", "trailing_stop")
+    # maker return_bps already nets the maker/taker fees, so no separate latency cost applies.
+    if rc_name == "maker_fep":
+        cost_bps = 0.0
     invert = e.get("invert", [False])[0]
     label = e.get("label")
 
@@ -180,6 +184,13 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
                                       min_age=None, max_age=None, invert=invert, label=label)
         if rc_name == "triple_barrier":
             rc = TripleBarrierReturn(barrier, cap, fill_delay_seconds=fill_delay_seconds)
+        elif rc_name == "maker_fep":  # maker limit-order economics (fees baked into return_bps)
+            m = spec.get("maker", {})
+            rc = MakerFEPReturn(
+                offset_bps=m.get("offset_bps", 0.0), fill_window_s=m.get("fill_window_s", 30.0),
+                hold_s=m.get("hold_s", 30.0), exit_window_s=m.get("exit_window_s", 60.0),
+                maker_fee_bps=m.get("maker_fee_bps", 0.0), taker_fee_bps=m.get("taker_fee_bps", 5.0),
+                long_only=m.get("long_only", False), price_unit=m.get("price_unit", 0.0))
         else:  # trailing_stop (v3): no binding time cap
             rc = TrailingStopReturn(barrier, time_cap_seconds=None,
                                     fill_delay_seconds=fill_delay_seconds)
