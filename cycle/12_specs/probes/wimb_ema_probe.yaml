@@ -1,0 +1,55 @@
+hypothesis_id: probe-wimb-ema
+family: microprice
+# PROBE (not a tradable spec): does smoothing the book-imbalance LEVEL, or smoothing its
+# RATE OF CHANGE, buy a higher IC or a slower decay than raw wimb_k5?
+#   level  = pressure interpretation (price responds to how imbalanced the book IS)
+#   diff   = flow interpretation      (price responds to imbalance CHANGING — OFI-like)
+# EMA halflives in seconds; all wrapped in the same zscore(.,1800) so the units and the
+# fire threshold stay comparable with the incumbent factor.
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+  b:
+    exchange: COINCHECK
+    symbol: BTC_SPOT
+    execution_size: '0.002'
+target:
+  exchange: COINCHECK
+  symbol: BTC_SPOT
+  execution_size: '0.002'
+factors:
+- name: wimb_k5_RAW
+  expr: zscore(a_bs_weighted_imb_k5, 1800)
+- name: wimb_k5_ema2
+  expr: zscore(ema(a_bs_weighted_imb_k5, 2), 1800)
+- name: wimb_k5_ema5
+  expr: zscore(ema(a_bs_weighted_imb_k5, 5), 1800)
+- name: wimb_k5_ema15
+  expr: zscore(ema(a_bs_weighted_imb_k5, 15), 1800)
+- name: wimb_k5_ema30
+  expr: zscore(ema(a_bs_weighted_imb_k5, 30), 1800)
+- name: wimb_k5_ema60
+  expr: zscore(ema(a_bs_weighted_imb_k5, 60), 1800)
+- name: wimb_k5_dRAW
+  expr: zscore(diff(a_bs_weighted_imb_k5, 1), 1800)
+- name: wimb_k5_dema2
+  expr: zscore(ema(diff(a_bs_weighted_imb_k5, 1), 2), 1800)
+- name: wimb_k5_dema5
+  expr: zscore(ema(diff(a_bs_weighted_imb_k5, 1), 5), 1800)
+- name: wimb_k5_dema15
+  expr: zscore(ema(diff(a_bs_weighted_imb_k5, 1), 15), 1800)
+- name: wimb_k5_dema30
+  expr: zscore(ema(diff(a_bs_weighted_imb_k5, 1), 30), 1800)
+- name: wimb_k5_dema60
+  expr: zscore(ema(diff(a_bs_weighted_imb_k5, 1), 60), 1800)
+expressions:
+- label: wimb_k5_RAW
+  expr: zscore(a_bs_weighted_imb_k5, 1800)
+  invert:
+  - false
+thresholds:
+- 2.0
+horizons:
+- 30
