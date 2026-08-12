@@ -8,11 +8,21 @@ Two modes:
 
 For each factor it reports IC (Pearson + rank, across horizons), the value distribution,
 and monthly IC stability; plus the cross-factor correlation matrix. Writes
-cycle/13_signal_corr/<name>/{ic.csv,dist.csv,corr_matrix.csv}. See doc/research-pipeline.md.
+cycle/13_signal_corr/<name>/{ic.csv,dist.csv,corr_matrix.csv,decay.csv}.
+See doc/research-pipeline.md.
 
     python src/cli.py signal-corr --families BTC \
         --venues GMO:BTC_JPY:0.01,COINCHECK:BTC_SPOT:0.002 \
         --start 2025-08-01 --end 2026-06-30 --horizons 5,10,30,60,120,300,600
+
+DECAY VIEW (`decay.csv`): one row per factor × market pair, two columns per horizon —
+`corr<h>` (Pearson) and `ic<h>` (Spearman rank) — so a row reads left-to-right as the
+factor's decay curve, with market_a (where the factor is COMPUTED) and market_b (whose
+forward return it PREDICTS) as explicit columns. `--pairs` spans several base symbols in
+one run and writes a single combined cycle/13_signal_corr/<SYM>_decay.csv:
+
+    python src/cli.py signal-corr --families BTC --start ... --end ... \
+        --pairs BINANCE:BTC_USDT:0.002>GMO:BTC_JPY:0.01,BINANCE:BTC_USDT:0.002>COINCHECK:BTC_SPOT:0.002
 """
 
 from __future__ import annotations
@@ -22,11 +32,13 @@ import glob
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import yaml
 
 from kilimanjaro.driver.signal_corr import (
     Factor,
     compute,
+    decay_table,
     factors_from_blend_expr,
 )
 
@@ -43,9 +55,13 @@ def register(sub: argparse._SubParsersAction) -> None:
                    help="[--families] execution venues EXCH:SYM:SIZE,... (default the 2 BTC venues)")
     p.add_argument("--leader", default="BINANCE:BTC_USDT:0.002",
                    help="[--families] leader market EXCH:SYM:SIZE (default BINANCE:BTC_USDT:0.002)")
+    p.add_argument("--pairs",
+                   help="[--families] explicit leader>venue pairs, overriding --leader/--venues: "
+                        "'BINANCE:ETH_USDT:0.1>GMO:ETH_JPY:0.3,BINANCE:XRP_USDT:150>BITBANK:XRP_SPOT:150'. "
+                        "Lets one run span several base symbols; every row carries market_a/market_b.")
     p.add_argument("--start", required=True)
     p.add_argument("--end", required=True)
-    p.add_argument("--horizons", default="5,10,30,60,120,300,600",
+    p.add_argument("--horizons", default="5,10,30,60,120,300,600,900",
                    help="forward-return horizons in seconds")
     p.add_argument("--target-mid", default="b_mid",
                    help="feature-frame expr for the execution venue mid (default b_mid)")
@@ -87,21 +103,36 @@ def _run(args) -> int:
     horizons = [int(h) for h in args.horizons.split(",")]
     if args.families:
         factors = _families_from_specs(args.families)
-        venues = [(_mkt(v), v.replace(":", "_")) for v in args.venues.split(",")]
-        leader = _mkt(args.leader)
+        # A "pair" is (leader=marketA, venue=marketB): the factors are computed on A and
+        # scored against B's forward return. --pairs lets one run span several base
+        # symbols; --leader/--venues is the single-leader shorthand.
+        if args.pairs:
+            pairs = [(_mkt(a), _mkt(b)) for a, b in
+                     (p.split(">") for p in args.pairs.split(","))]
+        else:
+            pairs = [(_mkt(args.leader), _mkt(v)) for v in args.venues.split(",")]
         fams = sorted({f.family for f in factors})
         print(f"signal-corr FAMILY SCAN: {args.families} | {len(factors)} factors "
-              f"({len(fams)} families) × {len(horizons)} horizons | {args.start}..{args.end}")
-        print(f"  leader {leader['exchange']}:{leader['symbol']}  venues: "
-              + ", ".join(f"{m['exchange']}:{m['symbol']}" for m, _ in venues))
-        cross = {}
-        for m, tag in venues:
-            markets = {"a": dict(leader), "b": dict(m)}
-            res = compute(markets, factors, args.target_mid, args.start, args.end, horizons)
-            out = _RESULTS / f"{args.families}_{tag}"
-            _write(res, out)
-            _print_scorecard(f"{m['exchange']}:{m['symbol']}", res)
-            cross[f"{m['exchange']}:{m['symbol']}"] = res.dist.set_index("factor")["best_rank_ic"]
+              f"({len(fams)} families) × {len(horizons)} horizons × {len(pairs)} pairs | "
+              f"{args.start}..{args.end}")
+        for a, b in pairs:
+            print(f"  {a['exchange']}:{a['symbol']} -> {b['exchange']}:{b['symbol']}")
+        cross, decays = {}, []
+        for a, b in pairs:
+            ma, mb = f"{a['exchange']}:{a['symbol']}", f"{b['exchange']}:{b['symbol']}"
+            res = compute({"a": dict(a), "b": dict(b)}, factors,
+                          args.target_mid, args.start, args.end, horizons)
+            tag = f"{ma}_{mb}".replace(":", "_")
+            _write(res, _RESULTS / f"{args.families}_{tag}")
+            d = decay_table(res.ic, ma, mb)
+            d.to_csv(_RESULTS / f"{args.families}_{tag}" / "decay.csv", index=False)
+            decays.append(d)
+            _print_decay(ma, mb, d, horizons)
+            cross[mb] = res.dist.set_index("factor")["best_rank_ic"]
+        # One combined survey table across every pair — the artifact to read/compare.
+        combined = _RESULTS / f"{args.families}_decay.csv"
+        pd.concat(decays, ignore_index=True).to_csv(combined, index=False)
+        print(f"\n  wrote {combined}  ({sum(len(d) for d in decays)} rows: factor × market pair)")
         _print_cross(factors, cross)
         return 0
 
@@ -113,6 +144,11 @@ def _run(args) -> int:
     res = compute(spec["markets"], factors, args.target_mid, args.start, args.end, horizons)
     out = _RESULTS / Path(args.spec).stem
     _write(res, out)
+    ma = "{exchange}:{symbol}".format(**spec["markets"]["a"])
+    mb = "{exchange}:{symbol}".format(**spec["markets"].get("b", spec["target"]))
+    d = decay_table(res.ic, ma, mb)
+    d.to_csv(out / "decay.csv", index=False)
+    _print_decay(ma, mb, d, horizons)
     _print_scorecard(spec["target"]["symbol"], res)
     return 0
 
@@ -122,6 +158,22 @@ def _write(res, out: Path) -> None:
     res.ic.to_csv(out / "ic.csv", index=False)
     res.summary().to_csv(out / "dist.csv", index=False)
     res.corr.to_csv(out / "corr_matrix.csv")
+
+
+def _print_decay(market_a: str, market_b: str, d, horizons: list[int]) -> None:
+    """Console view of the decay profile: rank IC across horizons, one row per factor.
+
+    Only rank IC is printed — 8 horizons x (Pearson, Spearman) does not fit a terminal.
+    decay.csv carries both (corr<h> = Pearson, ic<h> = Spearman)."""
+    print(f"\n===== {market_a} -> {market_b} — rank-IC decay (sorted by |peak|) =====")
+    print(f"  {'factor':<30} {'peak@':>6} " + "".join(f"{('h'+str(h)):>9}" for h in horizons))
+    for _, r in d.iterrows():
+        cells = "".join(f"{r[f'ic{h}']:>+9.4f}" if r[f"ic{h}"] == r[f"ic{h}"] else f"{'-':>9}"
+                        for h in horizons)
+        # peak_h is absent when a factor had no finite IC at any horizon (e.g. a column
+        # that is all-NaN on this market pair) — show it rather than crashing on it.
+        peak = f"{int(r.peak_h)}" if pd.notna(r.peak_h) else "-"
+        print(f"  {r.factor:<30} {peak:>6}{cells}")
 
 
 def _print_scorecard(venue: str, res) -> None:

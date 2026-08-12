@@ -37,3 +37,43 @@ class TestSignalCorr(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDecayTable(unittest.TestCase):
+    """decay_table reshapes the long IC table into one row per factor × market pair."""
+
+    def _ic(self):
+        import pandas as pd
+        rows = []
+        # weak factor peaking late, strong factor peaking early (classic lead-lag decay)
+        for h, a, b in [(5, 0.01, 0.09), (30, 0.02, 0.05), (300, 0.03, 0.01)]:
+            rows.append(dict(family="f1", factor="slow", expr="e1", horizon=h, n=100,
+                             ic=a, rank_ic=a))
+            rows.append(dict(family="f2", factor="fast", expr="e2", horizon=h, n=100,
+                             ic=b, rank_ic=b))
+        return pd.DataFrame(rows)
+
+    def test_shape_columns_and_provenance(self):
+        from kilimanjaro.driver.signal_corr import decay_table
+        d = decay_table(self._ic(), "BINANCE:BTC_USDT", "GMO:BTC_JPY")
+        self.assertEqual(len(d), 2)  # one row per factor
+        for c in ("market_a", "market_b", "corr5", "ic5", "corr300", "ic300", "peak_h"):
+            self.assertIn(c, d.columns)
+        self.assertEqual(set(d.market_a), {"BINANCE:BTC_USDT"})
+        self.assertEqual(set(d.market_b), {"GMO:BTC_JPY"})
+
+    def test_peak_is_the_max_abs_horizon_and_rows_rank_by_it(self):
+        from kilimanjaro.driver.signal_corr import decay_table
+        d = decay_table(self._ic(), "A", "B").set_index("factor")
+        self.assertEqual(d.loc["fast", "peak_h"], 5)     # 0.09 at h=5
+        self.assertEqual(d.loc["slow", "peak_h"], 300)   # 0.03 at h=300
+        # strongest |peak| sorts first
+        self.assertEqual(decay_table(self._ic(), "A", "B").factor.iloc[0], "fast")
+
+    def test_negative_ic_peaks_on_magnitude_not_sign(self):
+        from kilimanjaro.driver.signal_corr import decay_table
+        ic = self._ic()
+        ic.loc[ic.factor == "fast", ["ic", "rank_ic"]] *= -1  # inverted factor
+        d = decay_table(ic, "A", "B").set_index("factor")
+        self.assertEqual(d.loc["fast", "peak_h"], 5)
+        self.assertLess(d.loc["fast", "peak_ic"], 0)

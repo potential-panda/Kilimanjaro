@@ -191,6 +191,44 @@ def compute(
     return SignalCorrResult(ic=ic_df, dist=dist_df, corr=corr_df, horizons=list(horizons))
 
 
+def decay_table(ic: pd.DataFrame, market_a: str, market_b: str) -> pd.DataFrame:
+    """Reshape the long IC table into one row per factor, two columns per horizon.
+
+    `compute()` emits [factor, horizon, ic, rank_ic] long — good for machines, poor for
+    reading a DECAY PROFILE, which is a statement about one factor ACROSS horizons. This
+    pivots so a row reads left-to-right as the decay curve:
+
+        market_a, market_b, family, factor, n, peak_h, peak_ic,
+        corr5, ic5, corr10, ic10, ... , expr
+
+    `corr<h>` = Pearson (linear co-movement), `ic<h>` = Spearman rank (the robust IC the
+    rest of the funnel ranks on). Both are kept because they disagree in an informative
+    way: Pearson >> Spearman means the correlation is carried by a few extreme values.
+
+    market_a/market_b are carried as COLUMNS, not encoded in the output path, so decay
+    tables from different runs (other leaders, other venues, other symbols) concatenate
+    into one survey.
+    """
+    horizons = sorted(ic.horizon.unique())
+    rows = []
+    for (fam, factor, expr), g in ic.groupby(["family", "factor", "expr"], sort=False):
+        g = g.set_index("horizon")
+        row = {"market_a": market_a, "market_b": market_b, "family": fam, "factor": factor,
+               "n": int(g.n.min())}
+        # peak of the decay curve: where |rank IC| is largest (a factor that peaks at the
+        # shortest horizon and decays monotonically is the classic lead-lag shape).
+        valid = {h: g.rank_ic.get(h) for h in horizons if pd.notna(g.rank_ic.get(h))}
+        row["peak_h"] = max(valid, key=lambda h: abs(valid[h])) if valid else None
+        row["peak_ic"] = valid.get(row["peak_h"]) if valid else float("nan")
+        for h in horizons:
+            row[f"corr{h}"] = g.ic.get(h, float("nan"))
+            row[f"ic{h}"] = g.rank_ic.get(h, float("nan"))
+        row["expr"] = expr
+        rows.append(row)
+    out = pd.DataFrame(rows)
+    return out.reindex(out.peak_ic.abs().sort_values(ascending=False).index).reset_index(drop=True)
+
+
 def _factor_dist(f: "Factor", v_full: np.ndarray, win_idx, per_h: dict, fwd: dict, month) -> dict:
     """Per-factor scorecard: value distribution + best-horizon IC + monthly IC stability.
     Operates on the subsampled in-window rows (`win_idx` = integer positions)."""
