@@ -211,11 +211,6 @@ ops:
     - 5
     - 15
     - 30
-  diff_ema:
-    tmpl: diff(ema({x}, {p}), 1)
-    params:
-    - 5
-    - 30
   roll_mean:
     tmpl: roll_mean({x}, {p})
     params:
@@ -239,3 +234,14 @@ ops:
     params:
     - 1
     - 5
+notes:
+  diff_ema_removed: "ema and diff are both linear time-invariant, so diff(ema(x)) == ema(diff(x)) in theory. Measured corr\
+    \ 0.9990 \u2014 NOT exactly equal, but the divergence is a NaN/ramp-up ARTIFACT, not signal: 9 cells in 86,400 exceed\
+    \ 1 sd and 2/3 of those sit adjacent to a raw NaN gap (858 gaps/86,400 rows), the rest at the series head. Keeping both\
+    \ would add ~354 duplicate rows whose only difference is edge handling \u2014 and if one scored better it would be noise-fitting\
+    \ on NaN edges. Keep ema_diff only."
+  ema_adjust_caveat: "op/series.ema uses pandas ewm(halflife) with the DEFAULT adjust=True, a weight-normalized average, not\
+    \ the constant-alpha recursion (alpha = 1-0.5**(1/hl)) that aquila's engine runs online. Measured divergence on real data:\
+    \ hl=2 corr 0.99998 (53 cells > 1% sd), hl=30 corr 0.9947 (1,181 cells, max diff 4x sd). Small but NOT nil, and it grows\
+    \ with halflife. Any EMA-based factor promoted from this sweep must be checked at the calibration layer before production\
+    \ \u2014 this is the same class as the obi_ema per-second-alpha bug."
