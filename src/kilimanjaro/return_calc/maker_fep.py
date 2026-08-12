@@ -62,6 +62,17 @@ class MakerFEPReturn:
     long_only: bool = False        # spot venues: skip SELL (short) signals
     price_unit: float = 0.0        # tick; qate fills at ask<=P-price_unit (0 = ask<=P)
     non_overlapping: bool = True
+    # You cannot POST an order on a signal you do not have yet. A 1s-composite for second
+    # t is only knowable once t closes, so the limit goes on the book at t+1 — the same
+    # causality `fill_delay` enforces on the taker calcs (THE FILL LEAK). Resting one
+    # second early is a lookahead that harvests exactly the favourable crossings.
+    fill_delay_seconds: float = 0.0
+
+    # Mechanism diagnostics from the last compute() — the maker model's honesty check.
+    # Unfilled entries leave NO row (correctly: you didn't trade), so the fill rate is
+    # invisible in the output frame; it has to be counted here. A high fill rate on a
+    # momentum signal is the warning sign that the fills are the adverse ones.
+    last_stats: dict | None = None
 
     @property
     def params(self) -> dict:
@@ -70,6 +81,7 @@ class MakerFEPReturn:
             "fill_window_s": self.fill_window_s, "hold_s": self.hold_s,
             "exit_window_s": self.exit_window_s, "maker_fee_bps": self.maker_fee_bps,
             "taker_fee_bps": self.taker_fee_bps, "long_only": self.long_only,
+            "fill_delay_seconds": self.fill_delay_seconds,
         }
 
     def compute(self, signals: pd.DataFrame, target: MarketConfig,
@@ -80,6 +92,7 @@ class MakerFEPReturn:
         n_mp = len(mp.ts)
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
         if len(sig) == 0 or n_mp == 0:
+            self.last_stats = {"n_posted": 0, "n_filled": 0, "n_forced": 0, "fill_rate": float("nan")}
             return add_jst_columns(_empty(), ts_col="entry_exec_ts", date_ts_col="ts")
 
         ts, bid, ask, mid = mp.ts, mp.bid, mp.ask, mp.mid
@@ -87,10 +100,12 @@ class MakerFEPReturn:
         direction = sig["direction"].to_numpy(dtype=float)
         strength = sig["strength"].to_numpy()
         pu = self.price_unit
-        post_idx = mp.first_at_or_after(sig_ts)  # tick we post the entry limit on
+        # tick we post the entry limit on — at/after ts + fill_delay (causality, see above)
+        post_idx = mp.first_at_or_after(sig_ts + self.fill_delay_seconds)
 
         rows: list[dict] = []
         last_exit_ts = -np.inf
+        n_posted = n_filled = n_forced = 0
         for i in range(len(sig)):
             d = direction[i]
             if self.long_only and d < 0:
@@ -104,12 +119,14 @@ class MakerFEPReturn:
             m0 = mid[e0]
             off = self.offset_bps / 10000.0
             # ── entry: post a passive limit, wait for the book to cross it ──
+            n_posted += 1
             hi_e = self._idx_at(ts, ts[e0] + self.fill_window_s, n_mp)
             entry_fill = self._maker_fill(d, m0 * (1 - off) if d > 0 else m0 * (1 + off),
                                           e0, hi_e, ask, bid, pu)
             if entry_fill is None:  # book never crossed within the window → no trade
                 continue
             ej, entry_price = entry_fill
+            n_filled += 1
 
             # ── hold, then post the exit limit; force-take if it doesn't fill ──
             x0 = self._idx_at(ts, ts[ej] + self.hold_s, n_mp)
@@ -127,6 +144,7 @@ class MakerFEPReturn:
                 exit_price = ask[xj] if xd > 0 else bid[xj]
                 exit_forced = True
                 exit_fee = self.taker_fee_bps
+                n_forced += 1
 
             gross = d * (exit_price - entry_price) / entry_price * 10000.0
             net = gross - self.maker_fee_bps - exit_fee  # entry always maker; exit maker|taker
@@ -140,6 +158,10 @@ class MakerFEPReturn:
             if self.non_overlapping:
                 last_exit_ts = ts[xj]
 
+        self.last_stats = {
+            "n_posted": n_posted, "n_filled": n_filled, "n_forced": n_forced,
+            "fill_rate": (n_filled / n_posted) if n_posted else float("nan"),
+        }
         trades = pd.DataFrame(rows) if rows else _empty()
         return add_jst_columns(trades, ts_col="entry_exec_ts", date_ts_col="ts")
 

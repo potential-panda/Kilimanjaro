@@ -56,11 +56,14 @@ def _run(args) -> int:
     df = evaluate_spec(spec, args.start, args.end, thresholds,
                        cost_bps=args.cost_bps, jst_hours=jst, dd_threshold_bps=dd)
 
+    maker = "fill_rate" in df.columns  # maker runs carry the mechanism diagnostics
     print(f"\n  {'thr':>4} {'nTrades':>8} {'totalBps':>9} {'avgBps':>7} | "
-          f"{'netTotal':>9} {'netAvg':>7} {'sharpe':>7} {'holdS':>7}")
+          f"{'netTotal':>9} {'netAvg':>7} {'sharpe':>7} {'holdS':>7}"
+          + (f" | {'fillRate':>8} {'forced':>7}" if maker else ""))
     for _, r in df.iterrows():
         print(f"  {r.threshold:>4} {int(r.n_trades):>8} {r.total_bps:>+9.1f} {r.avg_bps:>+7.3f} | "
-              f"{r.net_total_bps:>+9.1f} {r.net_avg_bps:>+7.3f} {r.sharpe:>+7.2f} {int(r.avg_hold_s):>7}")
+              f"{r.net_total_bps:>+9.1f} {r.net_avg_bps:>+7.3f} {r.sharpe:>+7.2f} {int(r.avg_hold_s):>7}"
+              + (f" | {r.fill_rate:>8.3f} {r.forced_share:>7.3f}" if maker else ""))
     pos = df[df.net_total_bps > 0]
     print(f"\n  net-positive thresholds: "
           + (", ".join(f"{r.threshold}({int(r.n_trades)} tr, {r.net_avg_bps:+.2f}/t)"

@@ -37,5 +37,37 @@ class TestMakerFill(unittest.TestCase):
         self.assertEqual(len(out), 0)
 
 
+class TestFillDelayCausality(unittest.TestCase):
+    """You cannot rest a limit order on a signal you don't have yet — the order goes on
+    the book at ts+fill_delay. Guards the class of lookahead that was THE FILL LEAK."""
+
+    def _run(self, delay):
+        import kilimanjaro.return_calc.maker_fep as mod
+        from kilimanjaro.data.price_cache import TargetPrices
+        from kilimanjaro.framework.protocol import MarketConfig
+
+        # A BUY signal at t=100. The ask dips to a fillable level ONLY at t=100.5 —
+        # inside the signal's own second, i.e. before the signal is knowable.
+        ts = np.array([100.0, 100.5, 101.0, 102.0, 140.0, 200.0])
+        bid = np.array([99.0, 90.0, 99.0, 99.0, 99.0, 99.0])
+        ask = np.array([101.0, 92.0, 101.0, 101.0, 101.0, 101.0])
+        orig = mod.load_target_prices
+        mod.load_target_prices = lambda *a, **k: TargetPrices(ts, bid, ask)
+        try:
+            sig = pd.DataFrame({"ts": [100.0], "direction": [1.0], "strength": [4.0]})
+            return MakerFEPReturn(fill_delay_seconds=delay, hold_s=1.0, exit_window_s=1.0).compute(
+                sig, MarketConfig("COINCHECK", "BTC_SPOT", "0.002"), "2026-01-01", "2026-01-02")
+        finally:
+            mod.load_target_prices = orig
+
+    def test_zero_delay_takes_the_lookahead_fill(self):
+        # posting at ts sees the t=100.5 dip → fills (this is the leak)
+        self.assertEqual(len(self._run(0.0)), 1)
+
+    def test_unit_delay_misses_it(self):
+        # posting at ts+1 (t=101) — the dip is gone, so no trade
+        self.assertEqual(len(self._run(1.0)), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

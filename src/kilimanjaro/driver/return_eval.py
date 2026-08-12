@@ -190,7 +190,9 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
                 offset_bps=m.get("offset_bps", 0.0), fill_window_s=m.get("fill_window_s", 30.0),
                 hold_s=m.get("hold_s", 30.0), exit_window_s=m.get("exit_window_s", 60.0),
                 maker_fee_bps=m.get("maker_fee_bps", 0.0), taker_fee_bps=m.get("taker_fee_bps", 5.0),
-                long_only=m.get("long_only", False), price_unit=m.get("price_unit", 0.0))
+                long_only=m.get("long_only", False), price_unit=m.get("price_unit", 0.0),
+                # same causality the taker calcs get — post at ts+delay, never at ts
+                fill_delay_seconds=m.get("fill_delay_seconds", fill_delay_seconds))
         else:  # trailing_stop (v3): no binding time cap
             rc = TrailingStopReturn(barrier, time_cap_seconds=None,
                                     fill_delay_seconds=fill_delay_seconds)
@@ -207,10 +209,21 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
         sd = float(tr.return_bps.std()) if n > 1 else 0.0
         sharpe = float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)) if sd > 0 else 0.0
         hold = float((tr.exit_exec_ts - tr.entry_exec_ts).mean()) if n else 0.0
-        rows.append({
+        row = {
             "threshold": float(thr), "n_trades": n,
             "total_bps": round(gross, 1), "avg_bps": round(gross / n, 3) if n else 0.0,
             "net_total_bps": round(net, 1), "net_avg_bps": round(net / n, 3) if n else 0.0,
             "sharpe": round(sharpe, 2), "avg_hold_s": round(hold, 0),
-        })
+        }
+        if rc_name == "maker_fep":
+            # Mechanism diagnostics — a maker result is only readable alongside these.
+            # fill_rate: share of posted limits the book actually crossed (mechanism-level,
+            # before the schedule/DD filters). forced_share: of the trades that survive the
+            # gates, how many had to force-close as a taker (the expensive path on a
+            # fee-charging venue). Both decide whether a net number is trustworthy.
+            st = rc.last_stats or {}
+            row["fill_rate"] = round(st.get("fill_rate", float("nan")), 4)
+            row["n_posted"] = st.get("n_posted", 0)
+            row["forced_share"] = round(float(tr.exit_forced.mean()), 4) if n else 0.0
+        rows.append(row)
     return pd.DataFrame(rows)
