@@ -198,11 +198,12 @@ def compute(
                 ic = float(a.corr(b))
                 rank_ic = float(a.corr(b, method="spearman"))
             per_h[h] = rank_ic
-            gross_bps, net_bps, n_fire = _executable_bps(
+            gross_bps, net_bps, n_fire, se_bps = _executable_bps(
                 v, win_idx, h, n_rows, mid, bid, ask, fire_threshold, ROUND_TRIP_COST_BPS)
             ic_rows.append(dict(family=f.family, factor=f.name, expr=f.expr, horizon=h,
                                 n=n, ic=round(ic, 5), rank_ic=round(rank_ic, 5),
-                                n_fire=n_fire, gross_bps=gross_bps, net_bps=net_bps))
+                                n_fire=n_fire, gross_bps=gross_bps, net_bps=net_bps,
+                                se_bps=se_bps))
         dist_rows.append(_factor_dist(f, values[f.name], win_idx, per_h, fwd, month))
     ic_df = pd.DataFrame(ic_rows)
     dist_df = pd.DataFrame(dist_rows)
@@ -221,18 +222,20 @@ def _executable_bps(v, win_idx, h, n_rows, mid, bid, ask, fire_threshold, cost_b
     so the spread is paid inside the price — then subtract the flat latency cost. No
     separate spread estimate is added (that would double-count it).
 
-    Returns (gross_bps, net_bps, n_fire). The gap between the two IS the spread: it is
-    what a correlation cannot show you, because corr is invariant to that offset.
+    Returns (gross_bps, net_bps, n_fire, se_bps). `se_bps` is the standard error of the
+    net mean (sd/sqrt(n)) — without it a cell built on 28 fires reads the same as one built
+    on 28,000, which is how a wide sweep manufactures winners. The gap between gross and net
+    IS the spread: what a correlation cannot show you, because corr is invariant to it.
     """
     fire = np.isfinite(v) & (np.abs(v) >= fire_threshold)
     if not fire.any():
-        return float("nan"), float("nan"), 0
+        return float("nan"), float("nan"), 0, float("nan")
     src = win_idx[fire]                      # positions at t
     dst = src + h                            # positions at t+h
     keep = dst < n_rows
     src, dst = src[keep], dst[keep]
     if len(src) == 0:
-        return float("nan"), float("nan"), 0
+        return float("nan"), float("nan"), 0, float("nan")
     d = np.sign(v[fire][keep])
     entry = np.where(d > 0, ask[src], bid[src])      # aggressive side at entry
     exit_ = np.where(d > 0, bid[dst], ask[dst])      # passive side at exit
@@ -240,10 +243,12 @@ def _executable_bps(v, win_idx, h, n_rows, mid, bid, ask, fire_threshold, cost_b
     exec_bps = d * (exit_ - entry) / entry * 1e4
     ok = np.isfinite(gross_mid) & np.isfinite(exec_bps)
     if not ok.any():
-        return float("nan"), float("nan"), 0
+        return float("nan"), float("nan"), 0, float("nan")
+    n = int(ok.sum())
     return (round(float(gross_mid[ok].mean()), 3),
             round(float(exec_bps[ok].mean() - cost_bps), 3),
-            int(ok.sum()))
+            n,
+            round(float(exec_bps[ok].std(ddof=1) / np.sqrt(n)), 3) if n > 1 else float("nan"))
 
 
 def decay_table(ic: pd.DataFrame, market_a: str, market_b: str,
@@ -285,6 +290,7 @@ def decay_table(ic: pd.DataFrame, market_a: str, market_b: str,
             if "gross_bps" in g:
                 row[f"gross{h}"] = g.gross_bps.get(h, float("nan"))
                 row[f"net{h}"] = g.net_bps.get(h, float("nan"))
+                row[f"se{h}"] = g.se_bps.get(h, float("nan")) if "se_bps" in g else float("nan")
         # best NET horizon — the tradability peak, which need not be the IC peak (IC
         # peaks short, where moves are smallest relative to the spread).
         nets = {h: row.get(f"net{h}") for h in horizons if pd.notna(row.get(f"net{h}"))}

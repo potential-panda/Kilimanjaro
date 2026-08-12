@@ -97,7 +97,7 @@ class TestExecutableBps(unittest.TestCase):
                                self.mid, self.bid, self.ask, thr, cost)
 
     def test_long_pays_the_spread(self):
-        gross, net, n = self._call([3.0])  # BUY fires
+        gross, net, n, _se = self._call([3.0])  # BUY fires
         self.assertEqual(n, 1)
         self.assertAlmostEqual(gross, 20.0, places=1)   # mid-to-mid +20 bps
         # buy at ask 10005, sell at bid 10015 -> +9.995 bps, minus 1 bp cost
@@ -105,7 +105,7 @@ class TestExecutableBps(unittest.TestCase):
         self.assertLess(net, gross)  # the spread is the gap IC hides
 
     def test_short_direction_flips_both_legs(self):
-        gross, net, _ = self._call([-3.0])  # SELL fires into a rising market
+        gross, net, _, _se = self._call([-3.0])  # SELL fires into a rising market
         self.assertAlmostEqual(gross, -20.0, places=1)
         # sell at bid 9995, buy back at ask 10025 -> -30.0 bps, minus 1 bp
         self.assertAlmostEqual(net, -31.02, places=1)
@@ -114,6 +114,6 @@ class TestExecutableBps(unittest.TestCase):
         self.assertEqual(self._call([1.0])[2], 0)
 
     def test_cost_is_subtracted_once_per_round_trip(self):
-        _, net_free, _ = self._call([3.0], cost=0.0)
-        _, net_paid, _ = self._call([3.0], cost=1.0)
+        _, net_free, _, _ = self._call([3.0], cost=0.0)
+        _, net_paid, _, _ = self._call([3.0], cost=1.0)
         self.assertAlmostEqual(net_free - net_paid, 1.0, places=6)

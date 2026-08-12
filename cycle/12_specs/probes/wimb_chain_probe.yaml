@@ -1,0 +1,41 @@
+hypothesis_id: probe-wimb-chains
+family: microprice
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+  b:
+    exchange: COINCHECK
+    symbol: BTC_SPOT
+    execution_size: '0.002'
+target:
+  exchange: COINCHECK
+  symbol: BTC_SPOT
+  execution_size: '0.002'
+factors:
+- name: RAW
+  expr: zscore(a_bs_weighted_imb_k5, 1800)
+- name: d1
+  expr: zscore(diff(a_bs_weighted_imb_k5, 1), 1800)
+- name: d1_ema2_BEST
+  expr: zscore(ema(diff(a_bs_weighted_imb_k5, 1), 2), 1800)
+- name: d2
+  expr: zscore(diff(diff(a_bs_weighted_imb_k5, 1), 1), 1800)
+- name: ema2_of_d2
+  expr: zscore(ema(diff(diff(a_bs_weighted_imb_k5, 1), 1), 2), 1800)
+- name: diff_ema_diff
+  expr: zscore(diff(ema(diff(a_bs_weighted_imb_k5, 1), 2), 1), 1800)
+- name: ema_diff_ema_diff
+  expr: zscore(ema(diff(ema(diff(a_bs_weighted_imb_k5, 1), 2), 1), 2), 1800)
+- name: ema5_diff_ema5_diff
+  expr: zscore(ema(diff(ema(diff(a_bs_weighted_imb_k5, 1), 5), 1), 5), 1800)
+expressions:
+- label: RAW
+  expr: zscore(a_bs_weighted_imb_k5, 1800)
+  invert:
+  - false
+thresholds:
+- 2.0
+horizons:
+- 30

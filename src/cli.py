@@ -39,6 +39,7 @@ def main() -> int:
         learn,
         loop,
         meta,
+        op_sweep,
         populate,
         return_eval,
         verify,
@@ -62,6 +63,7 @@ def main() -> int:
     factory.register(sub)
     calibrate.register(sub)
     signal_corr.register(sub)
+    op_sweep.register(sub)
     blend_corr.register(sub)
 
     args = parser.parse_args()
