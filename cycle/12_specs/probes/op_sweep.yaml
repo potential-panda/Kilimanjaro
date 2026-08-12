@@ -1,0 +1,241 @@
+market_a: BINANCE:BTC_USDT:0.002
+market_b: COINCHECK:BTC_SPOT:0.002
+zscore_windows:
+- 900
+- 1800
+bases:
+  vol_imb_k1: a_bs_vol_imb_k1
+  weighted_imb_k1: a_bs_weighted_imb_k1
+  obi_k1: a_obi_k1
+  vol_imb_k3: a_bs_vol_imb_k3
+  weighted_imb_k3: a_bs_weighted_imb_k3
+  obi_k3: a_obi_k3
+  vol_imb_k5: a_bs_vol_imb_k5
+  weighted_imb_k5: a_bs_weighted_imb_k5
+  obi_k5: a_obi_k5
+  vol_imb_k10: a_bs_vol_imb_k10
+  weighted_imb_k10: a_bs_weighted_imb_k10
+  obi_k10: a_obi_k10
+  depth_imb_1bps: a_bs_depth_imb_1bps
+  depth_imb_2bps: a_bs_depth_imb_2bps
+  depth_imb_5bps: a_bs_depth_imb_5bps
+  depth_imb_10bps: a_bs_depth_imb_10bps
+  obi_ema_k1_10s: a_obi_ema_k1_10s
+  obi_ema_k1_30s: a_obi_ema_k1_30s
+  obi_ema_k1_60s: a_obi_ema_k1_60s
+  obi_ema_k1_120s: a_obi_ema_k1_120s
+  obi_ema_k1_300s: a_obi_ema_k1_300s
+  obi_ema_k3_10s: a_obi_ema_k3_10s
+  obi_ema_k3_30s: a_obi_ema_k3_30s
+  obi_ema_k3_60s: a_obi_ema_k3_60s
+  obi_ema_k3_120s: a_obi_ema_k3_120s
+  obi_ema_k3_300s: a_obi_ema_k3_300s
+  obi_ema_k5_10s: a_obi_ema_k5_10s
+  obi_ema_k5_30s: a_obi_ema_k5_30s
+  obi_ema_k5_60s: a_obi_ema_k5_60s
+  obi_ema_k5_120s: a_obi_ema_k5_120s
+  obi_ema_k5_300s: a_obi_ema_k5_300s
+  imbalance_qty_1s: a_ta_imbalance_qty_1s
+  imbalance_qty_3s: a_ta_imbalance_qty_3s
+  imbalance_qty_5s: a_ta_imbalance_qty_5s
+  imbalance_qty_10s: a_ta_imbalance_qty_10s
+  imbalance_qty_30s: a_ta_imbalance_qty_30s
+  imbalance_qty_60s: a_ta_imbalance_qty_60s
+  imbalance_count_1s: a_ta_imbalance_count_1s
+  imbalance_count_3s: a_ta_imbalance_count_3s
+  imbalance_count_5s: a_ta_imbalance_count_5s
+  imbalance_count_10s: a_ta_imbalance_count_10s
+  imbalance_count_30s: a_ta_imbalance_count_30s
+  imbalance_count_60s: a_ta_imbalance_count_60s
+  net_flow_1s: a_ta_net_flow_1s
+  net_flow_3s: a_ta_net_flow_3s
+  net_flow_5s: a_ta_net_flow_5s
+  net_flow_10s: a_ta_net_flow_10s
+  net_flow_30s: a_ta_net_flow_30s
+  net_flow_60s: a_ta_net_flow_60s
+  buy_sell_ratio_1s: a_ta_buy_sell_ratio_1s
+  buy_sell_ratio_3s: a_ta_buy_sell_ratio_3s
+  buy_sell_ratio_5s: a_ta_buy_sell_ratio_5s
+  buy_sell_ratio_10s: a_ta_buy_sell_ratio_10s
+  buy_sell_ratio_30s: a_ta_buy_sell_ratio_30s
+  buy_sell_ratio_60s: a_ta_buy_sell_ratio_60s
+  qty_per_sec_1s: a_ta_qty_per_sec_1s
+  qty_per_sec_3s: a_ta_qty_per_sec_3s
+  qty_per_sec_5s: a_ta_qty_per_sec_5s
+  qty_per_sec_10s: a_ta_qty_per_sec_10s
+  qty_per_sec_30s: a_ta_qty_per_sec_30s
+  qty_per_sec_60s: a_ta_qty_per_sec_60s
+  trades_per_sec_1s: a_ta_trades_per_sec_1s
+  trades_per_sec_3s: a_ta_trades_per_sec_3s
+  trades_per_sec_5s: a_ta_trades_per_sec_5s
+  trades_per_sec_10s: a_ta_trades_per_sec_10s
+  trades_per_sec_30s: a_ta_trades_per_sec_30s
+  trades_per_sec_60s: a_ta_trades_per_sec_60s
+  total_qty_1s: a_ta_total_qty_1s
+  total_qty_3s: a_ta_total_qty_3s
+  total_qty_5s: a_ta_total_qty_5s
+  total_qty_10s: a_ta_total_qty_10s
+  total_qty_30s: a_ta_total_qty_30s
+  total_qty_60s: a_ta_total_qty_60s
+  total_count_1s: a_ta_total_count_1s
+  total_count_3s: a_ta_total_count_3s
+  total_count_5s: a_ta_total_count_5s
+  total_count_10s: a_ta_total_count_10s
+  total_count_30s: a_ta_total_count_30s
+  total_count_60s: a_ta_total_count_60s
+  avg_trade_size_1s: a_ta_avg_trade_size_1s
+  avg_trade_size_3s: a_ta_avg_trade_size_3s
+  avg_trade_size_5s: a_ta_avg_trade_size_5s
+  avg_trade_size_10s: a_ta_avg_trade_size_10s
+  avg_trade_size_30s: a_ta_avg_trade_size_30s
+  avg_trade_size_60s: a_ta_avg_trade_size_60s
+  max_trade_size_1s: a_ta_max_trade_size_1s
+  max_trade_size_3s: a_ta_max_trade_size_3s
+  max_trade_size_5s: a_ta_max_trade_size_5s
+  max_trade_size_10s: a_ta_max_trade_size_10s
+  max_trade_size_30s: a_ta_max_trade_size_30s
+  max_trade_size_60s: a_ta_max_trade_size_60s
+  burst_flag_1s: a_ta_burst_flag_1s
+  burst_flag_3s: a_ta_burst_flag_3s
+  burst_flag_5s: a_ta_burst_flag_5s
+  burst_flag_10s: a_ta_burst_flag_10s
+  burst_flag_30s: a_ta_burst_flag_30s
+  burst_flag_60s: a_ta_burst_flag_60s
+  dominant_size_bucket_1s: a_ta_dominant_size_bucket_1s
+  dominant_size_bucket_3s: a_ta_dominant_size_bucket_3s
+  dominant_size_bucket_5s: a_ta_dominant_size_bucket_5s
+  dominant_size_bucket_10s: a_ta_dominant_size_bucket_10s
+  dominant_size_bucket_30s: a_ta_dominant_size_bucket_30s
+  dominant_size_bucket_60s: a_ta_dominant_size_bucket_60s
+  dominant_bucket_count_1s: a_ta_dominant_bucket_count_1s
+  dominant_bucket_count_3s: a_ta_dominant_bucket_count_3s
+  dominant_bucket_count_5s: a_ta_dominant_bucket_count_5s
+  dominant_bucket_count_10s: a_ta_dominant_bucket_count_10s
+  dominant_bucket_count_30s: a_ta_dominant_bucket_count_30s
+  dominant_bucket_count_60s: a_ta_dominant_bucket_count_60s
+  dominant_bucket_share_1s: a_ta_dominant_bucket_share_1s
+  dominant_bucket_share_3s: a_ta_dominant_bucket_share_3s
+  dominant_bucket_share_5s: a_ta_dominant_bucket_share_5s
+  dominant_bucket_share_10s: a_ta_dominant_bucket_share_10s
+  dominant_bucket_share_30s: a_ta_dominant_bucket_share_30s
+  dominant_bucket_share_60s: a_ta_dominant_bucket_share_60s
+  buy_qty_1s: a_ta_buy_qty_1s
+  buy_qty_3s: a_ta_buy_qty_3s
+  buy_qty_5s: a_ta_buy_qty_5s
+  buy_qty_10s: a_ta_buy_qty_10s
+  buy_qty_30s: a_ta_buy_qty_30s
+  buy_qty_60s: a_ta_buy_qty_60s
+  sell_qty_1s: a_ta_sell_qty_1s
+  sell_qty_3s: a_ta_sell_qty_3s
+  sell_qty_5s: a_ta_sell_qty_5s
+  sell_qty_10s: a_ta_sell_qty_10s
+  sell_qty_30s: a_ta_sell_qty_30s
+  sell_qty_60s: a_ta_sell_qty_60s
+  buy_count_1s: a_ta_buy_count_1s
+  buy_count_3s: a_ta_buy_count_3s
+  buy_count_5s: a_ta_buy_count_5s
+  buy_count_10s: a_ta_buy_count_10s
+  buy_count_30s: a_ta_buy_count_30s
+  buy_count_60s: a_ta_buy_count_60s
+  sell_count_1s: a_ta_sell_count_1s
+  sell_count_3s: a_ta_sell_count_3s
+  sell_count_5s: a_ta_sell_count_5s
+  sell_count_10s: a_ta_sell_count_10s
+  sell_count_30s: a_ta_sell_count_30s
+  sell_count_60s: a_ta_sell_count_60s
+  buy_qty_per_sec_1s: a_ta_buy_qty_per_sec_1s
+  buy_qty_per_sec_3s: a_ta_buy_qty_per_sec_3s
+  buy_qty_per_sec_5s: a_ta_buy_qty_per_sec_5s
+  buy_qty_per_sec_10s: a_ta_buy_qty_per_sec_10s
+  buy_qty_per_sec_30s: a_ta_buy_qty_per_sec_30s
+  buy_qty_per_sec_60s: a_ta_buy_qty_per_sec_60s
+  sell_qty_per_sec_1s: a_ta_sell_qty_per_sec_1s
+  sell_qty_per_sec_3s: a_ta_sell_qty_per_sec_3s
+  sell_qty_per_sec_5s: a_ta_sell_qty_per_sec_5s
+  sell_qty_per_sec_10s: a_ta_sell_qty_per_sec_10s
+  sell_qty_per_sec_30s: a_ta_sell_qty_per_sec_30s
+  sell_qty_per_sec_60s: a_ta_sell_qty_per_sec_60s
+  spread_bps: a_spread_bps
+  best_spread_bps: a_bs_best_spread_bps
+  mpoff_k1: a_bs_microprice_k1 / a_mid - 1
+  mpoff_k3: a_bs_microprice_k3 / a_mid - 1
+  mpoff_k5: a_bs_microprice_k5 / a_mid - 1
+  mpoff_k10: a_bs_microprice_k10 / a_mid - 1
+  vwapdev_1s: a_mid / a_ta_vwap_1s - 1
+  vwapskew_1s: a_ta_vwap_buy_1s / a_ta_vwap_sell_1s - 1
+  vwapdev_3s: a_mid / a_ta_vwap_3s - 1
+  vwapskew_3s: a_ta_vwap_buy_3s / a_ta_vwap_sell_3s - 1
+  vwapdev_5s: a_mid / a_ta_vwap_5s - 1
+  vwapskew_5s: a_ta_vwap_buy_5s / a_ta_vwap_sell_5s - 1
+  vwapdev_10s: a_mid / a_ta_vwap_10s - 1
+  vwapskew_10s: a_ta_vwap_buy_10s / a_ta_vwap_sell_10s - 1
+  vwapdev_30s: a_mid / a_ta_vwap_30s - 1
+  vwapskew_30s: a_ta_vwap_buy_30s / a_ta_vwap_sell_30s - 1
+  vwapdev_60s: a_mid / a_ta_vwap_60s - 1
+  vwapskew_60s: a_ta_vwap_buy_60s / a_ta_vwap_sell_60s - 1
+  basis: a_mid / b_mid
+  mid_level: a_mid
+  obigrad_k1_k3: a_obi_k1 - a_obi_k3
+  obigrad_k1_k5: a_obi_k1 - a_obi_k5
+  obigrad_k1_k10: a_obi_k1 - a_obi_k10
+  obigrad_k3_k10: a_obi_k3 - a_obi_k10
+  wimbgrad_k1_k10: a_bs_weighted_imb_k1 - a_bs_weighted_imb_k10
+  volimbgrad_k1_k10: a_bs_vol_imb_k1 - a_bs_vol_imb_k10
+ops:
+  id:
+    tmpl: '{x}'
+    params:
+    - null
+  ema:
+    tmpl: ema({x}, {p})
+    params:
+    - 2
+    - 5
+    - 15
+    - 30
+    - 60
+    - 120
+  diff:
+    tmpl: diff({x}, {p})
+    params:
+    - 1
+    - 2
+    - 5
+    - 15
+    - 30
+    - 60
+  ema_diff:
+    tmpl: ema(diff({x}, 1), {p})
+    params:
+    - 2
+    - 5
+    - 15
+    - 30
+  diff_ema:
+    tmpl: diff(ema({x}, {p}), 1)
+    params:
+    - 5
+    - 30
+  roll_mean:
+    tmpl: roll_mean({x}, {p})
+    params:
+    - 30
+    - 300
+  roll_std:
+    tmpl: roll_std({x}, {p})
+    params:
+    - 30
+    - 300
+  abs:
+    tmpl: abs({x})
+    params:
+    - null
+  sign:
+    tmpl: sign({x})
+    params:
+    - null
+  lag:
+    tmpl: lag({x}, {p})
+    params:
+    - 1
+    - 5

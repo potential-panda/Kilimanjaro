@@ -1,0 +1,55 @@
+hypothesis_id: probe-wimb-d2
+family: microprice
+# Does a SECOND difference add anything over the first?
+#   diff(x, n)        = x_t - x_{t-n}              — one difference over distance n
+#   diff(diff(x,1),1) = x_t - 2x_{t-1} + x_{t-2}   — second difference (acceleration)
+# These are commonly conflated but are different filters: the first is a wider high-pass,
+# the second is high-pass applied twice (noise-amplifying, and over-differencing induces a
+# spurious negative autocorrelation). Both are swept, with and without EMA smoothing.
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+  b:
+    exchange: COINCHECK
+    symbol: BTC_SPOT
+    execution_size: '0.002'
+target:
+  exchange: COINCHECK
+  symbol: BTC_SPOT
+  execution_size: '0.002'
+factors:
+- name: RAW
+  expr: zscore(a_bs_weighted_imb_k5, 1800)
+- name: d1_n1
+  expr: zscore(diff(a_bs_weighted_imb_k5, 1), 1800)
+- name: d1_n2
+  expr: zscore(diff(a_bs_weighted_imb_k5, 2), 1800)
+- name: d1_n5
+  expr: zscore(diff(a_bs_weighted_imb_k5, 5), 1800)
+- name: d1_n15
+  expr: zscore(diff(a_bs_weighted_imb_k5, 15), 1800)
+- name: d1_ema2_BEST
+  expr: zscore(ema(diff(a_bs_weighted_imb_k5, 1), 2), 1800)
+- name: d2
+  expr: zscore(diff(diff(a_bs_weighted_imb_k5, 1), 1), 1800)
+- name: d2_ema2
+  expr: zscore(ema(diff(diff(a_bs_weighted_imb_k5, 1), 1), 2), 1800)
+- name: d2_ema5
+  expr: zscore(ema(diff(diff(a_bs_weighted_imb_k5, 1), 1), 5), 1800)
+- name: d2_ema15
+  expr: zscore(ema(diff(diff(a_bs_weighted_imb_k5, 1), 1), 15), 1800)
+- name: d2_ema30
+  expr: zscore(ema(diff(diff(a_bs_weighted_imb_k5, 1), 1), 30), 1800)
+- name: d3
+  expr: zscore(diff(diff(diff(a_bs_weighted_imb_k5, 1), 1), 1), 1800)
+expressions:
+- label: RAW
+  expr: zscore(a_bs_weighted_imb_k5, 1800)
+  invert:
+  - false
+thresholds:
+- 2.0
+horizons:
+- 30
