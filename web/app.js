@@ -23,8 +23,16 @@ const fmt = {
   },
 };
 
+/* Resolve API paths against the DOCUMENT's directory, not the server root.
+ * The viewer is served both directly (http://host:9777/) and behind an nginx
+ * path prefix (http://host:7700/kilimanjaro/, which strips the prefix upstream).
+ * An absolute "/api/x" breaks in the second case — the browser asks the proxy
+ * root, where nothing is mounted — so make every request relative to the page. */
+const API_ROOT = new URL("./", document.baseURI);
+
 async function getJSON(url) {
-  const r = await fetch(url);
+  const target = new URL(String(url).replace(/^\//, ""), API_ROOT);
+  const r = await fetch(target);
   if (!r.ok) throw new Error(`${url} → ${r.status}`);
   return r.json();
 }
