@@ -121,6 +121,61 @@ def run_episode_retest(
     )
 
 
+def _evaluate_flip_spec(spec: dict, target, start: str, end: str, boxes=None, *,
+                        cost_bps: float = 1.0, dd_threshold_bps: float | None = None,
+                        data_root=None):
+    """Stage 15 for the flip mechanism: sweep box size, one row per box.
+
+    Same standardized economics as the expression path, so flip and expression
+    candidates are directly comparable — plus `box`/`step` in place of `threshold`.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from kilimanjaro.framework.gate import (
+        DEFAULT_DD_COOLDOWN_SECONDS,
+        DEFAULT_DD_THRESHOLD_BPS,
+        DEFAULT_DD_WINDOW_SECONDS,
+        RollingDrawdownGate,
+    )
+    from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
+    from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
+    from kilimanjaro.signal.sar_flip import SARFlipSignal
+
+    flip = spec["flip"]
+    step = float(spec.get("step", 0.04))
+    boxes = boxes if boxes is not None else spec.get("boxes", [0.003])
+    sched = OrionScheduleFilter(spec.get("schedule", "nofilter"))
+    # Flip-mechanism gate defaults (3h/500bps/6h) — NOT aquila's (6h/200bps/1h).
+    dd_bps = DEFAULT_DD_THRESHOLD_BPS if dd_threshold_bps is None else dd_threshold_bps
+
+    rows = []
+    for box in boxes:
+        sig = SARFlipSignal(flip["exchange"], flip["symbol"], float(box), step)
+        tr = BetweenSignalReturn().compute(
+            sig.generate(sig.load_data(start, end, data_root)), target, start, end, data_root)
+        tr, _ = sched.apply(tr)
+        n_pre = len(tr)
+        if dd_bps and np.isfinite(dd_bps):
+            tr, _ = RollingDrawdownGate(window_seconds=DEFAULT_DD_WINDOW_SECONDS,
+                                        threshold_bps=dd_bps,
+                                        cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS).apply(tr)
+        tr = tr.dropna(subset=["return_bps"])
+        n = len(tr)
+        gross = float(tr.return_bps.sum()) if n else 0.0
+        net = gross - cost_bps * n
+        sd = float(tr.return_bps.std()) if n > 1 else 0.0
+        rows.append({
+            "box": float(box), "step": step, "n_trades": n, "n_gated_out": n_pre - n,
+            "total_bps": round(gross, 1), "avg_bps": round(gross / n, 3) if n else 0.0,
+            "net_total_bps": round(net, 1), "net_avg_bps": round(net / n, 3) if n else 0.0,
+            "sharpe": round(float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)), 2)
+                      if sd > 0 else 0.0,
+            "avg_hold_s": round(float((tr.exit_exec_ts - tr.entry_exec_ts).mean()), 0) if n else 0.0,
+        })
+    return pd.DataFrame(rows)
+
+
 # ── stage 15: evaluate a candidate spec as the calibrated trading strategy ─────
 # The screening tiers (13/14) measure PREDICTION (IC). This measures whether the
 # candidate PAYS: run its formula through the calibrated mechanism (v3 trailing /
@@ -155,9 +210,21 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
     from kilimanjaro.return_calc.trailing_stop import TrailingStopReturn
     from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
 
-    e = spec["expressions"][0]
-    markets, t = spec["markets"], spec["target"]
+    t = spec["target"]
     target = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
+
+    # ── flip mechanism (SAR flips + between-signal) ───────────────────────────
+    # The one CALIBRATED mechanism (ETH, 98.3% PnL-exact vs the backtest), so it runs
+    # through its own certified pieces: SARFlipSignal (exit_ts = the NEXT flip, so exits
+    # are driven by ALL flips even when the schedule blocks an entry — the backtest's
+    # NO_ENTRY close behaviour), BetweenSignalReturn, orion's OWN schedule module, and
+    # the flip gate defaults from framework.gate. Swept over box size, not threshold.
+    if spec.get("signal") == "sar_flip":
+        return _evaluate_flip_spec(spec, target, start, end, thresholds, cost_bps=cost_bps,
+                                   dd_threshold_bps=dd_threshold_bps, data_root=data_root)
+
+    e = spec["expressions"][0]
+    markets = spec["markets"]
     thresholds = thresholds if thresholds is not None else spec.get("thresholds", [3.0])
     barrier = spec.get("barriers", [10.0])[0]
     cap = spec.get("time_caps", [300])[0]

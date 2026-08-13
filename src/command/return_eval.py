@@ -31,7 +31,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--start", required=True)
     p.add_argument("--end", required=True)
     p.add_argument("--thresholds", default=None,
-                   help="comma list to sweep (default: the spec's own thresholds)")
+                   help="comma list to sweep (default: the spec's own thresholds; for a sar_flip spec this sweeps BOX SIZE)")
     p.add_argument("--cost-bps", type=float, default=1.0,
                    help="round-trip latency cost in bps (default 1.0, the calibrated value)")
     p.add_argument("--all-hours", action="store_true",
@@ -44,29 +44,39 @@ def register(sub: argparse._SubParsersAction) -> None:
 def _run(args) -> int:
     spec = yaml.safe_load(Path(args.spec).read_text())
     thresholds = [float(x) for x in args.thresholds.split(",")] if args.thresholds else None
+    is_flip = spec.get("signal") == "sar_flip"
     jst = tuple(range(24)) if args.all_hours else (22, 23, 0, 1, 2)
-    dd = float("inf") if args.no_dd_gate else 200.0
+    # A flip spec carries its own schedule (orion's module) and its own gate defaults
+    # (3h/500bps/6h, framework.gate) — passing None lets those defaults stand rather
+    # than silently imposing aquila's 200bps expression-strategy gate on it.
+    dd = float("inf") if args.no_dd_gate else (None if is_flip else 200.0)
 
     t = spec["target"]
-    rc = spec.get("return_calc", "trailing_stop")
+    rc = "between_signal" if spec.get("signal") == "sar_flip" else spec.get("return_calc", "trailing_stop")
+    where = (f"orion:{spec.get('schedule','nofilter')}" if is_flip
+             else ("all-hours" if args.all_hours else "US-session"))
     print(f"return-eval: {Path(args.spec).stem} | {t['exchange']}:{t['symbol']} | {rc} | "
-          f"{'all-hours' if args.all_hours else 'US-session'}"
+          f"{where}"
           f"{'' if not args.no_dd_gate else ' | no-dd-gate'} | cost {args.cost_bps}bp | "
           f"{args.start}..{args.end}")
     df = evaluate_spec(spec, args.start, args.end, thresholds,
                        cost_bps=args.cost_bps, jst_hours=jst, dd_threshold_bps=dd)
 
     maker = "fill_rate" in df.columns  # maker runs carry the mechanism diagnostics
-    print(f"\n  {'thr':>4} {'nTrades':>8} {'totalBps':>9} {'avgBps':>7} | "
+    flip = "box" in df.columns          # flip runs sweep box size, not threshold
+    sweep_col, sweep_hdr = ("box", "box") if flip else ("threshold", "thr")
+    print(f"\n  {sweep_hdr:>6} {'nTrades':>8} {'totalBps':>9} {'avgBps':>7} | "
           f"{'netTotal':>9} {'netAvg':>7} {'sharpe':>7} {'holdS':>7}"
+          + (f" | {'gatedOut':>8}" if flip else "")
           + (f" | {'fillRate':>8} {'forced':>7}" if maker else ""))
     for _, r in df.iterrows():
-        print(f"  {r.threshold:>4} {int(r.n_trades):>8} {r.total_bps:>+9.1f} {r.avg_bps:>+7.3f} | "
+        print(f"  {r[sweep_col]:>6} {int(r.n_trades):>8} {r.total_bps:>+9.1f} {r.avg_bps:>+7.3f} | "
               f"{r.net_total_bps:>+9.1f} {r.net_avg_bps:>+7.3f} {r.sharpe:>+7.2f} {int(r.avg_hold_s):>7}"
+              + (f" | {int(r.n_gated_out):>8}" if flip else "")
               + (f" | {r.fill_rate:>8.3f} {r.forced_share:>7.3f}" if maker else ""))
     pos = df[df.net_total_bps > 0]
-    print(f"\n  net-positive thresholds: "
-          + (", ".join(f"{r.threshold}({int(r.n_trades)} tr, {r.net_avg_bps:+.2f}/t)"
+    print(f"\n  net-positive {sweep_hdr}s: "
+          + (", ".join(f"{r[sweep_col]}({int(r.n_trades)} tr, {r.net_avg_bps:+.2f}/t)"
                        for _, r in pos.iterrows()) if len(pos) else "NONE"))
 
     out = Path(args.out) if args.out else _RESULTS / Path(args.spec).stem
