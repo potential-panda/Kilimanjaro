@@ -15,6 +15,8 @@ GET /api/scans/<kind>/<scan_id>         one run: params.json + file list
 GET /api/scans/<kind>/<scan_id>/file/<name>
                                         a CSV from the run folder as
                                         {columns, rows} (client sorts)
+GET /api/factors                        stage-13 factor tables (op-sweep / signal-corr)
+GET /api/factors/<run>/file/<name>      one of those CSVs as {columns, rows}
 GET /api/hypotheses                     spec+ledger join, one row per hyp
 GET /api/hypotheses/<hyp_id>            full spec + event history
 GET /api/ledger                         raw ledger events
@@ -146,6 +148,84 @@ def api_scan_detail(kind: str, scan_id: str):
 @app.route("/api/scans/<kind>/<scan_id>/file/<name>")
 def api_scan_file(kind: str, scan_id: str, name: str):
     folder = _scan_folder(kind, scan_id)
+    if "/" in name or ".." in name or not name.endswith(".csv"):
+        abort(404)
+    path = folder / name
+    if not path.is_file():
+        abort(404)
+    columns, rows = _read_csv(path)
+    return jsonify({"name": name, "columns": columns, "rows": rows})
+
+
+# -- Stage-13 factor tables -------------------------------------------------
+# The op-sweep catalog (sweep.csv) and the signal-corr outputs (decay.csv, ic.csv,
+# dist.csv, corr_matrix.csv) all live as CSVs under cycle/13_signal_corr/<run>/, so
+# one generic pair of endpoints serves every stage-13 table. Combined tables written
+# at the top level (e.g. BTC_decay.csv) are grouped under the pseudo-run "_combined".
+
+_SIGNAL_CORR_DIR = _ROOT / "cycle" / "13_signal_corr"
+_COMBINED = "_combined"
+_factor_cache: dict[str, tuple[float, int]] = {}
+
+
+def _csv_row_count(path: Path) -> int:
+    """Row count (excluding header), cached by mtime — sweep.csv is ~4 MB.
+
+    Counts CSV *records*, not lines: captured error messages are multi-line and get
+    quoted, so a line count over-reports (8662 vs the true 8654 on the op sweep).
+    """
+    mtime = path.stat().st_mtime
+    cached = _factor_cache.get(str(path))
+    if cached and cached[0] == mtime:
+        return cached[1]
+    with open(path, newline="") as f:
+        n = max(sum(1 for _ in csv.reader(f)) - 1, 0)
+    _factor_cache[str(path)] = (mtime, n)
+    return n
+
+
+def _factor_run_dir(run: str) -> Path:
+    if "/" in run or ".." in run:
+        abort(404)
+    folder = _SIGNAL_CORR_DIR if run == _COMBINED else _SIGNAL_CORR_DIR / run
+    if not folder.is_dir():
+        abort(404)
+    return folder
+
+
+@app.route("/api/factors")
+def api_factors():
+    out = []
+    if _SIGNAL_CORR_DIR.is_dir():
+        for folder in sorted(_SIGNAL_CORR_DIR.iterdir()):
+            if not folder.is_dir():
+                continue
+            files = sorted(p.name for p in folder.glob("*.csv"))
+            if files:
+                out.append(_factor_summary(folder.name, folder, files))
+        loose = sorted(p.name for p in _SIGNAL_CORR_DIR.glob("*.csv"))
+        if loose:
+            out.append(_factor_summary(_COMBINED, _SIGNAL_CORR_DIR, loose))
+    out.sort(key=lambda r: -r["mtime"])
+    return jsonify(out)
+
+
+def _factor_summary(run: str, folder: Path, files: list[str]) -> dict:
+    # Prefer the wide catalog, then the decay view, as the run's headline table.
+    primary = next((f for f in ("sweep.csv", "decay.csv") if f in files), files[0])
+    path = folder / primary
+    return {
+        "run": run,
+        "files": files,
+        "primary": primary,
+        "n_rows": _csv_row_count(path),
+        "mtime": path.stat().st_mtime,
+    }
+
+
+@app.route("/api/factors/<run>/file/<name>")
+def api_factor_file(run: str, name: str):
+    folder = _factor_run_dir(run)
     if "/" in name or ".." in name or not name.endswith(".csv"):
         abort(404)
     path = folder / name

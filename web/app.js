@@ -3,6 +3,8 @@
  *   #/scans                      list of grid-scan runs
  *   #/scans/{kind}/{id}          one run, sortable CSV table
  *   #/scans/{kind}/{id}/{file}   same, specific csv selected
+ *   #/factors                    stage-13 factor tables (op-sweep / signal-corr)
+ *   #/factors/{run}[/{file}]     one table, sortable + filterable
  *   #/hyps                       hypotheses (spec + ledger join)
  *   #/hyps/{id}                  one hypothesis: spec + event history
  */
@@ -210,6 +212,48 @@ async function viewScanDetail(kind, scanId, file) {
   $main.replaceChildren(header, tabs, sortableTable(csv.columns, csv.rows));
 }
 
+/* ── factors (stage 13: op-sweep catalog / signal-corr tables) ──────────── */
+
+async function viewFactors() {
+  $main.replaceChildren(el("div", { class: "loading" }, "loading factor tables…"));
+  const runs = await getJSON("/api/factors");
+  const rows = runs.map((r) =>
+    el("tr", { class: "clickable", onclick: () => { location.hash = `#/factors/${r.run}`; } },
+      el("td", { class: "mono" }, r.run),
+      el("td", { class: "num" }, r.n_rows),
+      el("td", { class: "mono dim" }, r.files.join("  ")),
+      el("td", { class: "dim" }, fmt.date(r.mtime)),
+    ));
+  $main.replaceChildren(
+    el("h1", {}, "Factor tables ", el("span", { class: "dim" }, `(${runs.length})`)),
+    el("div", { class: "table-scroll" },
+      el("table", { class: "grid" },
+        el("thead", {}, el("tr", {},
+          ...["run", "rows", "files", "written"].map((h) => el("th", { class: "static" }, h)))),
+        el("tbody", {}, ...rows))));
+}
+
+async function viewFactorDetail(run, file) {
+  $main.replaceChildren(el("div", { class: "loading" }, "loading…"));
+  const runs = await getJSON("/api/factors");
+  const meta = runs.find((r) => r.run === run);
+  if (!meta) throw new Error(`no factor run "${run}"`);
+  const active = file && meta.files.includes(file) ? file : meta.primary;
+
+  const header = el("div", {},
+    el("div", { class: "crumbs" },
+      el("a", { href: "#/factors" }, "factors"), " / ",
+      el("span", { class: "mono" }, run)),
+    el("div", { class: "chips" }, el("span", { class: "chip" }, `${meta.n_rows} rows`)));
+  const tabs = el("div", { class: "tabs" },
+    ...meta.files.map((f) =>
+      el("a", { class: f === active ? "tab active" : "tab", href: `#/factors/${run}/${f}` }, f)));
+
+  $main.replaceChildren(header, tabs, el("div", { class: "loading" }, `loading ${active}…`));
+  const csv = await getJSON(`/api/factors/${run}/file/${active}`);
+  $main.replaceChildren(header, tabs, sortableTable(csv.columns, csv.rows));
+}
+
 /* ── hypotheses ─────────────────────────────────────────────────────────── */
 
 async function viewHyps() {
@@ -268,6 +312,8 @@ async function route() {
   try {
     if (view === "scans" && parts.length >= 3) await viewScanDetail(parts[1], parts[2], parts[3]);
     else if (view === "scans") await viewScans();
+    else if (view === "factors" && parts[1]) await viewFactorDetail(parts[1], parts[2]);
+    else if (view === "factors") await viewFactors();
     else if (view === "hyps" && parts[1]) await viewHypDetail(parts[1]);
     else if (view === "hyps") await viewHyps();
     else location.hash = "#/scans";
