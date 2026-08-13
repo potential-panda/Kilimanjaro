@@ -121,6 +121,102 @@ def run_episode_retest(
     )
 
 
+def _evaluate_continuous_spec(spec: dict, target, start: str, end: str, params=None, *,
+                              cost_bps: float = 1.0, dd_threshold_bps: float | None = None,
+                              data_root=None):
+    """Stage 15 for the CONTINUOUS-BARRIER framework: pluggable clock x pluggable direction.
+
+    A clock (`clock.kind`: time/volume/dollar/tick/range) emits neutral decision points;
+    `direction_expr` picks the side at each; consecutive same-direction bars are held as
+    ONE position, so cost is paid per direction change. SAR is then just one possible
+    direction rule rather than also being the clock — which is what made the earlier
+    same-clock comparison unfair to every non-SAR rule.
+
+    Swept over the clock parameter (seconds / units / notional / move).
+    """
+    from datetime import datetime, timedelta
+
+    import numpy as np
+    import pandas as pd
+
+    from kilimanjaro.data.bars import bar_closes, hysteresis, runs_to_signals
+    from kilimanjaro.framework.gate import (
+        DEFAULT_DD_COOLDOWN_SECONDS,
+        DEFAULT_DD_THRESHOLD_BPS,
+        DEFAULT_DD_WINDOW_SECONDS,
+        RollingDrawdownGate,
+    )
+    from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
+    from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
+    from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
+
+    clock = spec["clock"]
+    kind = clock["kind"]
+    params = params if params is not None else clock.get("params", [300])
+    dir_expr = spec["direction_expr"]
+    qty_col = clock.get("qty_col", "a_ta_total_qty_1s")
+    dir_thr = float(spec.get("direction_threshold", 0.0))
+    sched = OrionScheduleFilter(spec.get("schedule", "nofilter"))
+    dd_bps = DEFAULT_DD_THRESHOLD_BPS if dd_threshold_bps is None else dd_threshold_bps
+
+    load_start = (datetime.strptime(start, "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
+    need = f"({dir_expr}) + (a_mid)" + (f" + ({qty_col})" if kind in ("volume", "dollar") else "")
+    frame = ExpressionSignal.create(markets=spec["markets"], expr=need, threshold=0.0,
+                                    min_age=None, max_age=None, invert=False,
+                                    label="cont").load_data(load_start, end, data_root)
+    ts = frame["ts"].to_numpy(dtype=float)
+    mid = np.asarray(eval_expr("a_mid", frame), dtype=float)
+    qty = np.asarray(eval_expr(qty_col, frame), dtype=float) if kind in ("volume", "dollar") else None
+    dvals = np.asarray(eval_expr(dir_expr, frame), dtype=float)
+    start_ts = datetime.strptime(start, "%Y-%m-%d").timestamp()
+
+    rows = []
+    for p in params:
+        ci = bar_closes(kind, float(p), ts=ts, mid=mid, qty=qty)
+        ci = ci[ci > 0]
+        # Causal read: a 1s value for second t is not knowable until t closes, so the
+        # decision at a bar closing on row i uses row i-1.
+        # Hysteresis dead band: hold the side until the signal crosses the OPPOSITE
+        # threshold. Without it sign(z) wobbles across zero and churns (~2 bars/trade).
+        d_at_bar = (hysteresis(dvals[ci - 1], float(dir_thr)) if dir_thr
+                    else np.sign(dvals[ci - 1]))
+        e_ts, e_dir, x_ts = runs_to_signals(ci, d_at_bar, ts)
+        # CLOCK CAUSALITY. A data-dependent close (range/volume/dollar) is only KNOWN
+        # once its second is complete, so acting at ts[ci] would front-run the close by
+        # up to 1s — the same lookahead class as THE FILL LEAK, and worth ~5 bps on a
+        # lead-lag trade. Time/tick closes are deterministic and need no delay.
+        if kind in ("range", "volume", "dollar"):
+            e_ts, x_ts = e_ts + 1.0, x_ts + 1.0
+        sigs = pd.DataFrame({"ts": e_ts, "direction": e_dir,
+                             "strength": np.abs(e_dir), "exit_ts": x_ts})
+        sigs = sigs[sigs.ts >= start_ts]
+        n_bars = int((ci >= np.searchsorted(ts, start_ts)).sum())
+        tr = BetweenSignalReturn().compute(sigs, target, start, end, data_root)
+        tr, _ = sched.apply(tr)
+        n_pre = len(tr)
+        if dd_bps and np.isfinite(dd_bps):
+            tr, _ = RollingDrawdownGate(window_seconds=DEFAULT_DD_WINDOW_SECONDS,
+                                        threshold_bps=dd_bps,
+                                        cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS).apply(tr)
+        tr = tr.dropna(subset=["return_bps"])
+        n = len(tr)
+        gross = float(tr.return_bps.sum()) if n else 0.0
+        net = gross - cost_bps * n
+        sd = float(tr.return_bps.std()) if n > 1 else 0.0
+        rows.append({
+            "clock": kind, "param": float(p), "dir_thr": dir_thr,
+            "n_bars": n_bars, "n_trades": n,
+            "bars_per_trade": round(n_bars / n, 1) if n else 0.0,
+            "n_gated_out": n_pre - n,
+            "total_bps": round(gross, 1), "avg_bps": round(gross / n, 3) if n else 0.0,
+            "net_total_bps": round(net, 1), "net_avg_bps": round(net / n, 3) if n else 0.0,
+            "sharpe": round(float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)), 2)
+                      if sd > 0 else 0.0,
+            "avg_hold_s": round(float((tr.exit_exec_ts - tr.entry_exec_ts).mean()), 0) if n else 0.0,
+        })
+    return pd.DataFrame(rows)
+
+
 def _evaluate_flip_spec(spec: dict, target, start: str, end: str, boxes=None, *,
                         cost_bps: float = 1.0, dd_threshold_bps: float | None = None,
                         data_root=None):
@@ -149,11 +245,38 @@ def _evaluate_flip_spec(spec: dict, target, start: str, end: str, boxes=None, *,
     # Flip-mechanism gate defaults (3h/500bps/6h) — NOT aquila's (6h/200bps/1h).
     dd_bps = DEFAULT_DD_THRESHOLD_BPS if dd_threshold_bps is None else dd_threshold_bps
 
+    # CONTINUOUS-BET FRAMING: the flip events are only a CLOCK (when to re-decide);
+    # the direction rule is pluggable. `direction_expr` swaps SAR's "which way did the
+    # leader just move" for any measured factor, holding the clock fixed so the two are
+    # compared on identical entry/exit times — the only difference is the side taken.
+    dir_expr = spec.get("direction_expr")
+    dir_vals = None
+    if dir_expr:
+        from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
+        from datetime import datetime, timedelta
+        load_start = (datetime.strptime(start, "%Y-%m-%d")
+                      - timedelta(days=2)).strftime("%Y-%m-%d")
+        frame = ExpressionSignal.create(markets=spec["markets"], expr=dir_expr, threshold=0.0,
+                                        min_age=None, max_age=None, invert=False,
+                                        label="dir").load_data(load_start, end, data_root)
+        dir_ts = frame["ts"].to_numpy(dtype=float)
+        dir_vals = (dir_ts, np.asarray(eval_expr(dir_expr, frame), dtype=float))
+
     rows = []
     for box in boxes:
         sig = SARFlipSignal(flip["exchange"], flip["symbol"], float(box), step)
-        tr = BetweenSignalReturn().compute(
-            sig.generate(sig.load_data(start, end, data_root)), target, start, end, data_root)
+        sigs = sig.generate(sig.load_data(start, end, data_root))
+        if dir_vals is not None:
+            # Causal read: the 1s value for second t is not knowable until t closes, so
+            # take the last completed second STRICTLY before the flip (searchsorted on
+            # ts-1). Zero/NaN factor values leave the flip untraded rather than guessing.
+            gts, gv = dir_vals
+            idx = np.searchsorted(gts, sigs["ts"].to_numpy(dtype=float) - 1.0, side="right") - 1
+            ok = idx >= 0
+            v = np.where(ok, gv[np.clip(idx, 0, len(gv) - 1)], np.nan)
+            sigs = sigs.assign(direction=np.sign(v))
+            sigs = sigs[np.isfinite(sigs.direction) & (sigs.direction != 0)]
+        tr = BetweenSignalReturn().compute(sigs, target, start, end, data_root)
         tr, _ = sched.apply(tr)
         n_pre = len(tr)
         if dd_bps and np.isfinite(dd_bps):
@@ -222,6 +345,10 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
     if spec.get("signal") == "sar_flip":
         return _evaluate_flip_spec(spec, target, start, end, thresholds, cost_bps=cost_bps,
                                    dd_threshold_bps=dd_threshold_bps, data_root=data_root)
+    if spec.get("signal") == "continuous":
+        return _evaluate_continuous_spec(spec, target, start, end, thresholds,
+                                         cost_bps=cost_bps, dd_threshold_bps=dd_threshold_bps,
+                                         data_root=data_root)
 
     e = spec["expressions"][0]
     markets = spec["markets"]

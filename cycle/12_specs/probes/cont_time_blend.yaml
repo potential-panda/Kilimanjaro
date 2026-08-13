@@ -1,0 +1,13 @@
+hypothesis_id: probe-cont-time-blend
+family: continuous
+# Continuous-barrier framework: NEUTRAL time clock (decision points uncorrelated with
+# price, so no adverse-timing penalty), blend as the direction rule, held through
+# consecutive same-direction bars so cost is paid per direction CHANGE.
+signal: continuous
+clock: {kind: time, params: [60, 300, 900, 1800, 3600]}
+schedule: nofilter
+direction_expr: "zscore(0.017090*(zscore(a_mid / b_mid, 900)) + -0.011150*(zscore(a_obi_ema_k5_30s, 1800)) + 0.028638*(zscore(a_mid / a_ta_vwap_10s - 1, 1800)) + -0.012230*(zscore(a_obi_k1 - a_obi_k10, 1800)) + 0.040049*(zscore(a_bs_weighted_imb_k1, 1800)) + 0.040298*(zscore(a_bs_weighted_imb_k5, 1800)), 1800)"
+markets:
+  a: {exchange: BINANCE, symbol: BTC_USDT, execution_size: '0.002'}
+  b: {exchange: COINCHECK, symbol: BTC_SPOT, execution_size: '0.002'}
+target: {exchange: COINCHECK, symbol: BTC_SPOT, execution_size: '0.002'}
