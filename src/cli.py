@@ -30,6 +30,7 @@ def main() -> int:
     from command import (
         blend,
         calibrate,
+        cont_batch,
         factory,
         generate,
         grid,
@@ -64,6 +65,7 @@ def main() -> int:
     calibrate.register(sub)
     signal_corr.register(sub)
     op_sweep.register(sub)
+    cont_batch.register(sub)
     blend_corr.register(sub)
 
     args = parser.parse_args()
