@@ -1,0 +1,64 @@
+markets:
+  a:
+    exchange: BINANCE
+    symbol: BTC_USDT
+    execution_size: '0.002'
+  b:
+    exchange: COINCHECK
+    symbol: BTC_SPOT
+    execution_size: '0.002'
+target:
+  exchange: COINCHECK
+  symbol: BTC_SPOT
+  execution_size: '0.002'
+schedule: nofilter
+directions:
+  basis_emadiff5: zscore(ema(diff(a_mid / b_mid, 1), 5), 1800)
+  basis_lvl_900: zscore(a_mid / b_mid, 900)
+  obi_ema_k5_30s: zscore(a_obi_ema_k5_30s, 1800)
+  obigrad_k1_k10: zscore(a_obi_k1 - a_obi_k10, 1800)
+  mom_900: zscore(ret(a_mid, 900), 1800)
+  imb_qty_5s: zscore(a_ta_imbalance_qty_5s, 1800)
+  mpoff_k1: zscore(a_bs_microprice_k1 / a_mid - 1, 1800)
+  blend: zscore(0.017090*(zscore(a_mid / b_mid, 900)) + -0.011150*(zscore(a_obi_ema_k5_30s, 1800)) + 0.028638*(zscore(a_mid / a_ta_vwap_10s - 1, 1800)) + -0.012230*(zscore(a_obi_k1 - a_obi_k10, 1800)) +
+    0.040049*(zscore(a_bs_weighted_imb_k1, 1800)) + 0.040298*(zscore(a_bs_weighted_imb_k5, 1800)), 1800)
+  blend_ema60: ema(zscore(0.017090*(zscore(a_mid / b_mid, 900)) + -0.011150*(zscore(a_obi_ema_k5_30s, 1800)) + 0.028638*(zscore(a_mid / a_ta_vwap_10s - 1, 1800)) + -0.012230*(zscore(a_obi_k1 - a_obi_k10,
+    1800)) + 0.040049*(zscore(a_bs_weighted_imb_k1, 1800)) + 0.040298*(zscore(a_bs_weighted_imb_k5, 1800)), 1800), 60)
+  vwapdev_10s: zscore(a_mid / a_ta_vwap_10s - 1, 1800)
+clocks:
+- kind: time
+  param: 900
+- kind: time
+  param: 1800
+- kind: range
+  param: 0.0015
+- kind: range
+  param: 0.0025
+dead_bands:
+- 0.5
+- 1.0
+- 1.5
+barriers:
+- {}
+- sl: 10
+- sl: 20
+- sl: 50
+- tp: 10
+- tp: 20
+- tp: 50
+- tp: 10
+  sl: 10
+- tp: 20
+  sl: 20
+- tp: 50
+  sl: 50
+- tp: 50
+  sl: 20
+- tp: 100
+  sl: 20
+- timeout: 300
+- timeout: 900
+- timeout: 3600
+- tp: 20
+  sl: 20
+  timeout: 900

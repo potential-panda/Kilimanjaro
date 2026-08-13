@@ -40,6 +40,7 @@ def run_batch(cfg: dict, start: str, end: str, *, cost_bps: float = 1.0,
     from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
     from kilimanjaro.framework.protocol import MarketConfig
     from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
+    from kilimanjaro.return_calc.continuous_barrier import ContinuousBarrierReturn
     from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
 
     markets, t = cfg["markets"], cfg["target"]
@@ -47,6 +48,10 @@ def run_batch(cfg: dict, start: str, end: str, *, cost_bps: float = 1.0,
     directions: dict[str, str] = cfg["directions"]
     clocks: list[dict] = cfg["clocks"]
     bands: list[float] = cfg.get("dead_bands", [0.0, 1.0, 2.0])
+    # Barrier geometry: each entry is {tp, sl, timeout}; all-None reduces to
+    # between-signal (exit only on direction change), so the default reproduces
+    # the earlier grid exactly and any difference is attributable to the barrier.
+    barriers: list[dict] = cfg.get("barriers", [{}])
     qty_col = cfg.get("qty_col", "a_ta_total_qty_1s")
     sched = OrionScheduleFilter(cfg.get("schedule", "nofilter"))
 
@@ -80,7 +85,7 @@ def run_batch(cfg: dict, start: str, end: str, *, cost_bps: float = 1.0,
              + ", ".join(f"{k[0]}:{k[1]:g}={len(v):,}" for k, v in list(closes.items())[:6]))
 
     rows = []
-    total = len(dvals) * len(closes) * len(bands)
+    total = len(dvals) * len(closes) * len(bands) * len(barriers)
     done = 0
     for (kind, param), ci in closes.items():
         # A data-dependent close is only KNOWN once its second completes — acting at
@@ -98,21 +103,30 @@ def run_batch(cfg: dict, start: str, end: str, *, cost_bps: float = 1.0,
                 sigs = pd.DataFrame({"ts": e_ts + delay, "direction": e_dir,
                                      "strength": np.abs(e_dir), "exit_ts": x_ts + delay})
                 sigs = sigs[sigs.ts >= start_ts]
-                tr = BetweenSignalReturn().compute(sigs, target, start, end, data_root)
-                tr, _ = sched.apply(tr)
-                tr, _ = RollingDrawdownGate(
-                    window_seconds=DEFAULT_DD_WINDOW_SECONDS,
-                    threshold_bps=DEFAULT_DD_THRESHOLD_BPS,
-                    cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS).apply(tr)
-                tr = tr.dropna(subset=["return_bps"])
-                n = len(tr)
-                if n == 0:
-                    continue
-                gross = float(tr.return_bps.sum())
-                sd = float(tr.return_bps.std()) if n > 1 else 0.0
-                net_avg = gross / n - cost_bps
-                rows.append({
+                for bar in barriers:
+                  tp, sl, to = bar.get("tp"), bar.get("sl"), bar.get("timeout")
+                  calc = (BetweenSignalReturn() if tp is None and sl is None and to is None
+                          else ContinuousBarrierReturn(tp_bps=tp, sl_bps=sl, max_hold_s=to))
+                  tr = calc.compute(sigs, target, start, end, data_root)
+                  tr, _ = sched.apply(tr)
+                  tr, _ = RollingDrawdownGate(
+                      window_seconds=DEFAULT_DD_WINDOW_SECONDS,
+                      threshold_bps=DEFAULT_DD_THRESHOLD_BPS,
+                      cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS).apply(tr)
+                  tr = tr.dropna(subset=["return_bps"])
+                  n = len(tr)
+                  if n == 0:
+                      continue
+                  gross = float(tr.return_bps.sum())
+                  sd = float(tr.return_bps.std()) if n > 1 else 0.0
+                  net_avg = gross / n - cost_bps
+                  rows.append({
                     "direction": dname, "clock": kind, "param": param, "dead_band": band,
+                    "tp": tp, "sl": sl, "timeout": to,
+                    "stop_share": round(float((tr.exit_reason == "stop").mean()), 3)
+                                  if "exit_reason" in tr else 0.0,
+                    "tp_share": round(float((tr.exit_reason == "take_profit").mean()), 3)
+                                if "exit_reason" in tr else 0.0,
                     "n_bars": n_bars, "n_trades": n,
                     "bars_per_trade": round(n_bars / n, 1),
                     "avg_bps": round(gross / n, 3), "net_avg_bps": round(net_avg, 3),
