@@ -30,7 +30,7 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -75,6 +75,7 @@ def _run_cli(makalu_root: Path, args: list[str]) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         timeout=30,
+        check=False,
     )
 
 
@@ -423,7 +424,7 @@ def build_inventory(
 ) -> dict:
     catalog = load_catalog(makalu_root)
     registered = query_list(makalu_root)
-    created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    created_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     datasets = []
     for entry in catalog:

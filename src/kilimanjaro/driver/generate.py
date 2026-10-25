@@ -129,8 +129,8 @@ def _book_shape(a):
     # imbalance differs from deeper in the book. Orthogonal to the obi family,
     # which only reads the level. (Makalu order-book-state gradient/divergence.)
     return [
-        (f"obigrad_k1_k5_z", f"zscore({a}_obi_k1 - {a}_obi_k5, 1800)"),
-        (f"obigrad_k1_k10_z", f"zscore({a}_obi_k1 - {a}_obi_k10, 1800)"),
+        ("obigrad_k1_k5_z", f"zscore({a}_obi_k1 - {a}_obi_k5, 1800)"),
+        ("obigrad_k1_k10_z", f"zscore({a}_obi_k1 - {a}_obi_k10, 1800)"),
     ]
 
 
@@ -140,27 +140,31 @@ def _flow_pressure(a):
     #  - size_asym: are buyers or sellers using bigger orders (imbalance of avg size)
     #  - qtycount_div: qty-share minus count-share — big-few vs small-many, the
     #    informed-size tell — distinct from plain qty imbalance.
-    return [
-        (
-            f"vwapskew_{w}s_z",
-            f"zscore(({a}_ta_vwap_buy_{w}s - {a}_ta_vwap_sell_{w}s) / {a}_ta_vwap_{w}s, 1800)",
-        )
-        for w in (60,)
-    ] + [
-        (
-            f"sizeasym_{w}s_z",
-            f"zscore(imbalance({a}_ta_buy_qty_{w}s / {a}_ta_buy_count_{w}s, "
-            f"{a}_ta_sell_qty_{w}s / {a}_ta_sell_count_{w}s), 1800)",
-        )
-        for w in (60,)
-    ] + [
-        (
-            f"qtycountdiv_{w}s_z",
-            f"zscore({a}_ta_buy_qty_{w}s / {a}_ta_total_qty_{w}s "
-            f"- {a}_ta_buy_count_{w}s / {a}_ta_total_count_{w}s, 1800)",
-        )
-        for w in (60,)
-    ]
+    return (
+        [
+            (
+                f"vwapskew_{w}s_z",
+                f"zscore(({a}_ta_vwap_buy_{w}s - {a}_ta_vwap_sell_{w}s) / {a}_ta_vwap_{w}s, 1800)",
+            )
+            for w in (60,)
+        ]
+        + [
+            (
+                f"sizeasym_{w}s_z",
+                f"zscore(imbalance({a}_ta_buy_qty_{w}s / {a}_ta_buy_count_{w}s, ",
+                f"{a}_ta_sell_qty_{w}s / {a}_ta_sell_count_{w}s), 1800)",
+            )
+            for w in (60,)
+        ]
+        + [
+            (
+                f"qtycountdiv_{w}s_z",
+                f"zscore({a}_ta_buy_qty_{w}s / {a}_ta_total_qty_{w}s ",
+                f"- {a}_ta_buy_count_{w}s / {a}_ta_total_count_{w}s, 1800)",
+            )
+            for w in (60,)
+        ]
+    )
 
 
 def _breakout(a):
@@ -171,9 +175,9 @@ def _breakout(a):
     return [
         (
             f"donch_{w}s_z",
-            f"zscore(2 * ({a}_mid - roll_min(lag({a}_mid, 1), {w})) / "
-            f"(roll_max(lag({a}_mid, 1), {w}) - roll_min(lag({a}_mid, 1), {w}) "
-            f"+ 0.000001) - 1, 1800)",
+            f"zscore(2 * ({a}_mid - roll_min(lag({a}_mid, 1), {w})) / ",
+            f"(roll_max(lag({a}_mid, 1), {w}) - roll_min(lag({a}_mid, 1), {w}) ",
+            "+ 0.000001) - 1, 1800)",
         )
         for w in (300, 900)
     ]
@@ -205,7 +209,7 @@ def _liquidity(a):
     ] + [
         (
             f"ofi_k{k}_z",
-            f"zscore(imbalance({a}_bc_delta_depth_bid_rate_k{k}, "
+            f"zscore(imbalance({a}_bc_delta_depth_bid_rate_k{k}, ",
             f"{a}_bc_delta_depth_ask_rate_k{k}), 1800)",
         )
         for k in (1, 5)
@@ -223,9 +227,7 @@ def _microprice(a):
             f"zscore(({a}_bs_microprice_k{k} - {a}_bs_best_mid) / {a}_bs_best_mid, 1800)",
         )
         for k in (1, 5)
-    ] + [
-        (f"wimb_k{k}_z", f"zscore({a}_bs_weighted_imb_k{k}, 1800)") for k in (1, 5)
-    ]
+    ] + [(f"wimb_k{k}_z", f"zscore({a}_bs_weighted_imb_k{k}, 1800)") for k in (1, 5)]
 
 
 # family: needs (feature group on the leader), cross (uses target mid too), build

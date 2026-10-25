@@ -18,7 +18,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
-from data_readiness import (  # noqa: E402
+from data_readiness import (
     _distinct_days_from_probe,
     _filesystem_distinct_days,
     _unsupported_transform_reasons,

@@ -6,6 +6,7 @@ online  (Himalaya):    InfluxDB measurement TRADING, field "composite_z" (the va
                        the aquila strategy fires on).
 This is the end-to-end signal: it matches only once every input factor does.
 """
+
 from pathlib import Path
 
 import yaml
@@ -13,9 +14,13 @@ import yaml
 from kilimanjaro.calibration.base import FactorCalib
 
 _SPEC = yaml.safe_load(
-    (Path(__file__).resolve().parents[4]
-     / "cycle" / "18_handoffs" / "blend-btc-jpy-us-z35"
-     / "composite_coincheck.yaml").read_text()
+    (
+        Path(__file__).resolve().parents[4]
+        / "cycle"
+        / "18_handoffs"
+        / "blend-btc-jpy-us-z35"
+        / "composite_coincheck.yaml"
+    ).read_text()
 )
 
 FACTOR = FactorCalib(

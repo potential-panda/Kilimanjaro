@@ -35,15 +35,18 @@ _WARMUP_DAYS = 2
 
 
 def _shift_date(date_str: str, days: int) -> str:
-    from datetime import datetime, timedelta
-    return (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
+    from datetime import date, timedelta
+
+    return (date.fromisoformat(date_str) - timedelta(days=days)).strftime("%Y-%m-%d")
 
 
 @dataclass(frozen=True)
 class FactorCalib:
-    name: str            # canonical factor name; also the InfluxDB field & offline label
-    offline_expr: str    # expression over the feature frame, e.g. "zscore(a_mid/b_mid, 900)"
-    online_field: str = ""   # InfluxDB TRADING field; defaults to `name`
+    name: str  # canonical factor name; also the InfluxDB field & offline label
+    offline_expr: (
+        str  # expression over the feature frame, e.g. "zscore(a_mid/b_mid, 900)"
+    )
+    online_field: str = ""  # InfluxDB TRADING field; defaults to `name`
     status: str = "pending"  # "pending" | "calibrated"
     tol: float = 1e-4
     note: str = ""
@@ -53,17 +56,29 @@ class FactorCalib:
         return self.online_field or self.name
 
     # ---- offline: Kilimanjaro / Makalu parquet --------------------------------
-    def offline_series(self, markets: dict, start: str, end: str,
-                       data_root: Path = _DEFAULT_DATA_ROOT,
-                       warmup_days: int = _WARMUP_DAYS) -> pd.Series:
+    def offline_series(
+        self,
+        markets: dict,
+        start: str,
+        end: str,
+        data_root: Path = _DEFAULT_DATA_ROOT,
+        warmup_days: int = _WARMUP_DAYS,
+    ) -> pd.Series:
         """Per-second factor series from the feature frame (index = integer second).
 
         Loads from `start - warmup_days` so the rolling windows converge before the
         compared window; the extra warmup seconds are dropped by the compare intersect."""
         from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
-        sig = ExpressionSignal.create(markets=markets, expr=self.offline_expr,
-                                      threshold=0.0, min_age=None, max_age=None,
-                                      invert=False, label=self.name)
+
+        sig = ExpressionSignal.create(
+            markets=markets,
+            expr=self.offline_expr,
+            threshold=0.0,
+            min_age=None,
+            max_age=None,
+            invert=False,
+            label=self.name,
+        )
         frame = sig.load_data(_shift_date(start, warmup_days), end, data_root)
         ts = frame["ts"].to_numpy() if "ts" in frame.columns else frame.index.to_numpy()
         vals = np.asarray(eval_expr(self.offline_expr, frame), dtype=float)
@@ -74,11 +89,20 @@ class FactorCalib:
     def online_series(self, bucket: str, start: str, end: str) -> pd.Series:
         """Per-second factor series from InfluxDB (measurement TRADING, field=self.field)."""
         from kilimanjaro.framework.verify import (
-            build_flux, influx_client, influx_range_jst, query_df,
+            build_flux,
+            influx_client,
+            influx_range_jst,
+            query_df,
         )
+
         rfc_start, rfc_stop = influx_range_jst(start, end)
-        flux = build_flux(bucket=bucket, measurement=_TRADING_MEASUREMENT,
-                          fields=[self.field], start=rfc_start, stop=rfc_stop)
+        flux = build_flux(
+            bucket=bucket,
+            measurement=_TRADING_MEASUREMENT,
+            fields=[self.field],
+            start=rfc_start,
+            stop=rfc_stop,
+        )
         with influx_client() as c:
             df = query_df(c.query_api(), flux)
         if df.empty or self.field not in df.columns:
@@ -88,9 +112,15 @@ class FactorCalib:
         return s.groupby(level=0).last()
 
     # ---- match -----------------------------------------------------------------
-    def calibrate(self, markets: dict, bucket: str, start: str, end: str,
-                  data_root: Path = _DEFAULT_DATA_ROOT,
-                  tol: float | None = None) -> CalibResult:
+    def calibrate(
+        self,
+        markets: dict,
+        bucket: str,
+        start: str,
+        end: str,
+        data_root: Path = _DEFAULT_DATA_ROOT,
+        tol: float | None = None,
+    ) -> CalibResult:
         off = self.offline_series(markets, start, end, data_root)
         on = self.online_series(bucket, start, end)
         return compare(self.name, off, on, tol=self.tol if tol is None else tol)

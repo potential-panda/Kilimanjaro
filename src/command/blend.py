@@ -34,23 +34,45 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("specs", nargs="+", help="Scan spec YAMLs (must share one target)")
     p.add_argument("--start", required=True, help="Window start YYYY-MM-DD")
     p.add_argument("--end", required=True, help="Window end YYYY-MM-DD")
-    p.add_argument("--split", default=None, help="Train/holdout split date "
-                   "(default: 2/3 of the range)")
+    p.add_argument(
+        "--split",
+        default=None,
+        help="Train/holdout split date (default: 2/3 of the range)",
+    )
     p.add_argument("--horizon", type=int, default=120, help="Forward horizon seconds")
-    p.add_argument("--step2", action="store_true",
-                   help="After the blend, run the composite through the realistic "
-                        "episode sim (bid/ask, gate, cost) and report net PnL")
-    p.add_argument("--min-weight", type=float, default=0.01,
-                   help="Drop factors with |train IC| below this from the composite")
-    p.add_argument("--jst-hours", default=None,
-                   help="step-2 only: restrict trades to these JST hours "
-                        "(comma list, e.g. 22,23,0,1,2 for the US session)")
-    p.add_argument("--exit", default="episode", choices=["episode", "triple_barrier"],
-                   help="step-2 exit mechanism (default: episode)")
-    p.add_argument("--barrier-bps", type=float, default=5.0,
-                   help="triple_barrier: symmetric take-profit/stop distance (bps)")
-    p.add_argument("--out", default=None, help="Output dir (default under "
-                   "cycle/14_blend_corr/)")
+    p.add_argument(
+        "--step2",
+        action="store_true",
+        help="After the blend, run the composite through the realistic "
+        "episode sim (bid/ask, gate, cost) and report net PnL",
+    )
+    p.add_argument(
+        "--min-weight",
+        type=float,
+        default=0.01,
+        help="Drop factors with |train IC| below this from the composite",
+    )
+    p.add_argument(
+        "--jst-hours",
+        default=None,
+        help="step-2 only: restrict trades to these JST hours "
+        "(comma list, e.g. 22,23,0,1,2 for the US session)",
+    )
+    p.add_argument(
+        "--exit",
+        default="episode",
+        choices=["episode", "triple_barrier"],
+        help="step-2 exit mechanism (default: episode)",
+    )
+    p.add_argument(
+        "--barrier-bps",
+        type=float,
+        default=5.0,
+        help="triple_barrier: symmetric take-profit/stop distance (bps)",
+    )
+    p.add_argument(
+        "--out", default=None, help="Output dir (default under cycle/14_blend_corr/)"
+    )
     p.set_defaults(func=_run_blend)
 
 
@@ -67,29 +89,42 @@ def _run_blend(args: argparse.Namespace) -> int:
     split = args.split or default_split(args.start, args.end)
 
     factors = factors_from_specs(specs)
-    print(f"blend: {len(factors)} distinct factors -> {t['exchange']}/{t['symbol']} "
-          f"| horizon={args.horizon}s | train<{split}<=holdout")
+    print(
+        f"blend: {len(factors)} distinct factors -> {t['exchange']}/{t['symbol']} "
+        f"| horizon={args.horizon}s | train<{split}<=holdout"
+    )
 
     res = blend(factors, target, args.start, split, args.end, args.horizon)
 
     print(f"\n  train n={res['train_n']}  holdout n={res['holdout_n']}")
     print(f"  {'factor':<32} {'weight':>9} {'train_ic':>9} {'holdout_ic':>11}")
     for p in res["per_factor"]:
-        print(f"  {p['factor']:<32} {p['weight']:>9.4f} {p['train_ic']:>9.4f} "
-              f"{p['holdout_ic']:>11.4f}")
-    print(f"\n  BLEND      train_ic={res['blend_train_ic']:+.4f}  "
-          f"holdout_ic={res['blend_holdout_ic']:+.4f}")
+        print(
+            f"  {p['factor']:<32} {p['weight']:>9.4f} {p['train_ic']:>9.4f} "
+            f"{p['holdout_ic']:>11.4f}"
+        )
+    print(
+        f"\n  BLEND      train_ic={res['blend_train_ic']:+.4f}  "
+        f"holdout_ic={res['blend_holdout_ic']:+.4f}"
+    )
     print(f"  best single-factor holdout |ic| = {res['best_single_holdout_ic']:.4f}")
     dr = res["diversification_ratio"]
-    print(f"  diversification ratio (blend/best) = "
-          f"{dr:.2f}" + ("  (>1 = combination helped)" if dr == dr else ""))
+    print(
+        f"  diversification ratio (blend/best) = "
+        f"{dr:.2f}" + ("  (>1 = combination helped)" if dr == dr else "")
+    )
 
-    out_dir = Path(args.out) if args.out else (
-        _RESULTS / f"{t['symbol']}_{args.start}_{args.end}_h{args.horizon}"
+    out_dir = (
+        Path(args.out)
+        if args.out
+        else (_RESULTS / f"{t['symbol']}_{args.start}_{args.end}_h{args.horizon}")
     )
     out_dir.mkdir(parents=True, exist_ok=True)
-    write_csv(res["per_factor"], out_dir / "per_factor.csv",
-              ["factor", "weight", "train_ic", "holdout_ic"])
+    write_csv(
+        res["per_factor"],
+        out_dir / "per_factor.csv",
+        ["factor", "weight", "train_ic", "holdout_ic"],
+    )
     summary = {k: v for k, v in res.items() if k != "per_factor"}
     write_csv([summary], out_dir / "summary.csv", list(summary.keys()))
     print(f"\n  -> {out_dir}")
@@ -106,14 +141,20 @@ def _run_step2(specs, factors, res, target, split, args, out_dir) -> None:
 
     weights = {p["factor"]: p["weight"] for p in res["per_factor"]}
     comp = composite_spec(
-        specs, factors, weights,
-        thresholds=[1.5, 2.5], horizon=args.horizon,
-        min_abs_weight=args.min_weight, return_calc=args.exit,
-        barrier_bps=args.barrier_bps, time_cap=args.horizon,
+        specs,
+        factors,
+        weights,
+        thresholds=[1.5, 2.5],
+        horizon=args.horizon,
+        min_abs_weight=args.min_weight,
+        return_calc=args.exit,
+        barrier_bps=args.barrier_bps,
+        time_cap=args.horizon,
     )
     # Persist the composite as a spec so it can be re-examined later — e.g.
     #   cli.py learn --op return_dist --spec <out>/composite_spec.yaml ...
     import yaml
+
     (out_dir / "composite_spec.yaml").write_text(yaml.safe_dump(comp, sort_keys=False))
 
     n_terms = comp["expressions"][0]["expr"].count("*(")
@@ -123,27 +164,41 @@ def _run_step2(specs, factors, res, target, split, args, out_dir) -> None:
         allowed = {int(h) for h in args.jst_hours.split(",")}
         blocked = [h for h in range(24) if h not in allowed]
         schedule = ScheduleFilter(
-            block_weekday_hours=blocked, block_weekend_hours=blocked,
-            block_gmo_maintenance=True, name=f"jst_{args.jst_hours}",
+            block_weekday_hours=blocked,
+            block_weekend_hours=blocked,
+            block_gmo_maintenance=True,
+            name=f"jst_{args.jst_hours}",
         )
         hours_note = f", JST hours {sorted(allowed)} only"
-    print(f"\n  step-2 sim: composite of {n_terms} factors (|IC| >= {args.min_weight}), "
-          f"episode + gate + cost, threshold sweep 1.5/2.5{hours_note}")
+    print(
+        f"\n  step-2 sim: composite of {n_terms} factors (|IC| >= {args.min_weight}), "
+        f"episode + gate + cost, threshold sweep 1.5/2.5{hours_note}"
+    )
     scan_res, s2_dir, _ = run_spec(
-        comp, args.start, args.end,
-        results_root=out_dir / "step2", split=split, scan_name="blend_step2",
+        comp,
+        args.start,
+        args.end,
+        results_root=out_dir / "step2",
+        split=split,
+        scan_name="blend_step2",
         schedule=schedule,
     )
-    print(f"  {'thr':>4} {'ho_episodes':>12} {'ho_avg_net':>11} {'hit_net':>8} "
-          f"{'ho_total_net':>13} {'sharpe':>7} {'dd_blk':>7}")
+    print(
+        f"  {'thr':>4} {'ho_episodes':>12} {'ho_avg_net':>11} {'hit_net':>8} "
+        f"{'ho_total_net':>13} {'sharpe':>7} {'dd_blk':>7}"
+    )
     for r in sorted(scan_res["rows"], key=lambda r: r.get("threshold", 0)):
-        print(f"  {r.get('threshold'):>4} {r.get('holdout_n_episodes', 0):>12} "
-              f"{_f(r.get('holdout_avg_net')):>11} {_f(r.get('holdout_hit_rate_net')):>8} "
-              f"{_f(r.get('holdout_total_net_bps')):>13} {_f(r.get('holdout_sharpe_per_trade')):>7} "
-              f"{r.get('holdout_n_dd_blocked', 0):>7}")
+        print(
+            f"  {r.get('threshold'):>4} {r.get('holdout_n_episodes', 0):>12} "
+            f"{_f(r.get('holdout_avg_net')):>11} {_f(r.get('holdout_hit_rate_net')):>8} "
+            f"{_f(r.get('holdout_total_net_bps')):>13} {_f(r.get('holdout_sharpe_per_trade')):>7} "
+            f"{r.get('holdout_n_dd_blocked', 0):>7}"
+        )
     print(f"  -> {s2_dir}")
-    print("  NB: expression+episode is trend-only (uncalibrated) — direction/"
-          "magnitude indicative, not a promotion number (see doc/calibration.md)")
+    print(
+        "  NB: expression+episode is trend-only (uncalibrated) — direction/"
+        "magnitude indicative, not a promotion number (see doc/calibration.md)"
+    )
 
 
 def _f(v) -> str:

@@ -96,7 +96,7 @@ class TrailingStopReturn:
         # Fill at the next available price after the 1s signal bar closes (see
         # triple_barrier); fill_delay=0 keeps the certified tick-fired behaviour.
         fd = self.fill_delay_seconds
-        dsec = int(round(fd))  # a signal at second s is only actionable at s+dsec
+        dsec = round(fd)  # a signal at second s is only actionable at s+dsec
         # seconds on which a same-/opposite-side fire is ACTIONABLE (shifted by the
         # same delay as the entry, so ratchet + flip register when the signal is known)
         fire_secs = np.floor(ts).astype(np.int64) + dsec

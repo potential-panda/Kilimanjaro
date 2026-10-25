@@ -11,8 +11,8 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.driver import generate as gen  # noqa: E402
-from kilimanjaro.driver.validate import validate_scan_spec  # noqa: E402
+from kilimanjaro.driver import generate as gen
+from kilimanjaro.driver.validate import validate_scan_spec
 
 # a market that has everything (leader) and a target that has only mid
 _FULL = {"mid, spread_bps (execution_size=0.1)": {}, "obi (OBIFeature)": {},

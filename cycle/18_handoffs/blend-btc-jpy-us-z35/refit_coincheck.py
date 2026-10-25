@@ -17,8 +17,8 @@ from glob import glob
 from pathlib import Path
 
 import yaml
-
 from kilimanjaro.driver.blend import blend, composite_spec, factors_from_specs
+
 from kilimanjaro.driver.scan_runner import run_spec
 from kilimanjaro.framework import MarketConfig, default_split
 from kilimanjaro.framework.schedule import ScheduleFilter
@@ -75,7 +75,7 @@ def main() -> None:
         print(f"  {'thr':>4} {'barr':>5} {'ho_n':>6} {'ho_avg_net':>11} "
               f"{'ho_hit':>7} {'ho_total':>10} {'sharpe':>7}")
         for row in sorted(r["rows"], key=lambda x: (x.get("threshold", 0), x.get("barrier_bps") or 0)):
-            print(f"  {row.get('threshold'):>4} {str(row.get('barrier_bps') or '-'):>5} "
+            print(f"  {row.get('threshold'):>4} {row.get('barrier_bps') or '-'!s:>5} "
                   f"{row.get('holdout_n_episodes', row.get('holdout_n', 0)):>6} "
                   f"{_f(row.get('holdout_avg_net')):>11} {_f(row.get('holdout_hit_rate_net')):>7} "
                   f"{_f(row.get('holdout_total_net_bps')):>10} "

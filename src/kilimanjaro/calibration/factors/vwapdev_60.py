@@ -4,6 +4,7 @@ offline (Kilimanjaro): eval `zscore(a_mid / a_ta_vwap_60s - 1, 1800)` over the M
 online  (Himalaya):    InfluxDB measurement TRADING, field "vwapdev_60".
 note: vwap deviation 60s
 """
+
 from kilimanjaro.calibration.base import FactorCalib
 
 FACTOR = FactorCalib(

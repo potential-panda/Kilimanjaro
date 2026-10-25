@@ -29,9 +29,14 @@ import numpy as np
 _KINDS = ("time", "volume", "dollar", "tick", "range")
 
 
-def bar_closes(kind: str, param: float, *, ts: np.ndarray,
-               mid: np.ndarray | None = None,
-               qty: np.ndarray | None = None) -> np.ndarray:
+def bar_closes(
+    kind: str,
+    param: float,
+    *,
+    ts: np.ndarray,
+    mid: np.ndarray | None = None,
+    qty: np.ndarray | None = None,
+) -> np.ndarray:
     """Indices where a bar closes, for the given clock.
 
     kind:
@@ -93,8 +98,9 @@ def _range_closes(mid: np.ndarray, rate: float) -> np.ndarray:
     return np.asarray(out, dtype=np.int64)
 
 
-def runs_to_signals(close_idx: np.ndarray, direction: np.ndarray,
-                    ts: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def runs_to_signals(
+    close_idx: np.ndarray, direction: np.ndarray, ts: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compress consecutive same-direction bar decisions into held positions.
 
     THIS is what makes the framework continuous rather than a series of bets: a run of
@@ -123,11 +129,14 @@ def hysteresis(values: np.ndarray, threshold: float) -> np.ndarray:
     on genuine reversals. threshold=0 reduces to plain sign().
     """
     v = np.asarray(values, dtype=float)
-    raw = np.where(np.isfinite(v) & (v >= threshold), 1.0,
-                   np.where(np.isfinite(v) & (v <= -threshold), -1.0, 0.0))
+    raw = np.where(
+        np.isfinite(v) & (v >= threshold),
+        1.0,
+        np.where(np.isfinite(v) & (v <= -threshold), -1.0, 0.0),
+    )
     out = np.zeros(len(raw))
     cur = 0.0
-    for i, r in enumerate(raw):          # carry the last decisive side forward
+    for i, r in enumerate(raw):  # carry the last decisive side forward
         if r != 0.0:
             cur = r
         out[i] = cur

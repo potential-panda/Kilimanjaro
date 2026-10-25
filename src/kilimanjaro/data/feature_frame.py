@@ -206,7 +206,9 @@ def _load_market(
     if routes["mp"]:
         if execution_size is None:
             raise ValueError(f"{exchange}/{symbol}: mid/spread need execution_size")
-        cols = ", ".join(f"last({c} ORDER BY ts, file_row_number) AS {c}" for c in routes["mp"])
+        cols = ", ".join(
+            f"last({c} ORDER BY ts, file_row_number) AS {c}" for c in routes["mp"]
+        )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
             FROM read_parquet('{_mp_glob(exchange, symbol, execution_size, data_root)}', hive_partitioning=true, file_row_number=true)
@@ -217,7 +219,8 @@ def _load_market(
 
     if routes["obi"]:
         cols = ", ".join(
-            f"last({_obi_source_col(f)} ORDER BY ts, file_row_number) AS {f}" for f in routes["obi"]
+            f"last({_obi_source_col(f)} ORDER BY ts, file_row_number) AS {f}"
+            for f in routes["obi"]
         )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
@@ -229,7 +232,8 @@ def _load_market(
 
     if routes["ta"]:
         cols = ", ".join(
-            f"last({_TA_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}" for f in routes["ta"]
+            f"last({_TA_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}"
+            for f in routes["ta"]
         )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
@@ -241,7 +245,8 @@ def _load_market(
 
     if routes["bs"]:
         cols = ", ".join(
-            f"last({_BS_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}" for f in routes["bs"]
+            f"last({_BS_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}"
+            for f in routes["bs"]
         )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}
@@ -253,7 +258,8 @@ def _load_market(
 
     if routes["bc"]:
         cols = ", ".join(
-            f"last({_BC_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}" for f in routes["bc"]
+            f"last({_BC_RE.match(f).group(1)} ORDER BY ts, file_row_number) AS {f}"
+            for f in routes["bc"]
         )
         df = _query(f"""
             SELECT CAST(floor(ts) AS BIGINT) AS sec, {cols}

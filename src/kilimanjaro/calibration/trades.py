@@ -41,29 +41,33 @@ US_JST_HOURS = (22, 23, 0, 1, 2)
 @dataclass(frozen=True)
 class ScanConfig:
     """Everything the scan needs to reproduce the aquila backtest that filled `bucket`."""
+
     threshold: float = 3.5
     barrier_bps: float = 10.0
     time_cap_s: float = 300.0
-    variant: str = "v3"                    # EXIT mechanism: "v3" trailing stop (default,
-                                           # matches the promoted aquila run) or "v1" triple
-                                           # barrier. MUST match the --variant the bucket was
-                                           # generated with, or exits diverge by mechanism.
-    fill_delay_seconds: float = 1.0        # next-available-price fill (the certified model)
+    variant: str = "v3"  # EXIT mechanism: "v3" trailing stop (default,
+    # matches the promoted aquila run) or "v1" triple
+    # barrier. MUST match the --variant the bucket was
+    # generated with, or exits diverge by mechanism.
+    fill_delay_seconds: float = 1.0  # next-available-price fill (the certified model)
     jst_hours: tuple[int, ...] = US_JST_HOURS
-    dd_window_s: float = 21600.0           # aquila dd_window_s (6h)
-    dd_threshold_bps: float = 200.0        # aquila dd_threshold_bps
-    dd_cooldown_s: float = 3600.0          # aquila dd_cooldown_s (1h)
+    dd_window_s: float = 21600.0  # aquila dd_window_s (6h)
+    dd_threshold_bps: float = 200.0  # aquila dd_threshold_bps
+    dd_cooldown_s: float = 3600.0  # aquila dd_cooldown_s (1h)
     use_dd_gate: bool = True
 
     @classmethod
-    def from_bucket(cls, bucket: str, **over) -> "ScanConfig":
+    def from_bucket(cls, bucket: str, **over) -> ScanConfig:
         """Parse threshold_barrier_cap from a `..._<thr>_<bar>_<cap>` bucket name."""
         tail = bucket.rsplit("__", 1)[-1]
         parts = tail.split("_")
         kw: dict = {}
         try:
-            kw = {"threshold": float(parts[0]), "barrier_bps": float(parts[1]),
-                  "time_cap_s": float(parts[2])}
+            kw = {
+                "threshold": float(parts[0]),
+                "barrier_bps": float(parts[1]),
+                "time_cap_s": float(parts[2]),
+            }
         except (IndexError, ValueError):
             pass
         kw.update(over)
@@ -120,19 +124,24 @@ class TradeCalib:
         self.cfg = cfg
 
     # ---- offline: the scan's trades -------------------------------------------
-    def offline_trades(self, start: str, end: str,
-                       data_root: Path = _DEFAULT_DATA_ROOT) -> pd.DataFrame:
-        from kilimanjaro.driver.scan_runner import gates_for_spec
+    def offline_trades(
+        self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT
+    ) -> pd.DataFrame:
+        from kilimanjaro.calibration.base import _WARMUP_DAYS, _shift_date
         from kilimanjaro.framework.protocol import MarketConfig
         from kilimanjaro.framework.schedule import ScheduleFilter
-        from kilimanjaro.calibration.base import _shift_date, _WARMUP_DAYS
         from kilimanjaro.signal.expression import ExpressionSignal
 
         e = self.spec["expressions"][0]
         sig = ExpressionSignal.create(
-            markets=self.markets, expr=e["expr"], threshold=self.cfg.threshold,
-            min_age=None, max_age=None,
-            invert=e.get("invert", [False])[0], label=e.get("label"))
+            markets=self.markets,
+            expr=e["expr"],
+            threshold=self.cfg.threshold,
+            min_age=None,
+            max_age=None,
+            invert=e.get("invert", [False])[0],
+            label=e.get("label"),
+        )
         # Load from start-warmup so the composite's rolling windows converge to the same
         # state aquila has at the window start (else the first ~hour under-warms); the
         # extra early trades are dropped by the Himalaya-window restriction in calibrate().
@@ -143,24 +152,39 @@ class TradeCalib:
         # Pick the EXIT mechanism to match the aquila variant that filled the bucket.
         if self.cfg.variant == "v1":
             from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
-            rc = TripleBarrierReturn(self.cfg.barrier_bps, self.cfg.time_cap_s,
-                                     fill_delay_seconds=self.cfg.fill_delay_seconds)
+
+            rc = TripleBarrierReturn(
+                self.cfg.barrier_bps,
+                self.cfg.time_cap_s,
+                fill_delay_seconds=self.cfg.fill_delay_seconds,
+            )
         else:  # v3 — trailing stop, no binding time cap (aquila v3 holds past 300s)
             from kilimanjaro.return_calc.trailing_stop import TrailingStopReturn
-            rc = TrailingStopReturn(self.cfg.barrier_bps, time_cap_seconds=None,
-                                    fill_delay_seconds=self.cfg.fill_delay_seconds)
+
+            rc = TrailingStopReturn(
+                self.cfg.barrier_bps,
+                time_cap_seconds=None,
+                fill_delay_seconds=self.cfg.fill_delay_seconds,
+            )
         trades = rc.compute(sig.generate(data), tgt, load_start, end, data_root)
 
         # US-session schedule: allow entries only in jst_hours (any day), no maint block.
         blocked = [h for h in range(24) if h not in self.cfg.jst_hours]
-        sched = ScheduleFilter(block_weekday_hours=blocked, block_weekend_hours=blocked,
-                               block_gmo_maintenance=False, name="us")
+        sched = ScheduleFilter(
+            block_weekday_hours=blocked,
+            block_weekend_hours=blocked,
+            block_gmo_maintenance=False,
+            name="us",
+        )
         trades, _ = sched.apply(trades)
         if self.cfg.use_dd_gate:
             from kilimanjaro.framework.gate import RollingDrawdownGate
-            g = RollingDrawdownGate(window_seconds=self.cfg.dd_window_s,
-                                    threshold_bps=self.cfg.dd_threshold_bps,
-                                    cooldown_seconds=self.cfg.dd_cooldown_s)
+
+            g = RollingDrawdownGate(
+                window_seconds=self.cfg.dd_window_s,
+                threshold_bps=self.cfg.dd_threshold_bps,
+                cooldown_seconds=self.cfg.dd_cooldown_s,
+            )
             trades, _ = g.apply(trades)
         trades = trades.dropna(subset=["return_bps"]).sort_values("entry_exec_ts")
         return trades.reset_index(drop=True)
@@ -170,17 +194,23 @@ class TradeCalib:
         import warnings
 
         from influxdb_client.client.warnings import MissingPivotFunction
+
         warnings.simplefilter("ignore", MissingPivotFunction)
         from kilimanjaro.framework.verify import (
-            influx_client, influx_range_jst, query_df,
+            influx_client,
+            influx_range_jst,
+            query_df,
         )
+
         rfc_start, rfc_stop = influx_range_jst(start, end)
 
         def _pull(meas: str) -> pd.DataFrame:
-            flux = (f'from(bucket:"{bucket}")|>range(start:{rfc_start},stop:{rfc_stop})'
-                    f'|>filter(fn:(r)=>r._measurement=="{meas}")'
-                    f'|>pivot(rowKey:["_time"],columnKey:["_field"],valueColumn:"_value")'
-                    f'|>sort(columns:["_time"])')
+            flux = (
+                f'from(bucket:"{bucket}")|>range(start:{rfc_start},stop:{rfc_stop})'
+                f'|>filter(fn:(r)=>r._measurement=="{meas}")'
+                f'|>pivot(rowKey:["_time"],columnKey:["_field"],valueColumn:"_value")'
+                f'|>sort(columns:["_time"])'
+            )
             with influx_client() as c:
                 return query_df(c.query_api(), flux)
 
@@ -201,31 +231,48 @@ class TradeCalib:
             st = o["SETTLE_TYPE"]
             if st == "OPEN":
                 if pos is None:
-                    pos = (o["ts"], 1 if o["SIDE"] == "BUY" else -1, float(o["EXEC_PRICE"]))
+                    pos = (
+                        o["ts"],
+                        1 if o["SIDE"] == "BUY" else -1,
+                        float(o["EXEC_PRICE"]),
+                    )
             elif st == "CLOSE" and pos is not None:
                 e_ts, side, e_px = pos
                 x_ts, x_px = o["ts"], float(o["EXEC_PRICE"])
-                rows.append((e_ts, x_ts, side, e_px, x_px,
-                             side * (x_px - e_px) / e_px * 1e4))
+                rows.append(
+                    (e_ts, x_ts, side, e_px, x_px, side * (x_px - e_px) / e_px * 1e4)
+                )
                 pos = None
         ht = pd.DataFrame(rows, columns=cols)
         return ht
 
     # ---- align + report --------------------------------------------------------
-    def calibrate(self, bucket: str, start: str, end: str,
-                  data_root: Path = _DEFAULT_DATA_ROOT,
-                  px_tol: float = 1.0, ts_tol: float = 0.001, ret_tol: float = 0.5,
-                  max_div: int = 15) -> TradeCalibResult:
+    def calibrate(
+        self,
+        bucket: str,
+        start: str,
+        end: str,
+        data_root: Path = _DEFAULT_DATA_ROOT,
+        px_tol: float = 1.0,
+        ts_tol: float = 0.001,
+        ret_tol: float = 0.5,
+        max_div: int = 15,
+    ) -> TradeCalibResult:
         sc = self.offline_trades(start, end, data_root)
         ht = self.online_trades(bucket, start, end)
         # restrict scan to Himalaya's covered window (first open .. last close)
         if not ht.empty:
-            sc = sc[(sc.entry_exec_ts >= ht.e_ts.min() - 5)
-                    & (sc.entry_exec_ts <= ht.e_ts.max() + 5)].reset_index(drop=True)
+            sc = sc[
+                (sc.entry_exec_ts >= ht.e_ts.min() - 5)
+                & (sc.entry_exec_ts <= ht.e_ts.max() + 5)
+            ].reset_index(drop=True)
 
         s_e = sc["entry_exec_ts"].to_numpy() if len(sc) else np.array([])
-        idx = (np.clip(np.searchsorted(s_e, ht["e_ts"].to_numpy()), 0, len(s_e) - 1)
-               if len(s_e) else np.array([], dtype=int))
+        idx = (
+            np.clip(np.searchsorted(s_e, ht["e_ts"].to_numpy()), 0, len(s_e) - 1)
+            if len(s_e)
+            else np.array([], dtype=int)
+        )
 
         side_m = ets_m = xts_m = epx_m = xpx_m = ret_m = matched = 0
         scan_g: list[float] = []
@@ -238,8 +285,10 @@ class TradeCalib:
             j = min(cands, key=lambda c: abs(s_e[c] - ht["e_ts"][k])) if cands else None
             if j is None or abs(s_e[j] - ht["e_ts"][k]) > 3:
                 if len(divs) < max_div:
-                    divs.append(f"no scan trade near hima open {ht['e_ts'][k]:.0f} "
-                                f"side {ht['side'][k]:+d}")
+                    divs.append(
+                        f"no scan trade near hima open {ht['e_ts'][k]:.0f} "
+                        f"side {ht['side'][k]:+d}"
+                    )
                 continue
             matched += 1
             sr = sc.iloc[j]
@@ -249,24 +298,42 @@ class TradeCalib:
             ep = abs(sr["entry_price"] - ht["e_px"][k]) <= px_tol
             xp = abs(sr["exit_price"] - ht["x_px"][k]) <= px_tol
             rm = abs(sr["return_bps"] - ht["gross_bps"][k]) <= ret_tol
-            side_m += sd; ets_m += es; xts_m += xs; epx_m += ep; xpx_m += xp; ret_m += rm
-            scan_g.append(sr["return_bps"]); hima_g.append(ht["gross_bps"][k])
+            side_m += sd
+            ets_m += es
+            xts_m += xs
+            epx_m += ep
+            xpx_m += xp
+            ret_m += rm
+            scan_g.append(sr["return_bps"])
+            hima_g.append(ht["gross_bps"][k])
             if (not (es and xs and sd and ep and xp and rm)) and len(divs) < max_div:
                 divs.append(
                     f"e {sr['entry_exec_ts']:.0f}/{ht['e_ts'][k]:.0f} "
                     f"x {sr['exit_exec_ts']:.0f}/{ht['x_ts'][k]:.0f} "
                     f"sd {int(sr['direction'])}/{int(ht['side'][k])} "
                     f"epx {sr['entry_price']:.0f}/{ht['e_px'][k]:.0f} "
-                    f"g {sr['return_bps']:+.1f}/{ht['gross_bps'][k]:+.1f}")
+                    f"g {sr['return_bps']:+.1f}/{ht['gross_bps'][k]:+.1f}"
+                )
         sg = np.array(scan_g)
         hg = np.array(hima_g)
         corr = float(np.corrcoef(sg, hg)[0, 1]) if len(sg) > 1 else float("nan")
         return TradeCalibResult(
-            n_scan=len(sc), n_hima=len(ht), n_matched=matched,
-            side_match=side_m, entry_ts_exact=ets_m, exit_ts_exact=xts_m,
-            entry_px_match=epx_m, exit_px_match=xpx_m,
-            scan_total_bps=float(sg.sum()), hima_total_bps=float(hg.sum()),
+            n_scan=len(sc),
+            n_hima=len(ht),
+            n_matched=matched,
+            side_match=side_m,
+            entry_ts_exact=ets_m,
+            exit_ts_exact=xts_m,
+            entry_px_match=epx_m,
+            exit_px_match=xpx_m,
+            scan_total_bps=float(sg.sum()),
+            hima_total_bps=float(hg.sum()),
             scan_mean_bps=float(sg.mean()) if len(sg) else 0.0,
             hima_mean_bps=float(hg.mean()) if len(hg) else 0.0,
-            ret_corr=corr, ret_match=ret_m,
-            px_tol=px_tol, ts_tol=ts_tol, ret_tol=ret_tol, divergences=divs)
+            ret_corr=corr,
+            ret_match=ret_m,
+            px_tol=px_tol,
+            ts_tol=ts_tol,
+            ret_tol=ret_tol,
+            divergences=divs,
+        )

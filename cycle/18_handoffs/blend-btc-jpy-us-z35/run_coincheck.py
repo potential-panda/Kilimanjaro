@@ -45,7 +45,7 @@ def _us_hours_schedule() -> ScheduleFilter:
 
 
 def _run(spec: dict, start: str, end: str, out: Path, label: str) -> None:
-    res, out_dir, _ = run_spec(
+    res, _out_dir, _ = run_spec(
         spec, start, end, results_root=out, split=None,
         scan_name=f"cc_{label}", schedule=_us_hours_schedule(),
     )

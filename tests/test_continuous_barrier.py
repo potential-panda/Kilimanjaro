@@ -1,8 +1,12 @@
 """ContinuousBarrierReturn: direction-change / TP / SL / timeout, whichever is first."""
-import sys, unittest
+import sys
+import unittest
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-import numpy as np, pandas as pd
+import numpy as np
+import pandas as pd
+
 import kilimanjaro.return_calc.continuous_barrier as mod
 from kilimanjaro.data.price_cache import TargetPrices
 from kilimanjaro.framework.protocol import MarketConfig

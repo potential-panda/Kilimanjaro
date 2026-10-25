@@ -22,6 +22,6 @@ __all__ = [
     "load_events",
     "load_hypotheses",
     "next_event_id",
-    "search",
     "record_grid_scan",
+    "search",
 ]

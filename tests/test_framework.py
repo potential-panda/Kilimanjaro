@@ -15,7 +15,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.framework import (  # noqa: E402
+from kilimanjaro.framework import (
     MarketConfig,
     RollingDrawdownGate,
     ScheduleFilter,
@@ -24,7 +24,7 @@ from kilimanjaro.framework import (  # noqa: E402
     run_grid_split,
     split_windows,
 )
-from kilimanjaro.framework.evaluate import default_split  # noqa: E402
+from kilimanjaro.framework.evaluate import default_split
 
 TARGET = MarketConfig("GMO", "ETH_JPY", "0.3")
 
@@ -86,7 +86,7 @@ class TestRollingDrawdownGate(unittest.TestCase):
     def test_missing_exit_ts_column_falls_back_to_ts(self):
         gate = RollingDrawdownGate(1000, 100, 500)
         df = pd.DataFrame({"ts": [0.0, 10.0], "return_bps": [1.0, 2.0]})
-        kept, info = gate.apply(df)
+        kept, _info = gate.apply(df)
         self.assertEqual(len(kept), 2)
 
 

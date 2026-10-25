@@ -1,9 +1,16 @@
 """Stage 13 signal_corr — pure helpers (no data needed)."""
-import sys, unittest
+import sys
+import unittest
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from kilimanjaro.driver.signal_corr import factors_from_blend_expr, _split_top_level, _shift_ratio
 import numpy as np
+
+from kilimanjaro.driver.signal_corr import (
+    _shift_ratio,
+    _split_top_level,
+    factors_from_blend_expr,
+)
 
 
 class TestSignalCorr(unittest.TestCase):
@@ -47,10 +54,10 @@ class TestDecayTable(unittest.TestCase):
         rows = []
         # weak factor peaking late, strong factor peaking early (classic lead-lag decay)
         for h, a, b in [(5, 0.01, 0.09), (30, 0.02, 0.05), (300, 0.03, 0.01)]:
-            rows.append(dict(family="f1", factor="slow", expr="e1", horizon=h, n=100,
-                             ic=a, rank_ic=a))
-            rows.append(dict(family="f2", factor="fast", expr="e2", horizon=h, n=100,
-                             ic=b, rank_ic=b))
+            rows.append({"family": "f1", "factor": "slow", "expr": "e1", "horizon": h, "n": 100,
+                             "ic": a, "rank_ic": a})
+            rows.append({"family": "f2", "factor": "fast", "expr": "e2", "horizon": h, "n": 100,
+                             "ic": b, "rank_ic": b})
         return pd.DataFrame(rows)
 
     def test_shape_columns_and_provenance(self):
@@ -91,8 +98,9 @@ class TestExecutableBps(unittest.TestCase):
         self.win = np.array([0])
 
     def _call(self, v, cost=1.0, thr=2.0):
-        from kilimanjaro.driver.signal_corr import _executable_bps
         import numpy as np
+
+        from kilimanjaro.driver.signal_corr import _executable_bps
         return _executable_bps(np.array(v), self.win, 1, 2,
                                self.mid, self.bid, self.ask, thr, cost)
 

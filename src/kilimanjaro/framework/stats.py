@@ -65,7 +65,7 @@ def block_bootstrap_pvalue(
 
     obs = float(net.mean())
     centered = net - obs
-    block = max(1, int(round(n ** (1.0 / 3.0))))
+    block = max(1, round(n ** (1.0 / 3.0)))
     n_blocks = int(np.ceil(n / block))
     rng = np.random.default_rng(seed)
 

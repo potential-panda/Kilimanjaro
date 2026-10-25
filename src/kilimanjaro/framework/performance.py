@@ -180,7 +180,7 @@ def compute_path_metrics(
         return _nan_metrics()
 
     eq = daily_equity(net_bps, ts_seconds)
-    n_days = int(len(eq))
+    n_days = len(eq)
     if n_days < min_days:
         return _nan_metrics()
 

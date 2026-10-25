@@ -110,7 +110,11 @@ def run_episode_retest(
         scan_name=scan_id,
         csv_fields=CSV_FIELDS,
         split=split,
-        param_meta={"spec": spec, "tier": "episode", "screening_scan_id": screening_scan_id},
+        param_meta={
+            "spec": spec,
+            "tier": "episode",
+            "screening_scan_id": screening_scan_id,
+        },
         schedule=schedule,
         # Drawdown gate applies here (episodes are non-overlapping), even though
         # the screening spec's own return_calc still says fixed_horizon.
@@ -121,9 +125,17 @@ def run_episode_retest(
     )
 
 
-def _evaluate_continuous_spec(spec: dict, target, start: str, end: str, params=None, *,
-                              cost_bps: float = 1.0, dd_threshold_bps: float | None = None,
-                              data_root=None):
+def _evaluate_continuous_spec(
+    spec: dict,
+    target,
+    start: str,
+    end: str,
+    params=None,
+    *,
+    cost_bps: float = 1.0,
+    dd_threshold_bps: float | None = None,
+    data_root=None,
+):
     """Stage 15 for the CONTINUOUS-BARRIER framework: pluggable clock x pluggable direction.
 
     A clock (`clock.kind`: time/volume/dollar/tick/range) emits neutral decision points;
@@ -159,14 +171,28 @@ def _evaluate_continuous_spec(spec: dict, target, start: str, end: str, params=N
     sched = OrionScheduleFilter(spec.get("schedule", "nofilter"))
     dd_bps = DEFAULT_DD_THRESHOLD_BPS if dd_threshold_bps is None else dd_threshold_bps
 
-    load_start = (datetime.strptime(start, "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
-    need = f"({dir_expr}) + (a_mid)" + (f" + ({qty_col})" if kind in ("volume", "dollar") else "")
-    frame = ExpressionSignal.create(markets=spec["markets"], expr=need, threshold=0.0,
-                                    min_age=None, max_age=None, invert=False,
-                                    label="cont").load_data(load_start, end, data_root)
+    load_start = (datetime.strptime(start, "%Y-%m-%d") - timedelta(days=2)).strftime(
+        "%Y-%m-%d"
+    )
+    need = f"({dir_expr}) + (a_mid)" + (
+        f" + ({qty_col})" if kind in ("volume", "dollar") else ""
+    )
+    frame = ExpressionSignal.create(
+        markets=spec["markets"],
+        expr=need,
+        threshold=0.0,
+        min_age=None,
+        max_age=None,
+        invert=False,
+        label="cont",
+    ).load_data(load_start, end, data_root)
     ts = frame["ts"].to_numpy(dtype=float)
     mid = np.asarray(eval_expr("a_mid", frame), dtype=float)
-    qty = np.asarray(eval_expr(qty_col, frame), dtype=float) if kind in ("volume", "dollar") else None
+    qty = (
+        np.asarray(eval_expr(qty_col, frame), dtype=float)
+        if kind in ("volume", "dollar")
+        else None
+    )
     dvals = np.asarray(eval_expr(dir_expr, frame), dtype=float)
     start_ts = datetime.strptime(start, "%Y-%m-%d").timestamp()
 
@@ -178,8 +204,11 @@ def _evaluate_continuous_spec(spec: dict, target, start: str, end: str, params=N
         # decision at a bar closing on row i uses row i-1.
         # Hysteresis dead band: hold the side until the signal crosses the OPPOSITE
         # threshold. Without it sign(z) wobbles across zero and churns (~2 bars/trade).
-        d_at_bar = (hysteresis(dvals[ci - 1], float(dir_thr)) if dir_thr
-                    else np.sign(dvals[ci - 1]))
+        d_at_bar = (
+            hysteresis(dvals[ci - 1], float(dir_thr))
+            if dir_thr
+            else np.sign(dvals[ci - 1])
+        )
         e_ts, e_dir, x_ts = runs_to_signals(ci, d_at_bar, ts)
         # CLOCK CAUSALITY. A data-dependent close (range/volume/dollar) is only KNOWN
         # once its second is complete, so acting at ts[ci] would front-run the close by
@@ -187,39 +216,64 @@ def _evaluate_continuous_spec(spec: dict, target, start: str, end: str, params=N
         # lead-lag trade. Time/tick closes are deterministic and need no delay.
         if kind in ("range", "volume", "dollar"):
             e_ts, x_ts = e_ts + 1.0, x_ts + 1.0
-        sigs = pd.DataFrame({"ts": e_ts, "direction": e_dir,
-                             "strength": np.abs(e_dir), "exit_ts": x_ts})
+        sigs = pd.DataFrame(
+            {"ts": e_ts, "direction": e_dir, "strength": np.abs(e_dir), "exit_ts": x_ts}
+        )
         sigs = sigs[sigs.ts >= start_ts]
         n_bars = int((ci >= np.searchsorted(ts, start_ts)).sum())
         tr = BetweenSignalReturn().compute(sigs, target, start, end, data_root)
         tr, _ = sched.apply(tr)
         n_pre = len(tr)
         if dd_bps and np.isfinite(dd_bps):
-            tr, _ = RollingDrawdownGate(window_seconds=DEFAULT_DD_WINDOW_SECONDS,
-                                        threshold_bps=dd_bps,
-                                        cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS).apply(tr)
+            tr, _ = RollingDrawdownGate(
+                window_seconds=DEFAULT_DD_WINDOW_SECONDS,
+                threshold_bps=dd_bps,
+                cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS,
+            ).apply(tr)
         tr = tr.dropna(subset=["return_bps"])
         n = len(tr)
         gross = float(tr.return_bps.sum()) if n else 0.0
         net = gross - cost_bps * n
         sd = float(tr.return_bps.std()) if n > 1 else 0.0
-        rows.append({
-            "clock": kind, "param": float(p), "dir_thr": dir_thr,
-            "n_bars": n_bars, "n_trades": n,
-            "bars_per_trade": round(n_bars / n, 1) if n else 0.0,
-            "n_gated_out": n_pre - n,
-            "total_bps": round(gross, 1), "avg_bps": round(gross / n, 3) if n else 0.0,
-            "net_total_bps": round(net, 1), "net_avg_bps": round(net / n, 3) if n else 0.0,
-            "sharpe": round(float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)), 2)
-                      if sd > 0 else 0.0,
-            "avg_hold_s": round(float((tr.exit_exec_ts - tr.entry_exec_ts).mean()), 0) if n else 0.0,
-        })
+        rows.append(
+            {
+                "clock": kind,
+                "param": float(p),
+                "dir_thr": dir_thr,
+                "n_bars": n_bars,
+                "n_trades": n,
+                "bars_per_trade": round(n_bars / n, 1) if n else 0.0,
+                "n_gated_out": n_pre - n,
+                "total_bps": round(gross, 1),
+                "avg_bps": round(gross / n, 3) if n else 0.0,
+                "net_total_bps": round(net, 1),
+                "net_avg_bps": round(net / n, 3) if n else 0.0,
+                "sharpe": round(
+                    float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)), 2
+                )
+                if sd > 0
+                else 0.0,
+                "avg_hold_s": round(
+                    float((tr.exit_exec_ts - tr.entry_exec_ts).mean()), 0
+                )
+                if n
+                else 0.0,
+            }
+        )
     return pd.DataFrame(rows)
 
 
-def _evaluate_flip_spec(spec: dict, target, start: str, end: str, boxes=None, *,
-                        cost_bps: float = 1.0, dd_threshold_bps: float | None = None,
-                        data_root=None):
+def _evaluate_flip_spec(
+    spec: dict,
+    target,
+    start: str,
+    end: str,
+    boxes=None,
+    *,
+    cost_bps: float = 1.0,
+    dd_threshold_bps: float | None = None,
+    data_root=None,
+):
     """Stage 15 for the flip mechanism: sweep box size, one row per box.
 
     Same standardized economics as the expression path, so flip and expression
@@ -252,13 +306,22 @@ def _evaluate_flip_spec(spec: dict, target, start: str, end: str, boxes=None, *,
     dir_expr = spec.get("direction_expr")
     dir_vals = None
     if dir_expr:
-        from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
         from datetime import datetime, timedelta
-        load_start = (datetime.strptime(start, "%Y-%m-%d")
-                      - timedelta(days=2)).strftime("%Y-%m-%d")
-        frame = ExpressionSignal.create(markets=spec["markets"], expr=dir_expr, threshold=0.0,
-                                        min_age=None, max_age=None, invert=False,
-                                        label="dir").load_data(load_start, end, data_root)
+
+        from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
+
+        load_start = (
+            datetime.strptime(start, "%Y-%m-%d") - timedelta(days=2)
+        ).strftime("%Y-%m-%d")
+        frame = ExpressionSignal.create(
+            markets=spec["markets"],
+            expr=dir_expr,
+            threshold=0.0,
+            min_age=None,
+            max_age=None,
+            invert=False,
+            label="dir",
+        ).load_data(load_start, end, data_root)
         dir_ts = frame["ts"].to_numpy(dtype=float)
         dir_vals = (dir_ts, np.asarray(eval_expr(dir_expr, frame), dtype=float))
 
@@ -271,7 +334,12 @@ def _evaluate_flip_spec(spec: dict, target, start: str, end: str, boxes=None, *,
             # take the last completed second STRICTLY before the flip (searchsorted on
             # ts-1). Zero/NaN factor values leave the flip untraded rather than guessing.
             gts, gv = dir_vals
-            idx = np.searchsorted(gts, sigs["ts"].to_numpy(dtype=float) - 1.0, side="right") - 1
+            idx = (
+                np.searchsorted(
+                    gts, sigs["ts"].to_numpy(dtype=float) - 1.0, side="right"
+                )
+                - 1
+            )
             ok = idx >= 0
             v = np.where(ok, gv[np.clip(idx, 0, len(gv) - 1)], np.nan)
             sigs = sigs.assign(direction=np.sign(v))
@@ -280,22 +348,38 @@ def _evaluate_flip_spec(spec: dict, target, start: str, end: str, boxes=None, *,
         tr, _ = sched.apply(tr)
         n_pre = len(tr)
         if dd_bps and np.isfinite(dd_bps):
-            tr, _ = RollingDrawdownGate(window_seconds=DEFAULT_DD_WINDOW_SECONDS,
-                                        threshold_bps=dd_bps,
-                                        cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS).apply(tr)
+            tr, _ = RollingDrawdownGate(
+                window_seconds=DEFAULT_DD_WINDOW_SECONDS,
+                threshold_bps=dd_bps,
+                cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS,
+            ).apply(tr)
         tr = tr.dropna(subset=["return_bps"])
         n = len(tr)
         gross = float(tr.return_bps.sum()) if n else 0.0
         net = gross - cost_bps * n
         sd = float(tr.return_bps.std()) if n > 1 else 0.0
-        rows.append({
-            "box": float(box), "step": step, "n_trades": n, "n_gated_out": n_pre - n,
-            "total_bps": round(gross, 1), "avg_bps": round(gross / n, 3) if n else 0.0,
-            "net_total_bps": round(net, 1), "net_avg_bps": round(net / n, 3) if n else 0.0,
-            "sharpe": round(float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)), 2)
-                      if sd > 0 else 0.0,
-            "avg_hold_s": round(float((tr.exit_exec_ts - tr.entry_exec_ts).mean()), 0) if n else 0.0,
-        })
+        rows.append(
+            {
+                "box": float(box),
+                "step": step,
+                "n_trades": n,
+                "n_gated_out": n_pre - n,
+                "total_bps": round(gross, 1),
+                "avg_bps": round(gross / n, 3) if n else 0.0,
+                "net_total_bps": round(net, 1),
+                "net_avg_bps": round(net / n, 3) if n else 0.0,
+                "sharpe": round(
+                    float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)), 2
+                )
+                if sd > 0
+                else 0.0,
+                "avg_hold_s": round(
+                    float((tr.exit_exec_ts - tr.entry_exec_ts).mean()), 0
+                )
+                if n
+                else 0.0,
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -306,25 +390,36 @@ def _evaluate_flip_spec(spec: dict, target, start: str, end: str, boxes=None, *,
 # a threshold sweep, and report standardized per-row trade economics. Repeat-op made
 # code so every candidate is judged identically (no ad-hoc scripts).
 
-_CALIB_JST_HOURS = (22, 23, 0, 1, 2)   # aquila US-session
-_CALIB_DD = dict(threshold_bps=200.0, window_s=21600, cooldown_s=3600)  # aquila DD gate
+_CALIB_JST_HOURS = (22, 23, 0, 1, 2)  # aquila US-session
+_CALIB_DD = {"threshold_bps": 200.0, "window_s": 21600, "cooldown_s": 3600}  # aquila DD gate
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 
 
-def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
-                  fill_delay_seconds: float = 1.0, cost_bps: float = 1.0,
-                  jst_hours=_CALIB_JST_HOURS, dd_threshold_bps: float = _CALIB_DD["threshold_bps"],
-                  dd_window_s: float = _CALIB_DD["window_s"], dd_cooldown_s: float = _CALIB_DD["cooldown_s"],
-                  warmup_days: int = 2, data_root: Path = _DEFAULT_DATA_ROOT):
+def evaluate_spec(
+    spec: dict,
+    start: str,
+    end: str,
+    thresholds=None,
+    *,
+    fill_delay_seconds: float = 1.0,
+    cost_bps: float = 1.0,
+    jst_hours=_CALIB_JST_HOURS,
+    dd_threshold_bps: float = _CALIB_DD["threshold_bps"],
+    dd_window_s: float = _CALIB_DD["window_s"],
+    dd_cooldown_s: float = _CALIB_DD["cooldown_s"],
+    warmup_days: int = 2,
+    data_root: Path = _DEFAULT_DATA_ROOT,
+):
     """Run `spec` through its trading mechanism over a threshold sweep; one row per
     threshold with standardized economics:
       n_trades, total_bps, avg_bps  (GROSS: bid/ask execution, spread already paid)
       net_total_bps, net_avg_bps    (minus `cost_bps` latency slippage — the verdict)
       sharpe, avg_hold_s
     The frame is loaded once (warmup-padded) and reused across thresholds."""
+    from datetime import datetime, timedelta
+
     import numpy as np
     import pandas as pd
-    from datetime import datetime, timedelta
 
     from kilimanjaro.framework.gate import RollingDrawdownGate
     from kilimanjaro.framework.protocol import MarketConfig
@@ -343,12 +438,27 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
     # NO_ENTRY close behaviour), BetweenSignalReturn, orion's OWN schedule module, and
     # the flip gate defaults from framework.gate. Swept over box size, not threshold.
     if spec.get("signal") == "sar_flip":
-        return _evaluate_flip_spec(spec, target, start, end, thresholds, cost_bps=cost_bps,
-                                   dd_threshold_bps=dd_threshold_bps, data_root=data_root)
+        return _evaluate_flip_spec(
+            spec,
+            target,
+            start,
+            end,
+            thresholds,
+            cost_bps=cost_bps,
+            dd_threshold_bps=dd_threshold_bps,
+            data_root=data_root,
+        )
     if spec.get("signal") == "continuous":
-        return _evaluate_continuous_spec(spec, target, start, end, thresholds,
-                                         cost_bps=cost_bps, dd_threshold_bps=dd_threshold_bps,
-                                         data_root=data_root)
+        return _evaluate_continuous_spec(
+            spec,
+            target,
+            start,
+            end,
+            thresholds,
+            cost_bps=cost_bps,
+            dd_threshold_bps=dd_threshold_bps,
+            data_root=data_root,
+        )
 
     e = spec["expressions"][0]
     markets = spec["markets"]
@@ -362,52 +472,91 @@ def evaluate_spec(spec: dict, start: str, end: str, thresholds=None, *,
     invert = e.get("invert", [False])[0]
     label = e.get("label")
 
-    load_start = (datetime.strptime(start, "%Y-%m-%d")
-                  - timedelta(days=warmup_days)).strftime("%Y-%m-%d")
-    frame = ExpressionSignal.create(markets=markets, expr=e["expr"], threshold=0.0,
-                                    min_age=None, max_age=None, invert=invert,
-                                    label=label).load_data(load_start, end, data_root)
+    load_start = (
+        datetime.strptime(start, "%Y-%m-%d") - timedelta(days=warmup_days)
+    ).strftime("%Y-%m-%d")
+    frame = ExpressionSignal.create(
+        markets=markets,
+        expr=e["expr"],
+        threshold=0.0,
+        min_age=None,
+        max_age=None,
+        invert=invert,
+        label=label,
+    ).load_data(load_start, end, data_root)
     blocked = [h for h in range(24) if h not in jst_hours]
-    sched = ScheduleFilter(block_weekday_hours=blocked, block_weekend_hours=blocked,
-                           block_gmo_maintenance=False, name="us")
+    sched = ScheduleFilter(
+        block_weekday_hours=blocked,
+        block_weekend_hours=blocked,
+        block_gmo_maintenance=False,
+        name="us",
+    )
     start_ts = datetime.strptime(start, "%Y-%m-%d").timestamp()
 
     rows = []
     for thr in thresholds:
-        sig = ExpressionSignal.create(markets=markets, expr=e["expr"], threshold=float(thr),
-                                      min_age=None, max_age=None, invert=invert, label=label)
+        sig = ExpressionSignal.create(
+            markets=markets,
+            expr=e["expr"],
+            threshold=float(thr),
+            min_age=None,
+            max_age=None,
+            invert=invert,
+            label=label,
+        )
         if rc_name == "triple_barrier":
-            rc = TripleBarrierReturn(barrier, cap, fill_delay_seconds=fill_delay_seconds)
-        elif rc_name == "maker_fep":  # maker limit-order economics (fees baked into return_bps)
+            rc = TripleBarrierReturn(
+                barrier, cap, fill_delay_seconds=fill_delay_seconds
+            )
+        elif (
+            rc_name == "maker_fep"
+        ):  # maker limit-order economics (fees baked into return_bps)
             m = spec.get("maker", {})
             rc = MakerFEPReturn(
-                offset_bps=m.get("offset_bps", 0.0), fill_window_s=m.get("fill_window_s", 30.0),
-                hold_s=m.get("hold_s", 30.0), exit_window_s=m.get("exit_window_s", 60.0),
-                maker_fee_bps=m.get("maker_fee_bps", 0.0), taker_fee_bps=m.get("taker_fee_bps", 5.0),
-                long_only=m.get("long_only", False), price_unit=m.get("price_unit", 0.0),
+                offset_bps=m.get("offset_bps", 0.0),
+                fill_window_s=m.get("fill_window_s", 30.0),
+                hold_s=m.get("hold_s", 30.0),
+                exit_window_s=m.get("exit_window_s", 60.0),
+                maker_fee_bps=m.get("maker_fee_bps", 0.0),
+                taker_fee_bps=m.get("taker_fee_bps", 5.0),
+                long_only=m.get("long_only", False),
+                price_unit=m.get("price_unit", 0.0),
                 # same causality the taker calcs get — post at ts+delay, never at ts
-                fill_delay_seconds=m.get("fill_delay_seconds", fill_delay_seconds))
+                fill_delay_seconds=m.get("fill_delay_seconds", fill_delay_seconds),
+            )
         else:  # trailing_stop (v3): no binding time cap
-            rc = TrailingStopReturn(barrier, time_cap_seconds=None,
-                                    fill_delay_seconds=fill_delay_seconds)
+            rc = TrailingStopReturn(
+                barrier, time_cap_seconds=None, fill_delay_seconds=fill_delay_seconds
+            )
         tr = rc.compute(sig.generate(frame), target, load_start, end, data_root)
         tr, _ = sched.apply(tr)
         if dd_threshold_bps and np.isfinite(dd_threshold_bps):
-            tr, _ = RollingDrawdownGate(window_seconds=dd_window_s, threshold_bps=dd_threshold_bps,
-                                        cooldown_seconds=dd_cooldown_s).apply(tr)
+            tr, _ = RollingDrawdownGate(
+                window_seconds=dd_window_s,
+                threshold_bps=dd_threshold_bps,
+                cooldown_seconds=dd_cooldown_s,
+            ).apply(tr)
         tr = tr.dropna(subset=["return_bps"])
         tr = tr[tr.entry_exec_ts >= start_ts]
         n = len(tr)
         gross = float(tr.return_bps.sum()) if n else 0.0
         net = gross - cost_bps * n
         sd = float(tr.return_bps.std()) if n > 1 else 0.0
-        sharpe = float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)) if sd > 0 else 0.0
+        sharpe = (
+            float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n))
+            if sd > 0
+            else 0.0
+        )
         hold = float((tr.exit_exec_ts - tr.entry_exec_ts).mean()) if n else 0.0
         row = {
-            "threshold": float(thr), "n_trades": n,
-            "total_bps": round(gross, 1), "avg_bps": round(gross / n, 3) if n else 0.0,
-            "net_total_bps": round(net, 1), "net_avg_bps": round(net / n, 3) if n else 0.0,
-            "sharpe": round(sharpe, 2), "avg_hold_s": round(hold, 0),
+            "threshold": float(thr),
+            "n_trades": n,
+            "total_bps": round(gross, 1),
+            "avg_bps": round(gross / n, 3) if n else 0.0,
+            "net_total_bps": round(net, 1),
+            "net_avg_bps": round(net / n, 3) if n else 0.0,
+            "sharpe": round(sharpe, 2),
+            "avg_hold_s": round(hold, 0),
         }
         if rc_name == "maker_fep":
             # Mechanism diagnostics — a maker result is only readable alongside these.

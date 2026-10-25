@@ -4,6 +4,7 @@ offline (Kilimanjaro): eval `zscore(ret(a_mid, 30), 1800)` over the Makalu featu
 online  (Himalaya):    InfluxDB measurement TRADING, field "mom_30".
 note: 30s BINANCE momentum
 """
+
 from kilimanjaro.calibration.base import FactorCalib
 
 FACTOR = FactorCalib(

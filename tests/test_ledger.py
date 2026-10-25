@@ -9,12 +9,13 @@ ledger schema/search helper:
 import sys
 import tempfile
 import unittest
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.ledger.core import append_event, load_hypotheses, search  # noqa: E402
+from kilimanjaro.ledger.core import append_event, load_hypotheses, search
 
 _FIXTURES = Path(__file__).parent / "fixtures"
 

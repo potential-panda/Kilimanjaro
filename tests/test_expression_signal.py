@@ -11,8 +11,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.op.series import OPS, lag, zscore  # noqa: E402
-from kilimanjaro.signal.expression import (  # noqa: E402
+from kilimanjaro.op.series import OPS, lag, zscore
+from kilimanjaro.signal.expression import (
     ExpressionSignal,
     eval_expr,
     validate_expr,
@@ -110,11 +110,11 @@ class TestValidateExpr(unittest.TestCase):
 
 
 def _make_signal(**kw):
-    defaults = dict(
-        markets={"a": {"exchange": "X", "symbol": "Y", "execution_size": "1"}},
-        expr="ema(a_mid, 1)",
-        threshold=0.5,
-    )
+    defaults = {
+        "markets": {"a": {"exchange": "X", "symbol": "Y", "execution_size": "1"}},
+        "expr": "ema(a_mid, 1)",
+        "threshold": 0.5,
+    }
     defaults.update(kw)
     return ExpressionSignal.create(**defaults)
 

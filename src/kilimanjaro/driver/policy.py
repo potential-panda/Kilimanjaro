@@ -104,7 +104,9 @@ def _best_by_net(rows: list[dict]) -> dict:
     return max(rows, key=lambda r: r.get("holdout_avg_net") or float("-inf"))
 
 
-def _episode_headline(n_candidates: int, survivors: list[dict], best: dict | None) -> str:
+def _episode_headline(
+    n_candidates: int, survivors: list[dict], best: dict | None
+) -> str:
     if best is None:
         return (
             f"0/{n_candidates} candidates confirmed on non-overlapping episodes "

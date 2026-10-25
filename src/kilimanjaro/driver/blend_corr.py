@@ -150,7 +150,9 @@ def build_panel(
     missing: list[str] = []
     for f in factors:
         try:
-            fr = load_feature_frame(f.markets_dict, f.columns, start, end, data_root=data_root)
+            fr = load_feature_frame(
+                f.markets_dict, f.columns, start, end, data_root=data_root
+            )
         except Exception:  # noqa: BLE001
             # This factor can't be built in this window — no rows (BookChange is
             # absent in the holdout months) or a column its market lacks (some
@@ -181,9 +183,7 @@ def build_panel(
     ts = panel.index.to_numpy(dtype=float)
     panel = panel.reset_index(drop=True)
     panel.insert(0, "ts", ts)
-    panel["fwd_ret"] = _forward_return_bps(
-        ts, target, start, end, horizon, data_root
-    )
+    panel["fwd_ret"] = _forward_return_bps(ts, target, start, end, horizon, data_root)
     panel = panel.dropna(subset=["fwd_ret"]).reset_index(drop=True)
     if len(panel) > 1:  # honest inference: keep a non-overlapping subset
         keep = _nonoverlap_indices(panel["ts"].to_numpy(dtype=float), float(horizon))
@@ -216,7 +216,9 @@ def composite_spec(
     for s in specs:
         for alias, m in s["markets"].items():
             if alias in markets and markets[alias] != m:
-                raise ValueError(f"alias {alias!r} maps to different markets across specs")
+                raise ValueError(
+                    f"alias {alias!r} maps to different markets across specs"
+                )
             markets[alias] = m
 
     terms = [
@@ -325,8 +327,8 @@ def blend(
     return {
         "n_factors": len(names),
         "horizon": horizon,
-        "train_n": int(len(train)),
-        "holdout_n": int(len(holdout)),
+        "train_n": len(train),
+        "holdout_n": len(holdout),
         "blend_train_ic": blend_ic_tr,
         "blend_holdout_ic": blend_ic_ho,
         "best_single_holdout_ic": best_single_ho,
@@ -343,6 +345,7 @@ def blend(
 # HOLDOUT IC — every weight is fit on train, so the holdout number has nothing
 # fitted to it. A strong single factor competes as `single_best` (a blend of one).
 
+
 def _standardize(train: pd.DataFrame, holdout: pd.DataFrame, names: list[str]):
     """z-standardize each factor on TRAIN stats → (Z_tr, Z_ho matrices, ic_tr, ic_ho,
     r_tr, r_ho). NaN (silent second) → 0 (neutral) so it never drops a row."""
@@ -351,18 +354,29 @@ def _standardize(train: pd.DataFrame, holdout: pd.DataFrame, names: list[str]):
     Ztr, Zho, ic_tr, ic_ho = [], [], [], []
     for name in names:
         xt, xh = train[name].to_numpy(dtype=float), holdout[name].to_numpy(dtype=float)
-        mu = float(np.nanmean(xt)); mu = 0.0 if not np.isfinite(mu) else mu
-        sd = float(np.nanstd(xt)); sd = sd if (sd > 0 and np.isfinite(sd)) else 1.0
+        mu = float(np.nanmean(xt))
+        mu = 0.0 if not np.isfinite(mu) else mu
+        sd = float(np.nanstd(xt))
+        sd = sd if (sd > 0 and np.isfinite(sd)) else 1.0
         zt = np.nan_to_num((xt - mu) / sd, nan=0.0)
         zh = np.nan_to_num((xh - mu) / sd, nan=0.0)
-        Ztr.append(zt); Zho.append(zh)
-        ic_tr.append(_ic(zt, r_tr)); ic_ho.append(_ic(zh, r_ho))
-    return (np.array(Ztr).T, np.array(Zho).T,
-            np.array(ic_tr), np.array(ic_ho), r_tr, r_ho)
+        Ztr.append(zt)
+        Zho.append(zh)
+        ic_tr.append(_ic(zt, r_tr))
+        ic_ho.append(_ic(zh, r_ho))
+    return (
+        np.array(Ztr).T,
+        np.array(Zho).T,
+        np.array(ic_tr),
+        np.array(ic_ho),
+        r_tr,
+        r_ho,
+    )
 
 
-def _greedy_weights(Ztr: np.ndarray, ic_tr: np.ndarray, r_tr: np.ndarray,
-                    min_gain: float = 1e-4) -> np.ndarray:
+def _greedy_weights(
+    Ztr: np.ndarray, ic_tr: np.ndarray, r_tr: np.ndarray, min_gain: float = 1e-4
+) -> np.ndarray:
     """Forward-select factors (each added at its IC weight) while the TRAIN blend IC
     keeps improving — drops redundant/noise factors that a full IC-weighted sum keeps."""
     k = Ztr.shape[1]
@@ -372,12 +386,15 @@ def _greedy_weights(Ztr: np.ndarray, ic_tr: np.ndarray, r_tr: np.ndarray,
     while remaining:
         gains = {}
         for j in remaining:
-            w2 = w.copy(); w2[j] = ic_tr[j]
+            w2 = w.copy()
+            w2[j] = ic_tr[j]
             gains[j] = abs(_ic(Ztr @ w2, r_tr))
         j = max(gains, key=gains.get)
         if gains[j] <= best + min_gain:
             break
-        w[j] = ic_tr[j]; remaining.discard(j); best = gains[j]
+        w[j] = ic_tr[j]
+        remaining.discard(j)
+        best = gains[j]
     return w
 
 
@@ -405,7 +422,12 @@ def scan_blends(
     holdout = build_panel(factors, target, ho_s, ho_e, horizon, data_root)
     names = [f.name for f in factors]
     if train.empty or holdout.empty:
-        return {"results": [], "names": names, "train_n": len(train), "holdout_n": len(holdout)}
+        return {
+            "results": [],
+            "names": names,
+            "train_n": len(train),
+            "holdout_n": len(holdout),
+        }
 
     Ztr, Zho, ic_tr, ic_ho, r_tr, r_ho = _standardize(train, holdout, names)
     k = len(names)
@@ -425,40 +447,64 @@ def scan_blends(
     for method, w in cand.items():
         used = {names[i]: float(w[i]) for i in range(k) if abs(w[i]) >= 1e-9}
         ho_ic = _ic(Zho @ w, r_ho)
-        results.append({
-            "method": method,
-            "n_factors": len(used),
-            "train_ic": round(_ic(Ztr @ w, r_tr), 5),
-            "holdout_ic": round(ho_ic, 5),
-            "div_ratio": round(abs(ho_ic) / best_single_ho, 3) if best_single_ho else float("nan"),
-            "weights": used,
-        })
+        results.append(
+            {
+                "method": method,
+                "n_factors": len(used),
+                "train_ic": round(_ic(Ztr @ w, r_tr), 5),
+                "holdout_ic": round(ho_ic, 5),
+                "div_ratio": round(abs(ho_ic) / best_single_ho, 3)
+                if best_single_ho
+                else float("nan"),
+                "weights": used,
+            }
+        )
     lgbm_importances = None
     if use_lgbm:
         lg = _lgbm_blend(train, holdout, names)  # nonlinear capacity, no linear weights
         lgbm_importances = lg["importances"]
-        results.append({
-            "method": "lgbm", "n_factors": len(names),
-            "train_ic": round(lg["train_ic"], 5), "holdout_ic": round(lg["holdout_ic"], 5),
-            "div_ratio": round(abs(lg["holdout_ic"]) / best_single_ho, 3) if best_single_ho else float("nan"),
-            "weights": {},  # a tree model, not a formula — importances stored separately
-        })
+        results.append(
+            {
+                "method": "lgbm",
+                "n_factors": len(names),
+                "train_ic": round(lg["train_ic"], 5),
+                "holdout_ic": round(lg["holdout_ic"], 5),
+                "div_ratio": round(abs(lg["holdout_ic"]) / best_single_ho, 3)
+                if best_single_ho
+                else float("nan"),
+                "weights": {},  # a tree model, not a formula — importances stored separately
+            }
+        )
     results.sort(key=lambda r: -abs(r["holdout_ic"]))
     per_factor = sorted(
-        [{"factor": names[i], "train_ic": round(float(ic_tr[i]), 5),
-          "holdout_ic": round(float(ic_ho[i]), 5),
-          "stable": bool(np.sign(ic_tr[i]) == np.sign(ic_ho[i]) and abs(ic_ho[i]) > 0.005)}
-         for i in range(k)],
-        key=lambda p: -abs(p["holdout_ic"]))
+        [
+            {
+                "factor": names[i],
+                "train_ic": round(float(ic_tr[i]), 5),
+                "holdout_ic": round(float(ic_ho[i]), 5),
+                "stable": bool(
+                    np.sign(ic_tr[i]) == np.sign(ic_ho[i]) and abs(ic_ho[i]) > 0.005
+                ),
+            }
+            for i in range(k)
+        ],
+        key=lambda p: -abs(p["holdout_ic"]),
+    )
     return {
-        "results": results, "per_factor": per_factor, "names": names,
-        "horizon": horizon, "train_n": int(len(train)), "holdout_n": int(len(holdout)),
-        "best_single_holdout_ic": best_single_ho, "lgbm_importances": lgbm_importances,
+        "results": results,
+        "per_factor": per_factor,
+        "names": names,
+        "horizon": horizon,
+        "train_n": len(train),
+        "holdout_n": len(holdout),
+        "best_single_holdout_ic": best_single_ho,
+        "lgbm_importances": lgbm_importances,
     }
 
 
-def _lgbm_blend(train: pd.DataFrame, holdout: pd.DataFrame, names: list[str],
-                seed: int = 0) -> dict:
+def _lgbm_blend(
+    train: pd.DataFrame, holdout: pd.DataFrame, names: list[str], seed: int = 0
+) -> dict:
     """LGBM capacity layer: a heavily-regularized gradient-boosted regression of the
     factors onto the forward return, fit on TRAIN, scored by holdout IC. This is NOT a
     tradeable formula — it measures the *nonlinear* predictive ceiling, so we can see how
@@ -466,15 +512,30 @@ def _lgbm_blend(train: pd.DataFrame, holdout: pd.DataFrame, names: list[str],
     so factors are fed raw (no neutral imputation). Returns train/holdout IC + importances."""
     import lightgbm as lgb
 
-    Xtr, ytr = train[names].to_numpy(dtype=float), train["fwd_ret"].to_numpy(dtype=float)
-    Xho, yho = holdout[names].to_numpy(dtype=float), holdout["fwd_ret"].to_numpy(dtype=float)
+    Xtr, ytr = (
+        train[names].to_numpy(dtype=float),
+        train["fwd_ret"].to_numpy(dtype=float),
+    )
+    Xho, yho = (
+        holdout[names].to_numpy(dtype=float),
+        holdout["fwd_ret"].to_numpy(dtype=float),
+    )
     # Strong regularization + big leaves so it can't memorize the ~0.01-R² return noise:
     # small trees, tiny learning rate, huge min_child_samples, row/col subsampling.
     m = lgb.LGBMRegressor(
-        objective="regression", n_estimators=200, learning_rate=0.02,
-        num_leaves=15, min_child_samples=5000, subsample=0.7, subsample_freq=1,
-        colsample_bytree=0.8, reg_lambda=1.0, max_depth=4,
-        random_state=seed, n_jobs=-1, verbosity=-1,
+        objective="regression",
+        n_estimators=200,
+        learning_rate=0.02,
+        num_leaves=15,
+        min_child_samples=5000,
+        subsample=0.7,
+        subsample_freq=1,
+        colsample_bytree=0.8,
+        reg_lambda=1.0,
+        max_depth=4,
+        random_state=seed,
+        n_jobs=-1,
+        verbosity=-1,
     )
     m.fit(Xtr, ytr)
     imp = m.feature_importances_.astype(float)

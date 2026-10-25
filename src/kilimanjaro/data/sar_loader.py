@@ -9,7 +9,7 @@ import pandas as pd
 
 
 def _features_root() -> Path:
-    import qate.env.sys_env as sys_env
+    from qate.env import sys_env
     from qate.store.parquet_store import Layer, ParquetStore
 
     return ParquetStore(sys_env.PARQUET_ROOT_DIR).layer_dir[Layer.FEATURE]

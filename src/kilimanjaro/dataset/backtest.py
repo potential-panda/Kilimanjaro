@@ -55,7 +55,7 @@ _GMO_MAINTENANCE_SAT_HOURS: list[int] = [9, 10, 11]
 
 
 def _features_root() -> Path:
-    import qate.env.sys_env as sys_env
+    from qate.env import sys_env
     from qate.store.parquet_store import Layer, ParquetStore
 
     return ParquetStore(sys_env.PARQUET_ROOT_DIR).layer_dir[Layer.FEATURE]
@@ -238,7 +238,6 @@ def verify(
     bf = flips_df.merge(exit_ob, on="ts", how="inner")
     bf["scan_pnl"] = bf["sar_up"] * (bf["exit_price"] - bf["flip_price"]) * size_f
 
-
     # ── remote: backtest ORDER (entry fills) + EVAL (per-trade pnl) ──
     start_utc, end_utc = influx_range_jst(start_date, end_date)
     client = influx_client()
@@ -265,7 +264,9 @@ def verify(
 
     # ── basic verify via the general engine: entry price + pnl ──
     # scan is `local`, backtest is `remote`; every diff reads scan − backtest.
-    order_local = flips_df[["mp_ts", "flip_price"]].rename(columns={"mp_ts": "match_ts"})
+    order_local = flips_df[["mp_ts", "flip_price"]].rename(
+        columns={"mp_ts": "match_ts"}
+    )
     order_remote = (
         order_df[["ts", "EXEC_PRICE"]].rename(columns={"ts": "match_ts"})
         if not order_df.empty
@@ -299,7 +300,10 @@ def verify(
     # ── plus: risk-adjusted performance of the scan's own positions ──
     if len(bf):
         ret_bps = (
-            bf["sar_up"] * (bf["exit_price"] - bf["flip_price"]) / bf["flip_price"] * 1e4
+            bf["sar_up"]
+            * (bf["exit_price"] - bf["flip_price"])
+            / bf["flip_price"]
+            * 1e4
         )
         net_bps = (ret_bps - ROUND_TRIP_COST_BPS).to_numpy()
         exit_ts = bf["exit_ts"].to_numpy()
@@ -359,9 +363,11 @@ def _render_scan_verify(
     W = 72
     lines = [
         f"\n{'─' * W}",
-        f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        f"  {flip_exchange}/{flip_symbol}  →  {target_exchange}/{target_symbol}"
-        f"   box={box_size_rate}  step={sar_step}  size={execution_size}",
+        f"Generated: {datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        (
+            f"  {flip_exchange}/{flip_symbol}  →  {target_exchange}/{target_symbol}"
+            f"   box={box_size_rate}  step={sar_step}  size={execution_size}"
+        ),
         f"  {start_date} .. {end_date}",
         f"  {param_set_id}",
         f"{'─' * W}",

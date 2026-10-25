@@ -160,19 +160,19 @@ def fit_meta(
     n_val = max(1, int(len(tr) * 0.15))
     fit_part, val_part = tr.iloc[:-n_val], tr.iloc[-n_val:]
 
-    params = dict(
-        learning_rate=0.02,
-        num_leaves=15,
-        min_child_samples=200,
-        subsample=0.7,
-        subsample_freq=1,
-        colsample_bytree=0.7,
-        reg_lambda=5.0,
-        reg_alpha=1.0,
-        random_state=seed,
-        n_jobs=-1,
-        verbose=-1,
-    )
+    params = {
+        "learning_rate": 0.02,
+        "num_leaves": 15,
+        "min_child_samples": 200,
+        "subsample": 0.7,
+        "subsample_freq": 1,
+        "colsample_bytree": 0.7,
+        "reg_lambda": 5.0,
+        "reg_alpha": 1.0,
+        "random_state": seed,
+        "n_jobs": -1,
+        "verbose": -1,
+    }
 
     if objective == "classify":
         y_col, eval_metric = "label", "auc"
@@ -262,7 +262,7 @@ def compare_rankings(
 
     rows: list[dict] = []
     for fr in fractions:
-        k = max(1, int(round(n * fr)))
+        k = max(1, round(n * fr))
         zi, pi = z_order[:k], p_order[:k]
         rows.append(
             {

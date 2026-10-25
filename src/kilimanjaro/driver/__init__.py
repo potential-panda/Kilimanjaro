@@ -25,11 +25,11 @@ from kilimanjaro.driver.policy import (
 from kilimanjaro.driver.validate import validate_scan_spec
 
 __all__ = [
-    "run_once",
-    "process_spec",
+    "Outcome",
     "evaluate",
     "evaluate_episode",
+    "process_spec",
+    "run_once",
     "select_candidates",
-    "Outcome",
     "validate_scan_spec",
 ]

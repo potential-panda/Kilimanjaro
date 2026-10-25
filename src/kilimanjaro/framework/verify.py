@@ -149,7 +149,7 @@ def compare_frames(
         "coverage": {
             "n_local": n_local,
             "n_remote": n_remote,
-            "n_matched": int(len(l_idx)),
+            "n_matched": len(l_idx),
             "n_local_only": int((~l_matched).sum()),
             "n_remote_only": int((~r_matched).sum()),
         },

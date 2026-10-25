@@ -43,7 +43,7 @@ DEFAULT_DD_THRESHOLD_BPS = 500.0  # 5%
 DEFAULT_DD_COOLDOWN_SECONDS = 21600.0  # 6h
 
 
-def default_drawdown_gate() -> "RollingDrawdownGate":
+def default_drawdown_gate() -> RollingDrawdownGate:
     """The canonical rolling-drawdown gate applied to every scan by default."""
     return RollingDrawdownGate(
         window_seconds=DEFAULT_DD_WINDOW_SECONDS,

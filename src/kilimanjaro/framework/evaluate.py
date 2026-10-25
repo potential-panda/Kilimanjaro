@@ -29,8 +29,10 @@ separate spread cost — that would double-count.
 from __future__ import annotations
 
 import datetime
+import itertools
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.gate import Gate
@@ -413,7 +415,7 @@ def _add_plateau(rows: list[dict]) -> None:
             groups.setdefault(others, []).append(i)
         for idxs in groups.values():
             idxs.sort(key=lambda i: rows[i][key])
-            for a, b in zip(idxs, idxs[1:]):
+            for a, b in itertools.pairwise(idxs):
                 if rows[a][key] != rows[b][key]:
                     neighbors[a].append(b)
                     neighbors[b].append(a)
@@ -453,7 +455,7 @@ def _classify(r: dict, cutoff: float) -> str:
     pos_train = r["train_pos_month_share"]
     pos_holdout = r["holdout_pos_month_share"]
     plateau = r["train_plateau"]
-    on_plateau = not (plateau == plateau) or plateau >= 0.5  # NaN → benefit of doubt
+    on_plateau = plateau != plateau or plateau >= 0.5  # NaN → benefit of doubt
 
     if train_top and pos_train == pos_train and pos_train >= 0.7 and on_plateau:
         if pos_holdout == pos_holdout and pos_holdout <= 1 / 3:

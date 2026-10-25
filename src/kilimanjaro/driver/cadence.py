@@ -124,7 +124,7 @@ def run_cadence(
     deadline = time.monotonic() + max_minutes * 60 if max_minutes else None
 
     run_id = ledger_io.new_run_id()
-    started_at = datetime.datetime.now(datetime.timezone.utc)
+    started_at = datetime.datetime.now(datetime.UTC)
     digest = Digest(run_id=run_id)
     LOG.info("cadence %s started (window %s..%s)", run_id, start, end)
     n = 0
@@ -144,7 +144,7 @@ def run_cadence(
             break
         n += 1
         digest.cycles = n
-        date_str = datetime.date.today().strftime("%Y%m%d")
+        date_str = datetime.datetime.now(datetime.UTC).date().strftime("%Y%m%d")
 
         # One cycle is isolated: a failure in generate/run_once is logged and the
         # cadence moves on, so one bad cycle never takes down a days-long run.
@@ -153,7 +153,9 @@ def run_cadence(
             new_paths = (
                 []
                 if dry_run
-                else gen.generate(queue_dir, gen_per_cycle, date_str, scan_dirs=scan_dirs)
+                else gen.generate(
+                    queue_dir, gen_per_cycle, date_str, scan_dirs=scan_dirs
+                )
             )
             summary = run_once(
                 queue_dir,
@@ -164,17 +166,26 @@ def run_cadence(
                 results_root=results_root,
                 dry_run=dry_run,
             )
-        except Exception as ex:  # noqa: BLE001 — one bad cycle must not stop the run
+        except Exception as ex:
             consecutive_errors += 1
             digest.errors += 1
-            LOG.exception("cadence cycle %d failed (%d in a row)", n, consecutive_errors)
+            LOG.exception(
+                "cadence cycle %d failed (%d in a row)", n, consecutive_errors
+            )
             if on_cycle:
-                on_cycle(CycleResult(n, 0, 0, 0, {}, [], error=f"{type(ex).__name__}: {ex}"))
+                on_cycle(
+                    CycleResult(n, 0, 0, 0, {}, [], error=f"{type(ex).__name__}: {ex}")
+                )
             if consecutive_errors >= max_consecutive_errors:
                 digest.stop_reason = "too_many_errors"
-                LOG.error("cadence stopping: %d consecutive cycle failures", consecutive_errors)
+                LOG.error(
+                    "cadence stopping: %d consecutive cycle failures",
+                    consecutive_errors,
+                )
                 break
-            _interruptible_sleep(max(interval_seconds, _ERROR_BACKOFF_SECONDS), stop_requested)
+            _interruptible_sleep(
+                max(interval_seconds, _ERROR_BACKOFF_SECONDS), stop_requested
+            )
             continue
 
         consecutive_errors = 0
@@ -196,7 +207,11 @@ def run_cadence(
         digest.survivors.extend(cr.survivors)
         LOG.info(
             "cycle %d: generated=%d scanned=%d scans_run=%d survivors=%d verdicts=%s",
-            n, cr.generated, cr.scanned, cr.scans_run, len(cr.survivors),
+            n,
+            cr.generated,
+            cr.scanned,
+            cr.scans_run,
+            len(cr.survivors),
             {k: v for k, v in counts.items() if v},
         )
         if on_cycle:
@@ -213,11 +228,16 @@ def run_cadence(
 
     LOG.info(
         "cadence %s done (%s): %d cycles, %d scanned, %d scans, %d errors, %d survivors",
-        run_id, digest.stop_reason, digest.cycles, digest.scanned, digest.scans_run,
-        digest.errors, len(digest.survivors),
+        run_id,
+        digest.stop_reason,
+        digest.cycles,
+        digest.scanned,
+        digest.scans_run,
+        digest.errors,
+        len(digest.survivors),
     )
     if record_digest and not dry_run:
-        ended_at = datetime.datetime.now(datetime.timezone.utc)
+        ended_at = datetime.datetime.now(datetime.UTC)
         ledger_io.record_cadence_digest(
             run_id,
             actor_id,
@@ -230,7 +250,10 @@ def run_cadence(
                 "verdicts": digest.counts,
                 "n_survivors": len(digest.survivors),
                 "survivors": [
-                    {"hypothesis_id": s.get("hypothesis_id"), "headline": s.get("headline")}
+                    {
+                        "hypothesis_id": s.get("hypothesis_id"),
+                        "headline": s.get("headline"),
+                    }
                     for s in digest.survivors
                 ],
                 "window": [start, end],

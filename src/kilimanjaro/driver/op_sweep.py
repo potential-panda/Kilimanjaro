@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 
 import numpy as np
@@ -43,12 +44,13 @@ _IC_SUBSAMPLE = 1_500_000
 @dataclass(frozen=True)
 class Variant:
     """One factor: a base column, an operator applied to it, and a zscore window."""
+
     base: str
     base_expr: str
     op: str
     param: object
     zwin: int
-    inner: str          # the op applied to the base, before normalization
+    inner: str  # the op applied to the base, before normalization
 
     @property
     def name(self) -> str:
@@ -77,27 +79,55 @@ def _measure_base(args) -> list[dict]:
     Loads a frame containing only what this base needs plus the target's mid/bid/ask,
     evaluates variants one at a time, and returns plain dicts (picklable).
     """
-    (base, variants, markets, market_a, market_b, start, end, horizons,
-     fire_threshold, cost_bps, data_root, warmup_days) = args
+    (
+        base,
+        variants,
+        markets,
+        market_a,
+        market_b,
+        start,
+        end,
+        horizons,
+        fire_threshold,
+        cost_bps,
+        data_root,
+        warmup_days,
+    ) = args
     from datetime import datetime, timedelta
 
     from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
 
-    load_start = (datetime.strptime(start, "%Y-%m-%d")
-                  - timedelta(days=warmup_days)).strftime("%Y-%m-%d")
+    load_start = (
+        datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=UTC)
+        - timedelta(days=warmup_days)
+    ).strftime("%Y-%m-%d")
     # One expression naming every column this base needs, plus the target legs.
     load_expr = f"({variants[0].base_expr}) + (b_mid) + (b_bid) + (b_ask)"
     try:
         frame = ExpressionSignal.create(
-            markets=markets, expr=load_expr, threshold=0.0, min_age=None, max_age=None,
-            invert=False, label="op_sweep").load_data(load_start, end, Path(data_root))
-    except Exception as exc:  # a base whose source is missing on this pair — skip, don't crash
-        return [{"market_a": market_a, "market_b": market_b, "base": base,
-                 "error": f"{type(exc).__name__}: {exc}"}]
+            markets=markets,
+            expr=load_expr,
+            threshold=0.0,
+            min_age=None,
+            max_age=None,
+            invert=False,
+            label="op_sweep",
+        ).load_data(load_start, end, Path(data_root))
+    except Exception as exc:  # noqa: BLE001 - an unavailable optional source is returned as a row
+        return [
+            {
+                "market_a": market_a,
+                "market_b": market_b,
+                "base": base,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        ]
 
     ts = frame["ts"].to_numpy(dtype=float)
     sec = np.floor(ts).astype(np.int64)
-    in_win = sec >= int(datetime.strptime(start, "%Y-%m-%d").timestamp())
+    in_win = sec >= int(
+        datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=UTC).timestamp()
+    )
     mid = np.asarray(eval_expr("b_mid", frame), dtype=float)
     bid = np.asarray(eval_expr("b_bid", frame), dtype=float)
     ask = np.asarray(eval_expr("b_ask", frame), dtype=float)
@@ -112,16 +142,33 @@ def _measure_base(args) -> list[dict]:
     for var in variants:
         try:
             v_full = np.asarray(eval_expr(var.expr, frame), dtype=float)
-        except Exception as exc:
-            rows.append({"market_a": market_a, "market_b": market_b, "base": base,
-                         "op": var.op, "param": var.param, "zwin": var.zwin,
-                         "factor": var.name, "expr": var.expr,
-                         "error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:  # noqa: BLE001 - an invalid candidate is returned as a row
+            rows.append(
+                {
+                    "market_a": market_a,
+                    "market_b": market_b,
+                    "base": base,
+                    "op": var.op,
+                    "param": var.param,
+                    "zwin": var.zwin,
+                    "factor": var.name,
+                    "expr": var.expr,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
             continue
         v = v_full[win_idx]
-        row = {"market_a": market_a, "market_b": market_b, "base": base,
-               "base_expr": var.base_expr, "op": var.op, "param": var.param,
-               "zwin": var.zwin, "factor": var.name, "fire_threshold": fire_threshold}
+        row = {
+            "market_a": market_a,
+            "market_b": market_b,
+            "base": base,
+            "base_expr": var.base_expr,
+            "op": var.op,
+            "param": var.param,
+            "zwin": var.zwin,
+            "factor": var.name,
+            "fire_threshold": fire_threshold,
+        }
         n_min, peak_ic, peak_h, best_net, best_net_h = None, np.nan, None, -np.inf, None
         for h in horizons:
             r = fwd[h][win_idx]
@@ -134,7 +181,8 @@ def _measure_base(args) -> list[dict]:
                 a, b = pd.Series(v[ok]), pd.Series(r[ok])
                 corr, ric = float(a.corr(b)), float(a.corr(b, method="spearman"))
             g, net, n_fire, se = _executable_bps(
-                v, win_idx, h, n_rows, mid, bid, ask, fire_threshold, cost_bps)
+                v, win_idx, h, n_rows, mid, bid, ask, fire_threshold, cost_bps
+            )
             row[f"corr{h}"] = round(corr, 5)
             row[f"ic{h}"] = round(ric, 5)
             row[f"gross{h}"] = g
@@ -162,10 +210,19 @@ def _shift_ratio(mid: np.ndarray, h: int) -> np.ndarray:
     return out
 
 
-def run_sweep(cfg: dict, start: str, end: str, horizons: list[int], *,
-              fire_threshold: float = 2.0, cost_bps: float = 1.0,
-              workers: int | None = None, data_root: Path = _DEFAULT_DATA_ROOT,
-              warmup_days: int = _WARMUP_DAYS, progress=print) -> pd.DataFrame:
+def run_sweep(
+    cfg: dict,
+    start: str,
+    end: str,
+    horizons: list[int],
+    *,
+    fire_threshold: float = 2.0,
+    cost_bps: float = 1.0,
+    workers: int | None = None,
+    data_root: Path = _DEFAULT_DATA_ROOT,
+    warmup_days: int = _WARMUP_DAYS,
+    progress=print,
+) -> pd.DataFrame:
     """Run the full base x op grid for one market pair. Parallel over BASE columns."""
     import multiprocessing as mp
 
@@ -179,13 +236,29 @@ def run_sweep(cfg: dict, start: str, end: str, horizons: list[int], *,
     for v in variants:
         by_base.setdefault(v.base, []).append(v)
     workers = workers or min(16, os.cpu_count() or 4)
-    progress(f"op-sweep {market_a} -> {market_b} | {len(by_base)} bases x "
-             f"{len(variants)//max(len(by_base),1)} variants = {len(variants):,} factors "
-             f"| {len(horizons)} horizons | {start}..{end} | {workers} workers")
+    progress(
+        f"op-sweep {market_a} -> {market_b} | {len(by_base)} bases x "
+        f"{len(variants) // max(len(by_base), 1)} variants = {len(variants):,} factors "
+        f"| {len(horizons)} horizons | {start}..{end} | {workers} workers"
+    )
 
-    tasks = [(base, vs, markets, market_a, market_b, start, end, horizons,
-              fire_threshold, cost_bps, str(data_root), warmup_days)
-             for base, vs in by_base.items()]
+    tasks = [
+        (
+            base,
+            vs,
+            markets,
+            market_a,
+            market_b,
+            start,
+            end,
+            horizons,
+            fire_threshold,
+            cost_bps,
+            str(data_root),
+            warmup_days,
+        )
+        for base, vs in by_base.items()
+    ]
     rows: list[dict] = []
     with mp.get_context("spawn").Pool(workers) as pool:
         for i, out in enumerate(pool.imap_unordered(_measure_base, tasks), 1):
@@ -194,7 +267,9 @@ def run_sweep(cfg: dict, start: str, end: str, horizons: list[int], *,
                 progress(f"  {i}/{len(tasks)} bases  ({len(rows):,} rows)")
     df = pd.DataFrame(rows)
     if "peak_ic" in df.columns:
-        df = df.reindex(df.peak_ic.abs().sort_values(ascending=False, na_position="last").index)
+        df = df.reindex(
+            df.peak_ic.abs().sort_values(ascending=False, na_position="last").index
+        )
     return df.reset_index(drop=True)
 
 

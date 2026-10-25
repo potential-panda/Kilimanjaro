@@ -4,6 +4,7 @@ offline (Kilimanjaro): eval `zscore(a_mid / b_mid, 3600)` over the Makalu featur
 online  (Himalaya):    InfluxDB measurement TRADING, field "basis_3600".
 note: as basis_900, longer window
 """
+
 from kilimanjaro.calibration.base import FactorCalib
 
 FACTOR = FactorCalib(

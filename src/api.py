@@ -37,7 +37,11 @@ _GRID_SCAN_DIR = _ROOT / "cycle" / "15_return_eval" / "grid_scan"
 _SCAN_KINDS = ("flip", "horizon", "expr")
 
 sys.path.insert(0, str(_ROOT / "src"))
-from kilimanjaro.ledger.core import _latest_status, load_events, load_hypotheses  # noqa: E402
+from kilimanjaro.ledger.core import (
+    _latest_status,
+    load_events,
+    load_hypotheses,
+)
 
 app = Flask(__name__, static_folder=str(_WEB_DIR))
 

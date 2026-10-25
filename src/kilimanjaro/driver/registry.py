@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -123,7 +123,7 @@ def _status_and_decisions(hyp_id: str, events: list[dict]) -> tuple[str, list[di
     if not decisions:
         decisions = [
             {
-                "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "actor": "agent",
                 "decision": "draft",
                 "reason": "proposed by the generator; no ledger activity yet",

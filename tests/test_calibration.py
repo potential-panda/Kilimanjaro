@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.framework import calibration as C  # noqa: E402
+from kilimanjaro.framework import calibration as C
 
 
 class TestCalibrationRegistry(unittest.TestCase):

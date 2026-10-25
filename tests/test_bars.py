@@ -1,8 +1,11 @@
 """Bar clocks: the neutral decision-point stream for the continuous framework."""
-import sys, unittest
+import sys
+import unittest
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import numpy as np
+
 from kilimanjaro.data.bars import bar_closes, runs_to_signals
 
 
@@ -62,7 +65,7 @@ class TestRunCompression(unittest.TestCase):
         ts = np.arange(8, dtype=float)
         ci = np.array([0, 2, 4, 6])
         d = np.array([1., np.nan, 0., -1.])
-        e_ts, e_d, x_ts = runs_to_signals(ci, d, ts)
+        _e_ts, e_d, x_ts = runs_to_signals(ci, d, ts)
         self.assertEqual(list(e_d), [1.0])
         self.assertEqual(list(x_ts), [6.0])
 

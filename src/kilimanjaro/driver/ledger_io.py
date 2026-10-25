@@ -94,7 +94,7 @@ def record_scan_attached(
 
 def new_run_id(at: datetime.datetime | None = None) -> str:
     """Run-level id for a cadence run: run-YYYYMMDDTHHMMSSZ (UTC)."""
-    at = at or datetime.datetime.now(datetime.timezone.utc)
+    at = at or datetime.datetime.now(datetime.UTC)
     return at.strftime("run-%Y%m%dT%H%M%SZ")
 
 

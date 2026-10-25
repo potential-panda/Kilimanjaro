@@ -10,44 +10,44 @@ import argparse
 _COMMON_FLIP_ARGS = [
     (
         "--flip-exchange",
-        dict(required=True, help="Exchange that generates flips (e.g. BINANCE)"),
+        {"required": True, "help": "Exchange that generates flips (e.g. BINANCE)"},
     ),
-    ("--flip-symbol", dict(required=True, help="Symbol for flips (e.g. ETH_USDT)")),
+    ("--flip-symbol", {"required": True, "help": "Symbol for flips (e.g. ETH_USDT)"}),
     (
         "--target-exchange",
-        dict(required=True, help="Exchange to measure returns on (e.g. GMO)"),
+        {"required": True, "help": "Exchange to measure returns on (e.g. GMO)"},
     ),
     (
         "--target-symbol",
-        dict(required=True, help="Symbol to measure returns on (e.g. ETH_JPY)"),
+        {"required": True, "help": "Symbol to measure returns on (e.g. ETH_JPY)"},
     ),
-    ("--start", dict(required=True, help="Start date YYYY-MM-DD")),
-    ("--end", dict(required=True, help="End date YYYY-MM-DD")),
+    ("--start", {"required": True, "help": "Start date YYYY-MM-DD"}),
+    ("--end", {"required": True, "help": "End date YYYY-MM-DD"}),
     (
         "--box-size-rate",
-        dict(
-            dest="box_size_rate",
-            type=float,
-            default=0.0025,
-            help="Range bar size rate (e.g. 0.003)",
-        ),
+        {
+            "dest": "box_size_rate",
+            "type": float,
+            "default": 0.0025,
+            "help": "Range bar size rate (e.g. 0.003)",
+        },
     ),
     (
         "--sar-step",
-        dict(
-            dest="sar_step",
-            type=float,
-            default=0.02,
-            help="Parabolic SAR step (e.g. 0.04)",
-        ),
+        {
+            "dest": "sar_step",
+            "type": float,
+            "default": 0.02,
+            "help": "Parabolic SAR step (e.g. 0.04)",
+        },
     ),
     (
         "--execution-size",
-        dict(
-            dest="execution_size",
-            default="150",
-            help="MarketPrice execution size partition (e.g. 0.3 for ETH_JPY)",
-        ),
+        {
+            "dest": "execution_size",
+            "default": "150",
+            "help": "MarketPrice execution size partition (e.g. 0.3 for ETH_JPY)",
+        },
     ),
 ]
 
@@ -80,8 +80,8 @@ def _run_verify(args: argparse.Namespace) -> int:
 
     from kilimanjaro.dataset import backtest
 
-    box_int = int(round(args.box_size_rate * 100_000))
-    step_int = int(round(args.sar_step * 1_000))
+    box_int = round(args.box_size_rate * 100_000)
+    step_int = round(args.sar_step * 1_000)
     sym = args.target_symbol.replace("/", "_")
     out_path = (
         Path("cycle/15_return_eval")

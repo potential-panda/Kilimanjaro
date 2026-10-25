@@ -81,7 +81,7 @@ def validate_expr(expr: str) -> list[str]:
     columns: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, _ALLOWED_NODES):
-            raise ValueError(
+            raise TypeError(
                 f"disallowed syntax {type(node).__name__!r} in expression: {expr}"
             )
         if isinstance(node, ast.Call):
@@ -108,7 +108,7 @@ def eval_expr(expr: str, frame: pd.DataFrame) -> pd.Series:
         raise ValueError(f"expression needs columns missing from frame: {missing}")
     namespace = {**OPS, **{c: frame[c] for c in columns}}
     return pd.Series(
-        eval(  # noqa: S307 — AST-allowlisted above
+        eval(
             compile(ast.parse(expr, mode="eval"), "<expr>", "eval"),
             {"__builtins__": {}},
             namespace,
@@ -157,7 +157,7 @@ class ExpressionSignal:
         max_age: int | None = None,
         invert: bool = False,
         label: str | None = None,
-    ) -> "ExpressionSignal":
+    ) -> ExpressionSignal:
         validate_expr(expr)  # fail fast at construction
         return cls(
             markets_key=_freeze_markets(markets),

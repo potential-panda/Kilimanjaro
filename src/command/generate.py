@@ -15,23 +15,42 @@ def register(sub: argparse._SubParsersAction) -> None:
         "generate",
         help="Propose new formula scan specs into the loop queue (stage B)",
     )
-    p.add_argument("--queue", default="cycle/12_specs",
-                   help="Where to write proposed specs (default cycle/12_specs)")
-    p.add_argument("--limit", type=int, default=5,
-                   help="Max new specs to propose this call (default 5)")
-    p.add_argument("--date", default=None,
-                   help="Date stamp for hypothesis ids YYYYMMDD (default today)")
-    p.add_argument("--scan-dirs", nargs="*", default=["cycle/12_specs"],
-                   help="Dirs scanned for existing specs (dedup source)")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Print what would be proposed; do not write files")
+    p.add_argument(
+        "--queue",
+        default="cycle/12_specs",
+        help="Where to write proposed specs (default cycle/12_specs)",
+    )
+    p.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Max new specs to propose this call (default 5)",
+    )
+    p.add_argument(
+        "--date",
+        default=None,
+        help="Date stamp for hypothesis ids YYYYMMDD (default today)",
+    )
+    p.add_argument(
+        "--scan-dirs",
+        nargs="*",
+        default=["cycle/12_specs"],
+        help="Dirs scanned for existing specs (dedup source)",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be proposed; do not write files",
+    )
     p.set_defaults(func=_run_generate)
 
 
 def _run_generate(args: argparse.Namespace) -> int:
     from kilimanjaro.driver import generate as gen
 
-    date_str = args.date or datetime.date.today().strftime("%Y%m%d")
+    date_str = args.date or datetime.datetime.now(datetime.UTC).date().strftime(
+        "%Y%m%d"
+    )
     scan_dirs = [Path(d) for d in args.scan_dirs]
     seen = gen.existing_signatures(*scan_dirs)
     seq = gen.next_seq(date_str, *scan_dirs)
@@ -43,14 +62,18 @@ def _run_generate(args: argparse.Namespace) -> int:
     )
 
     if not specs:
-        print("Nothing new to propose — every viable formula is already queued or tested.")
+        print(
+            "Nothing new to propose — every viable formula is already queued or tested."
+        )
         return 0
 
     print(f"Proposing {len(specs)} new spec(s):")
     for s in specs:
         exprs = ", ".join(e["label"] for e in s["expressions"])
-        print(f"  {s['hypothesis_id']}  [{s['family']}]  {s['target']['exchange']}/"
-              f"{s['target']['symbol']}  ({exprs})")
+        print(
+            f"  {s['hypothesis_id']}  [{s['family']}]  {s['target']['exchange']}/"
+            f"{s['target']['symbol']}  ({exprs})"
+        )
 
     if args.dry_run:
         print("\n(dry-run: no files written)")
@@ -61,7 +84,9 @@ def _run_generate(args: argparse.Namespace) -> int:
     entries = gen.write_registry_entries(specs, gen.registry_dir_for(queue_dir))
     shared = len(specs) - len(entries)
     note = f", {shared} joining an existing hypothesis" if shared else ""
-    print(f"\nWrote {len(paths)} spec(s) to {args.queue}/ and "
-          f"{len(entries)} new hypothesis entry(ies){note}.")
+    print(
+        f"\nWrote {len(paths)} spec(s) to {args.queue}/ and "
+        f"{len(entries)} new hypothesis entry(ies){note}."
+    )
     print("Run `cli.py loop` to scan them.")
     return 0

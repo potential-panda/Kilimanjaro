@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.driver.generate import _priority_order, family_scores  # noqa: E402
+from kilimanjaro.driver.generate import _priority_order, family_scores
 
 
 class TestPriorityOrder(unittest.TestCase):

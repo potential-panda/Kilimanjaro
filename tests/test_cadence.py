@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.driver import cadence  # noqa: E402
-from kilimanjaro.ledger.core import load_events  # noqa: E402
+from kilimanjaro.driver import cadence
+from kilimanjaro.ledger.core import load_events
 
 _SUMMARY = {
     "n_specs": 3,

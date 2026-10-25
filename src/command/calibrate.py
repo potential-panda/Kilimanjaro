@@ -25,33 +25,70 @@ def register(sub: argparse._SubParsersAction) -> None:
         "calibrate",
         help="Exact-match offline (Makalu) vs online (InfluxDB) factor series",
     )
-    p.add_argument("factor", nargs="?", default="all",
-                   help="factor name (see --list) or 'all' (default)")
+    p.add_argument(
+        "factor",
+        nargs="?",
+        default="all",
+        help="factor name (see --list) or 'all' (default)",
+    )
     p.add_argument("--start", help="window start YYYY-MM-DD")
     p.add_argument("--end", help="window end YYYY-MM-DD")
-    p.add_argument("--bucket", default=DEFAULT_BUCKET,
-                   help=f"InfluxDB bucket with the TRADING factors (default {DEFAULT_BUCKET})")
-    p.add_argument("--tol", type=float, default=None,
-                   help="match tolerance on the factor value (default: per-factor)")
-    p.add_argument("--list", action="store_true",
-                   help="list factors + calibration status and exit")
-    p.add_argument("--mismatches", type=int, default=5,
-                   help="worst-N mismatching seconds to print for sub-target factors")
-    p.add_argument("--trades", action="store_true",
-                   help="calibrate the TRADE layer (orders + return) instead of factors: "
-                        "run the scan and match its round-trips against Himalaya's ORDER stream")
-    p.add_argument("--px-tol", type=float, default=1.0,
-                   help="[--trades] entry/exit price match tolerance in JPY (default 1.0)")
-    p.add_argument("--ret-tol", type=float, default=0.5,
-                   help="[--trades] per-trade return match tolerance in bps (default 0.5)")
-    p.add_argument("--no-dd-gate", action="store_true",
-                   help="[--trades] drop the rolling-drawdown gate from the scan")
-    p.add_argument("--variant", default="v3", choices=["v1", "v3"],
-                   help="[--trades] exit mechanism to match the bucket's aquila --variant: "
-                        "v3 trailing stop (default) or v1 triple barrier")
-    p.add_argument("--spec", default="composite_coincheck.yaml",
-                   help="[--trades] spec filename in cycle/18_handoffs/blend-btc-jpy-us-z35/ "
-                        "(default composite_coincheck.yaml; use composite.yaml for GMO BTC_JPY)")
+    p.add_argument(
+        "--bucket",
+        default=DEFAULT_BUCKET,
+        help=f"InfluxDB bucket with the TRADING factors (default {DEFAULT_BUCKET})",
+    )
+    p.add_argument(
+        "--tol",
+        type=float,
+        default=None,
+        help="match tolerance on the factor value (default: per-factor)",
+    )
+    p.add_argument(
+        "--list", action="store_true", help="list factors + calibration status and exit"
+    )
+    p.add_argument(
+        "--mismatches",
+        type=int,
+        default=5,
+        help="worst-N mismatching seconds to print for sub-target factors",
+    )
+    p.add_argument(
+        "--trades",
+        action="store_true",
+        help="calibrate the TRADE layer (orders + return) instead of factors: "
+        "run the scan and match its round-trips against Himalaya's ORDER stream",
+    )
+    p.add_argument(
+        "--px-tol",
+        type=float,
+        default=1.0,
+        help="[--trades] entry/exit price match tolerance in JPY (default 1.0)",
+    )
+    p.add_argument(
+        "--ret-tol",
+        type=float,
+        default=0.5,
+        help="[--trades] per-trade return match tolerance in bps (default 0.5)",
+    )
+    p.add_argument(
+        "--no-dd-gate",
+        action="store_true",
+        help="[--trades] drop the rolling-drawdown gate from the scan",
+    )
+    p.add_argument(
+        "--variant",
+        default="v3",
+        choices=["v1", "v3"],
+        help="[--trades] exit mechanism to match the bucket's aquila --variant: "
+        "v3 trailing stop (default) or v1 triple barrier",
+    )
+    p.add_argument(
+        "--spec",
+        default="composite_coincheck.yaml",
+        help="[--trades] spec filename in cycle/18_handoffs/blend-btc-jpy-us-z35/ "
+        "(default composite_coincheck.yaml; use composite.yaml for GMO BTC_JPY)",
+    )
     p.set_defaults(func=_run)
 
 
@@ -70,7 +107,9 @@ def _run(args) -> int:
         return _run_trades(args)
 
     names = registry.FACTOR_NAMES if args.factor == "all" else [args.factor]
-    print(f"calibrate {len(names)} factor(s) | window {args.start}..{args.end} | bucket {args.bucket}")
+    print(
+        f"calibrate {len(names)} factor(s) | window {args.start}..{args.end} | bucket {args.bucket}"
+    )
     below = []
     for name in names:
         f = registry.load(name)
@@ -88,7 +127,9 @@ def _run(args) -> int:
         for sec, off, on, d in r.mismatches[: args.mismatches]:
             print(f"    {sec}  {off:+.6f}  {on:+.6f}  {d:.6f}")
     if below:
-        print(f"\n{len(below)}/{len(names)} factor(s) below target — inspect + fix, then re-run.")
+        print(
+            f"\n{len(below)}/{len(names)} factor(s) below target — inspect + fix, then re-run."
+        )
     return 0
 
 
@@ -101,17 +142,21 @@ def _run_trades(args) -> int:
     from kilimanjaro.calibration.trades import ScanConfig, TradeCalib
 
     root = Path(__file__).resolve().parents[2]
-    spec_path = (root / "cycle" / "18_handoffs" / "blend-btc-jpy-us-z35" / args.spec)
+    spec_path = root / "cycle" / "18_handoffs" / "blend-btc-jpy-us-z35" / args.spec
     spec = yaml.safe_load(spec_path.read_text())
-    cfg = ScanConfig.from_bucket(args.bucket, use_dd_gate=not args.no_dd_gate,
-                                 variant=args.variant)
+    cfg = ScanConfig.from_bucket(
+        args.bucket, use_dd_gate=not args.no_dd_gate, variant=args.variant
+    )
     print(f"calibrate TRADES | window {args.start}..{args.end} | bucket {args.bucket}")
-    print(f"  scan cfg: variant {cfg.variant} thr {cfg.threshold} barrier {cfg.barrier_bps} "
-          f"cap {cfg.time_cap_s} fill_delay {cfg.fill_delay_seconds} dd_gate {cfg.use_dd_gate} "
-          f"(win {cfg.dd_window_s:.0f}/thr {cfg.dd_threshold_bps}/cd {cfg.dd_cooldown_s:.0f})")
+    print(
+        f"  scan cfg: variant {cfg.variant} thr {cfg.threshold} barrier {cfg.barrier_bps} "
+        f"cap {cfg.time_cap_s} fill_delay {cfg.fill_delay_seconds} dd_gate {cfg.use_dd_gate} "
+        f"(win {cfg.dd_window_s:.0f}/thr {cfg.dd_threshold_bps}/cd {cfg.dd_cooldown_s:.0f})"
+    )
     calib = TradeCalib(spec, spec["markets"], cfg)
-    r = calib.calibrate(args.bucket, args.start, args.end,
-                        px_tol=args.px_tol, ret_tol=args.ret_tol)
+    r = calib.calibrate(
+        args.bucket, args.start, args.end, px_tol=args.px_tol, ret_tol=args.ret_tol
+    )
     print(r.summary())
     if r.divergences:
         print(f"\n  first divergences (max {len(r.divergences)}):")

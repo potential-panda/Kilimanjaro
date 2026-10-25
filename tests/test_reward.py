@@ -8,12 +8,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.framework.costs import (  # noqa: E402
+from kilimanjaro.framework.costs import (
     PER_ORDER_SLIPPAGE_BPS,
     ROUND_TRIP_COST_BPS,
     round_trip_cost_bps,
 )
-from kilimanjaro.framework.evaluate import _bh_significant  # noqa: E402
+from kilimanjaro.framework.evaluate import _bh_significant
 
 
 class TestBenjaminiHochberg(unittest.TestCase):
@@ -59,7 +59,7 @@ class TestCostPolicy(unittest.TestCase):
 
     def test_no_spread_estimator_exists(self):
         # the spread-estimate cost path was removed on purpose
-        import kilimanjaro.framework.costs as costs
+        from kilimanjaro.framework import costs
         self.assertFalse(hasattr(costs, "estimate_round_trip_cost_bps"))
 
 

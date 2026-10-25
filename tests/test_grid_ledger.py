@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.ledger.grid import record_grid_scan  # noqa: E402
+from kilimanjaro.ledger.grid import record_grid_scan
 
 
 def _fake_res(stable_rows):

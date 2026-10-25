@@ -18,7 +18,7 @@ from __future__ import annotations
 import datetime as _dt
 import sys
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -34,7 +34,7 @@ _JST_OFFSET = 9 * 3600
 _REF_MONDAY = _dt.datetime(2026, 2, 2)  # a Monday: probe every (weekday, hour)
 
 
-@lru_cache(maxsize=None)
+@cache
 def _allowed_table(version: str) -> tuple[bool, ...]:
     """orion.check() materialized as a flat 7*24 bool tuple (weekday-major).
 

@@ -29,20 +29,20 @@ logging.basicConfig(
 def main() -> int:
     from command import (
         blend,
+        blend_corr,
         calibrate,
         cont_batch,
         factory,
         generate,
         grid,
-        ledger,
-        blend_corr,
-        signal_corr,
         learn,
+        ledger,
         loop,
         meta,
         op_sweep,
         populate,
         return_eval,
+        signal_corr,
         verify,
         verify_scan,
     )

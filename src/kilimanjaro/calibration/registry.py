@@ -24,8 +24,13 @@ import yaml
 
 _ROOT = Path(__file__).resolve().parents[3]  # repo root
 _SPEC = yaml.safe_load(
-    (_ROOT / "cycle" / "18_handoffs" / "blend-btc-jpy-us-z35"
-     / "composite_coincheck.yaml").read_text()
+    (
+        _ROOT
+        / "cycle"
+        / "18_handoffs"
+        / "blend-btc-jpy-us-z35"
+        / "composite_coincheck.yaml"
+    ).read_text()
 )
 
 # Offline market aliases the factor expressions reference (a=leader, b=basis leg).
@@ -38,20 +43,34 @@ DEFAULT_BUCKET = "backtest_AQUILA_COINCHECK_BTC_SPOT_0.002__3.5_10.0_300"
 
 # In composite order (see composite_coincheck.yaml). One module per name in factors/.
 FACTOR_NAMES = [
-    "basis_900", "basis_3600",
-    "mom_30", "mom_120", "mom_300",
-    "obi_ema_k1_30", "obi_ema_k1_120", "obi_ema_k5_30",
-    "imb_qty_5", "imb_qty_30", "net_flow_10",
-    "vwapdev_10", "vwapdev_60",
-    "aggcount_10", "aggcount_60",
-    "large_trade", "book_shape",
-    "wimb_k1", "wimb_k5",
+    "basis_900",
+    "basis_3600",
+    "mom_30",
+    "mom_120",
+    "mom_300",
+    "obi_ema_k1_30",
+    "obi_ema_k1_120",
+    "obi_ema_k5_30",
+    "imb_qty_5",
+    "imb_qty_30",
+    "net_flow_10",
+    "vwapdev_10",
+    "vwapdev_60",
+    "aggcount_10",
+    "aggcount_60",
+    "large_trade",
+    "book_shape",
+    "wimb_k1",
+    "wimb_k5",
     "composite_z",  # the end-to-end signal
     # RAW inputs (r_ prefix) — diagnostics to localise a mismatch to the raw
     # book/trade computation vs the zscore. Emitted by aquila alongside the factors.
-    "r_a_mid", "r_b_mid",
-    "r_vol_imb_k1", "r_vol_imb_k5",
-    "r_weighted_imb_k1", "r_weighted_imb_k5",
+    "r_a_mid",
+    "r_b_mid",
+    "r_vol_imb_k1",
+    "r_vol_imb_k5",
+    "r_weighted_imb_k1",
+    "r_weighted_imb_k5",
     "r_obi_ema_k1_30s",
 ]
 

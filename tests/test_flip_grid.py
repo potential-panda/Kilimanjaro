@@ -9,8 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.driver import flip_grid  # noqa: E402
-from kilimanjaro.framework.orion_schedule import OrionScheduleFilter  # noqa: E402
+from kilimanjaro.driver import flip_grid
+from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
 
 
 class TestFlipGrid(unittest.TestCase):
@@ -29,7 +29,7 @@ class TestFlipGrid(unittest.TestCase):
         combos = flip_grid.build_combos(flip_grid.MARKET_CONFIGS["btc"])
         # 7 boxes × 5 steps × 7 schedule versions
         self.assertEqual(len(combos), len(flip_grid.BOXES) * len(flip_grid.STEPS) * 7)
-        sig, rc, sched = combos[0]
+        sig, _rc, sched = combos[0]
         self.assertIsInstance(sched, OrionScheduleFilter)  # orion-backed schedule
         self.assertEqual(sched.has_exit_col, "exit_ts")
         self.assertEqual(sig.flip_exchange, "BINANCE")

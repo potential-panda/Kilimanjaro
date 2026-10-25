@@ -1,8 +1,11 @@
 """Stage 14 blend_corr — pure helpers for the multi-method blend scan."""
-import sys, unittest
+import sys
+import unittest
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import numpy as np
+
 from kilimanjaro.driver.blend_corr import _greedy_weights, _ic
 
 

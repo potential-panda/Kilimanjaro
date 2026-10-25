@@ -18,12 +18,12 @@ from pathlib import Path
 import yaml
 
 from kilimanjaro.driver import ledger_io
-from kilimanjaro.driver.return_eval import run_episode_retest
 from kilimanjaro.driver.policy import (
     Outcome,
     evaluate_episode,
     select_candidates,
 )
+from kilimanjaro.driver.return_eval import run_episode_retest
 from kilimanjaro.driver.review_packet import write_review_packet
 from kilimanjaro.driver.scan_runner import run_spec
 from kilimanjaro.driver.validate import validate_scan_spec
@@ -106,8 +106,13 @@ def process_spec(
         ep_dir = None
         if candidates:
             ep = run_episode_retest(
-                spec, candidates, s, e,
-                results_root=results_root, screening_scan_id=scan_id, split=split,
+                spec,
+                candidates,
+                s,
+                e,
+                results_root=results_root,
+                screening_scan_id=scan_id,
+                split=split,
             )
             if ep is not None:
                 ep_res, ep_dir, ep_scan_id = ep
@@ -118,15 +123,18 @@ def process_spec(
                     ep_res, len(candidates), res["params"]["n_combos"]
                 )
             else:
-                outcome = evaluate_episode({"rows": [], "params": {"n_combos": 0}},
-                                           len(candidates), res["params"]["n_combos"])
+                outcome = evaluate_episode(
+                    {"rows": [], "params": {"n_combos": 0}},
+                    len(candidates),
+                    res["params"]["n_combos"],
+                )
         else:
             # No rank-stable candidate — fail at the screening tier, no episode run.
             outcome = Outcome(
                 passed=False,
                 status="scan-failed",
                 headline=f"0/{res['params']['n_combos']} rank-stable candidates "
-                         f"— no episode re-test",
+                f"— no episode re-test",
                 n_stable=0,
                 n_survivors=0,
                 n_combos=res["params"]["n_combos"],
@@ -165,7 +173,7 @@ def process_spec(
             "episode_folder": str(ep_dir) if ep_dir else None,
             "review_packet": str(packet) if packet else None,
         }
-    except Exception as ex:  # noqa: BLE001 — one bad spec must not stop the loop
+    except Exception as ex:
         LOG.exception("scan failed for %s (%s)", scan_name, hyp)
         # No terminal status recorded -> retryable when the cause (e.g. missing
         # data) clears. Fingerprint stays un-recorded so it is retried.
@@ -192,6 +200,7 @@ def run_once(
     # One idea -> one hypothesis (many specs). Warn (don't block) if the queue
     # breaks it — the generator never does; a hand-added spec might.
     from kilimanjaro.driver.validate import idea_consistency_errors
+
     loaded = []
     for p in specs:
         try:

@@ -11,11 +11,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.driver import ledger_io  # noqa: E402
-from kilimanjaro.driver.loop import process_spec  # noqa: E402
-from kilimanjaro.driver.policy import evaluate  # noqa: E402
-from kilimanjaro.driver.validate import validate_scan_spec  # noqa: E402
-from kilimanjaro.driver import blend_corr as blend_mod  # noqa: E402
+from kilimanjaro.driver import blend_corr as blend_mod
+from kilimanjaro.driver.loop import process_spec
+from kilimanjaro.driver.policy import evaluate
+from kilimanjaro.driver.validate import validate_scan_spec
 
 _GOOD_SPEC = {
     "hypothesis_id": "hyp-20260716-999",
@@ -370,6 +369,7 @@ class TestMetaLabel(unittest.TestCase):
     def test_compare_rankings_prefers_better_selector(self):
         import numpy as np
         import pandas as pd
+
         from kilimanjaro.driver import meta_label as ml
         # 100 trades. |strength| is uninformative (constant); the meta pred is
         # perfectly aligned with net, so the meta ranking must dominate at every
@@ -390,6 +390,7 @@ class TestMetaLabel(unittest.TestCase):
     def test_fit_meta_learns_separable_signal(self):
         import numpy as np
         import pandas as pd
+
         from kilimanjaro.driver import meta_label as ml
         rng = np.random.default_rng(0)
         n = 4000
@@ -413,6 +414,7 @@ class TestMetaLabel(unittest.TestCase):
     def test_fit_meta_regress_ranks_by_magnitude(self):
         import numpy as np
         import pandas as pd
+
         from kilimanjaro.driver import meta_label as ml
         rng = np.random.default_rng(1)
         n = 4000
@@ -434,6 +436,7 @@ class TestMetaLabel(unittest.TestCase):
     def test_natural_operating_point_regress_cut(self):
         import numpy as np
         import pandas as pd
+
         from kilimanjaro.driver import meta_label as ml
         net = np.array([-2.0, -1.0, 1.0, 2.0])
         holdout = pd.DataFrame({"net_bps": net, "strength": np.ones(4)})
@@ -448,6 +451,7 @@ class TestExitModeDistribution(unittest.TestCase):
 
     def test_classifies_timeout_barrier_tp_stop(self):
         import pandas as pd
+
         from kilimanjaro.driver import learn_metrics as lm
         # cap=300, barrier=10. 4 trades:
         #  A timeout (elapsed 300 >= cap), ret -0.5  -> net -1.5
@@ -473,6 +477,7 @@ class TestExitModeDistribution(unittest.TestCase):
 
     def test_empty_trades(self):
         import pandas as pd
+
         from kilimanjaro.driver import learn_metrics as lm
         r = lm.exit_mode_distribution("blend", pd.DataFrame(), barrier_bps=10.0, time_cap=300)
         self.assertEqual(r["n_trades"], 0)

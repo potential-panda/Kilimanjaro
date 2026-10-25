@@ -38,7 +38,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
-import inventory as _inventory  # noqa: E402
+import inventory as _inventory
 
 _SUPPORTED_TARGET_TYPES = {"next_return", "spread_adjusted_return"}
 _SUPPORTED_DATASET = "OrderBook"  # v1 scanner.py only reads bronze OrderBook

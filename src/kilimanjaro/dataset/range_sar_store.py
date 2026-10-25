@@ -25,11 +25,12 @@ import datetime
 import logging
 from collections import deque
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
-import qate.env.sys_env as sys_env
 from orion.parabolic_sar import ParabolicSarIndicator
 from qate.core.model import Market
+from qate.env import sys_env
 from qate.store.parquet_store import Layer, ParquetStore, SingleMarketStore, TradeStore
 from qate.trading.chart import RangeBarBuilder
 from qate.util.dt_range import DtRange
@@ -45,6 +46,7 @@ LOG = logging.getLogger(__name__)
 
 _CHART_LEN = 5  # matches orion's BarChart(max_len=5)
 _CHUNK_DAYS = 7  # process this many days per memory chunk
+_JST = ZoneInfo("Asia/Tokyo")
 
 
 class ChartRangeSARStore(SingleMarketStore):
@@ -110,12 +112,13 @@ def populate(
         )
 
     warmup_start = (
-        datetime.datetime.strptime(start_date, "%Y-%m-%d")
-        - datetime.timedelta(days=warmup_days)
-    ).strftime("%Y-%m-%d")
+        datetime.date.fromisoformat(start_date) - datetime.timedelta(days=warmup_days)
+    ).isoformat()
     process_range = DtRange.from_strings(warmup_start, end_date)
     # Unix timestamp of the first moment of start_date in local (JST) time
-    cutoff_ts = datetime.datetime.strptime(start_date, "%Y-%m-%d").timestamp()
+    cutoff_ts = datetime.datetime.combine(
+        datetime.date.fromisoformat(start_date), datetime.time(), _JST
+    ).timestamp()
 
     bar_builder = RangeBarBuilder(box_size_rate)
     sar = ParabolicSarIndicator([acceleration, step, maximum])
@@ -161,7 +164,7 @@ def populate(
             if ts < cutoff_ts:
                 continue  # warmup phase: update state but don't write
 
-            date_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+            date_str = datetime.datetime.fromtimestamp(ts, _JST).strftime("%Y-%m-%d")
             if date_str in skip_dates:
                 continue
 
@@ -212,11 +215,12 @@ def verify(
     trade_store = TradeStore(str(parquet_store.layer_dir[Layer.BRONZE]), market)
 
     warmup_start = (
-        datetime.datetime.strptime(start_date, "%Y-%m-%d")
-        - datetime.timedelta(days=warmup_days)
-    ).strftime("%Y-%m-%d")
+        datetime.date.fromisoformat(start_date) - datetime.timedelta(days=warmup_days)
+    ).isoformat()
     process_range = DtRange.from_strings(warmup_start, end_date)
-    cutoff_ts = datetime.datetime.strptime(start_date, "%Y-%m-%d").timestamp()
+    cutoff_ts = datetime.datetime.combine(
+        datetime.date.fromisoformat(start_date), datetime.time(), _JST
+    ).timestamp()
 
     bar_builder = RangeBarBuilder(box_size_rate)
     sar_ind = ParabolicSarIndicator([acceleration, step, maximum])

@@ -26,9 +26,10 @@ Pipeline per combo (the canonical scan order):
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from itertools import groupby
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 
@@ -210,7 +211,7 @@ def run_grid(
                         valid["ts"] + 9 * 3600, unit="s", utc=True
                     ).dt.strftime("%Y-%m")
                     row["_monthly"] = {
-                        m: (int(len(g)), float(g.mean() - costs_bps))
+                        m: (len(g), float(g.mean() - costs_bps))
                         for m, g in valid["return_bps"].groupby(months)
                     }
 

@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
-import inventory  # noqa: E402
+import inventory
 
 _MAKALU_ROOT = Path("/home/lulurun/workspace/Makalu")
 _MARKETS = [{"exchange": "GMO", "symbol": "BTC_JPY"}, {"exchange": "BINANCE", "symbol": "BTC_USDT"}]

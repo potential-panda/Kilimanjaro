@@ -13,11 +13,11 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.data.price_cache import TargetPrices  # noqa: E402
-from kilimanjaro.framework.protocol import MarketConfig  # noqa: E402
-from kilimanjaro.return_calc.between_signal import BetweenSignalReturn  # noqa: E402
-from kilimanjaro.return_calc.episode import EpisodeReturn  # noqa: E402
-from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn  # noqa: E402
+from kilimanjaro.data.price_cache import TargetPrices
+from kilimanjaro.framework.protocol import MarketConfig
+from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
+from kilimanjaro.return_calc.episode import EpisodeReturn
+from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 
 TARGET = MarketConfig("GMO", "ETH_JPY", "0.3")
 
@@ -176,7 +176,8 @@ if __name__ == "__main__":
 
 # --- Triple-barrier -------------------------------------------------------
 
-from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn  # noqa: E402
+from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
+
 
 # ticks every 1s at t=0..4; spread 2 (bid=mid-1, ask=mid+1)
 def _mp(mids):
@@ -235,7 +236,9 @@ class TestTripleBarrierReturn(unittest.TestCase):
 
 class TestVolScaledTripleBarrierReturn(unittest.TestCase):
     def test_barrier_widens_with_vol(self):
-        from kilimanjaro.return_calc.vol_triple_barrier import VolScaledTripleBarrierReturn
+        from kilimanjaro.return_calc.vol_triple_barrier import (
+            VolScaledTripleBarrierReturn,
+        )
         rc = VolScaledTripleBarrierReturn(
             k=2.0, time_cap_seconds=100, vol_lookback_seconds=10, cost_floor_bps=0.0
         )
@@ -247,7 +250,9 @@ class TestVolScaledTripleBarrierReturn(unittest.TestCase):
         self.assertGreaterEqual(b_low, 0.0)
 
     def test_cost_floor_binds_when_vol_low(self):
-        from kilimanjaro.return_calc.vol_triple_barrier import VolScaledTripleBarrierReturn
+        from kilimanjaro.return_calc.vol_triple_barrier import (
+            VolScaledTripleBarrierReturn,
+        )
         rc = VolScaledTripleBarrierReturn(
             k=2.0, time_cap_seconds=100, vol_lookback_seconds=10, cost_floor_bps=5.0
         )
@@ -257,7 +262,9 @@ class TestVolScaledTripleBarrierReturn(unittest.TestCase):
 
     def test_k_zero_reduces_to_fixed_floor_barrier(self):
         # k=0 -> barrier == cost_floor everywhere; behaves like a fixed barrier.
-        from kilimanjaro.return_calc.vol_triple_barrier import VolScaledTripleBarrierReturn
+        from kilimanjaro.return_calc.vol_triple_barrier import (
+            VolScaledTripleBarrierReturn,
+        )
         mids = [100.0] * 5 + [101.5] + [102.0] * 5   # +1.5% at t=5
         rc = VolScaledTripleBarrierReturn(
             k=0.0, time_cap_seconds=100, vol_lookback_seconds=3, cost_floor_bps=100

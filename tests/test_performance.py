@@ -12,7 +12,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.framework.performance import (  # noqa: E402
+from kilimanjaro.framework.performance import (
     compute_path_metrics,
     compute_path_metrics_jpy,
 )

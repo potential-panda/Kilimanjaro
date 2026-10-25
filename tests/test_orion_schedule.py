@@ -16,17 +16,20 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.framework.orion_schedule import OrionScheduleFilter, entry_allowed  # noqa: E402
+from kilimanjaro.framework.orion_schedule import (
+    OrionScheduleFilter,
+    entry_allowed,
+)
 
 
 def _jst_ts(y, m, d, h) -> float:
     """Unix ts whose JST wall-clock is (y, m, d, h). Feb 2026: Mon=2 … Sun=8."""
-    return dt.datetime(y, m, d, h, tzinfo=dt.timezone.utc).timestamp() - 9 * 3600
+    return dt.datetime(y, m, d, h, tzinfo=dt.UTC).timestamp() - 9 * 3600
 
 
 try:
-    from orion.schedule import get_schedule  # noqa: E402
-    from qate.core.model import TradingMode  # noqa: E402
+    from orion.schedule import get_schedule
+    from qate.core.model import TradingMode
 
     _HAS_ORION = True
 except Exception:

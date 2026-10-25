@@ -14,7 +14,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kilimanjaro.framework.verify import (  # noqa: E402
+from kilimanjaro.framework.verify import (
     _greedy_match,
     compare_frames,
 )

@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import jsonschema
@@ -111,7 +111,7 @@ def append_event(
 ) -> dict:
     """Validate and append one event. Returns the written event dict."""
     existing = load_events(ledger_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event = {
         "schema_version": 1,
         "event_id": next_event_id(existing, now),
@@ -293,7 +293,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
-def register_cli(sub: "argparse._SubParsersAction") -> None:
+def register_cli(sub: argparse._SubParsersAction) -> None:
     """Add the append/search subcommands to a subparsers action (reused by
     both this module's main() and cli.py's `ledger` command)."""
     p_append = sub.add_parser("append", help="Append a ledger event")
