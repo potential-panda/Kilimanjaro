@@ -28,15 +28,16 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+from makalu.storage.parquet_store import (
+    Layer,
+    ParquetStore,
+    SingleMarketStore,
+    TradeStore,
+)
 from orion.parabolic_sar import ParabolicSarIndicator
 from qate.core.model import Market
-
-# These were Makalu storage APIs, not part of Hase or its qate dependency.
-# Keep this module importable for historical verification code; the producer
-# itself fails explicitly below until ChartRangeSAR is ported to Hase.
-SingleMarketStore = object
-Layer = ParquetStore = TradeStore = RangeBarBuilder = DtRange = None
-_QATE_STORE_ERROR = RuntimeError("ChartRangeSAR production has not been ported to Hase")
+from qate.trading.chart import RangeBarBuilder
+from qate.util.dt_range import DtRange
 
 from kilimanjaro.data.root import data_root
 from kilimanjaro.framework.verify import (
@@ -66,11 +67,6 @@ class ChartRangeSARStore(SingleMarketStore):
         box_size_rate: float,
         step: float,
     ):
-        if _QATE_STORE_ERROR is not None:
-            raise RuntimeError(
-                "ChartRangeSAR production requires qate's legacy store API; "
-                "Hase does not provide this dataset."
-            ) from _QATE_STORE_ERROR
         super().__init__(str(feature_root_dir), "ChartRangeSAR", market)
         self._box_size_rate = box_size_rate
         self._step = step
@@ -108,10 +104,6 @@ def populate(
 
     Returns the total number of flip events written.
     """
-    if _QATE_STORE_ERROR is not None:
-        raise RuntimeError(
-            "ChartRangeSAR production requires a Hase port; the legacy Makalu store API is unavailable."
-        ) from _QATE_STORE_ERROR
     parquet_store = ParquetStore(str(data_root()))
     feature_root = parquet_store.layer_dir[Layer.FEATURE]
     out_store = ChartRangeSARStore(feature_root, market, box_size_rate, step)
@@ -223,10 +215,6 @@ def verify(
     Returns a dict with keys: param_set_id, n_local, n_remote, n_matched,
     n_local_only, n_remote_only, fields (per-field stats dict).
     """
-    if _QATE_STORE_ERROR is not None:
-        raise RuntimeError(
-            "ChartRangeSAR verification requires a Hase port; the legacy Makalu store API is unavailable."
-        ) from _QATE_STORE_ERROR
     # ── 1. Local computation with warmup ─────────────────────────────────────
     parquet_store = ParquetStore(str(data_root()))
     trade_store = TradeStore(str(parquet_store.layer_dir[Layer.BRONZE]), market)
