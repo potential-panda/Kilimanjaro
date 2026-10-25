@@ -205,8 +205,10 @@ def run_once(
     for p in specs:
         try:
             loaded.append(yaml.safe_load(p.read_text()))
-        except Exception:  # noqa: BLE001 — per-spec load errors handled in the loop below
-            pass
+        except Exception as exc:  # noqa: BLE001 — processing reports the per-spec error later
+            LOG.warning(
+                "Skipping unreadable spec during consistency check %s: %s", p, exc
+            )
     for err in idea_consistency_errors(loaded):
         LOG.warning("idea-consistency: %s", err)
 

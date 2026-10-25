@@ -22,6 +22,7 @@ Design choices:
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 from pathlib import Path
@@ -31,6 +32,7 @@ import yaml
 from kilimanjaro.data.feature_frame import available_features
 
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+LOG = logging.getLogger(__name__)
 
 # (leader exchange, leader symbol, target exchange, target symbol).
 # Leaders are the BINANCE lead-lag source; targets are execution venues.
@@ -151,16 +153,20 @@ def _flow_pressure(a):
         + [
             (
                 f"sizeasym_{w}s_z",
-                f"zscore(imbalance({a}_ta_buy_qty_{w}s / {a}_ta_buy_count_{w}s, ",
-                f"{a}_ta_sell_qty_{w}s / {a}_ta_sell_count_{w}s), 1800)",
+                (
+                    f"zscore(imbalance({a}_ta_buy_qty_{w}s / {a}_ta_buy_count_{w}s, "
+                    f"{a}_ta_sell_qty_{w}s / {a}_ta_sell_count_{w}s), 1800)"
+                ),
             )
             for w in (60,)
         ]
         + [
             (
                 f"qtycountdiv_{w}s_z",
-                f"zscore({a}_ta_buy_qty_{w}s / {a}_ta_total_qty_{w}s ",
-                f"- {a}_ta_buy_count_{w}s / {a}_ta_total_count_{w}s, 1800)",
+                (
+                    f"zscore({a}_ta_buy_qty_{w}s / {a}_ta_total_qty_{w}s "
+                    f"- {a}_ta_buy_count_{w}s / {a}_ta_total_count_{w}s, 1800)"
+                ),
             )
             for w in (60,)
         ]
@@ -175,9 +181,11 @@ def _breakout(a):
     return [
         (
             f"donch_{w}s_z",
-            f"zscore(2 * ({a}_mid - roll_min(lag({a}_mid, 1), {w})) / ",
-            f"(roll_max(lag({a}_mid, 1), {w}) - roll_min(lag({a}_mid, 1), {w}) ",
-            "+ 0.000001) - 1, 1800)",
+            (
+                f"zscore(2 * ({a}_mid - roll_min(lag({a}_mid, 1), {w})) / "
+                f"(roll_max(lag({a}_mid, 1), {w}) - roll_min(lag({a}_mid, 1), {w}) "
+                "+ 0.000001) - 1, 1800)"
+            ),
         )
         for w in (300, 900)
     ]
@@ -209,8 +217,10 @@ def _liquidity(a):
     ] + [
         (
             f"ofi_k{k}_z",
-            f"zscore(imbalance({a}_bc_delta_depth_bid_rate_k{k}, ",
-            f"{a}_bc_delta_depth_ask_rate_k{k}), 1800)",
+            (
+                f"zscore(imbalance({a}_bc_delta_depth_bid_rate_k{k}, "
+                f"{a}_bc_delta_depth_ask_rate_k{k}), 1800)"
+            ),
         )
         for k in (1, 5)
     ]
@@ -364,7 +374,8 @@ def existing_idea_ids(*dirs: Path) -> dict[str, str]:
         for path in Path(d).rglob("*.yaml"):
             try:
                 spec = yaml.safe_load(path.read_text())
-            except Exception:  # noqa: BLE001 — a bad file shouldn't block generation
+            except Exception as exc:  # noqa: BLE001 — a bad file shouldn't block generation
+                LOG.warning("Skipping unreadable spec %s: %s", path, exc)
                 continue
             if not isinstance(spec, dict) or not spec.get("expressions"):
                 continue
@@ -384,7 +395,8 @@ def existing_signatures(*dirs: Path) -> set[str]:
         for path in Path(d).rglob("*.yaml"):
             try:
                 spec = yaml.safe_load(path.read_text())
-            except Exception:  # noqa: BLE001 — a bad file shouldn't block generation
+            except Exception as exc:  # noqa: BLE001 — a bad file shouldn't block generation
+                LOG.warning("Skipping unreadable spec %s: %s", path, exc)
                 continue
             if isinstance(spec, dict) and spec.get("expressions"):
                 sigs.add(signature(spec))
@@ -433,7 +445,8 @@ def family_scores(
         for path in Path(d).rglob("*.yaml"):
             try:
                 spec = yaml.safe_load(path.read_text())
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 — a bad file should not stop feedback aggregation
+                LOG.warning("Skipping unreadable spec %s: %s", path, exc)
                 continue
             if (
                 isinstance(spec, dict)
