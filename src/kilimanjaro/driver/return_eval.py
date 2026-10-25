@@ -17,6 +17,7 @@ rank-stable candidate, so most specs still write a single result folder.
 from __future__ import annotations
 
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from kilimanjaro.driver.scan_runner import (
     CSV_FIELDS,
@@ -30,6 +31,7 @@ from kilimanjaro.signal.expression import ExpressionSignal
 # Combo-identity fields on a screening row (ExpressionSignal.params), minus the
 # label alias, used to recover which signals to re-measure.
 _IDENTITY = ("threshold", "min_age", "max_age", "invert")
+_JST = ZoneInfo("Asia/Tokyo")
 
 
 def _expr_by_label(spec: dict) -> dict[str, str]:
@@ -171,9 +173,9 @@ def _evaluate_continuous_spec(
     sched = OrionScheduleFilter(spec.get("schedule", "nofilter"))
     dd_bps = DEFAULT_DD_THRESHOLD_BPS if dd_threshold_bps is None else dd_threshold_bps
 
-    load_start = (datetime.strptime(start, "%Y-%m-%d") - timedelta(days=2)).strftime(
-        "%Y-%m-%d"
-    )
+    load_start = (
+        datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=_JST) - timedelta(days=2)
+    ).strftime("%Y-%m-%d")
     need = f"({dir_expr}) + (a_mid)" + (
         f" + ({qty_col})" if kind in ("volume", "dollar") else ""
     )
@@ -194,7 +196,7 @@ def _evaluate_continuous_spec(
         else None
     )
     dvals = np.asarray(eval_expr(dir_expr, frame), dtype=float)
-    start_ts = datetime.strptime(start, "%Y-%m-%d").timestamp()
+    start_ts = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=_JST).timestamp()
 
     rows = []
     for p in params:
@@ -311,7 +313,8 @@ def _evaluate_flip_spec(
         from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
 
         load_start = (
-            datetime.strptime(start, "%Y-%m-%d") - timedelta(days=2)
+            datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=_JST)
+            - timedelta(days=2)
         ).strftime("%Y-%m-%d")
         frame = ExpressionSignal.create(
             markets=spec["markets"],
@@ -391,7 +394,11 @@ def _evaluate_flip_spec(
 # code so every candidate is judged identically (no ad-hoc scripts).
 
 _CALIB_JST_HOURS = (22, 23, 0, 1, 2)  # aquila US-session
-_CALIB_DD = {"threshold_bps": 200.0, "window_s": 21600, "cooldown_s": 3600}  # aquila DD gate
+_CALIB_DD = {
+    "threshold_bps": 200.0,
+    "window_s": 21600,
+    "cooldown_s": 3600,
+}  # aquila DD gate
 _DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
 
 
@@ -473,7 +480,8 @@ def evaluate_spec(
     label = e.get("label")
 
     load_start = (
-        datetime.strptime(start, "%Y-%m-%d") - timedelta(days=warmup_days)
+        datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=_JST)
+        - timedelta(days=warmup_days)
     ).strftime("%Y-%m-%d")
     frame = ExpressionSignal.create(
         markets=markets,
@@ -491,7 +499,7 @@ def evaluate_spec(
         block_gmo_maintenance=False,
         name="us",
     )
-    start_ts = datetime.strptime(start, "%Y-%m-%d").timestamp()
+    start_ts = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=_JST).timestamp()
 
     rows = []
     for thr in thresholds:

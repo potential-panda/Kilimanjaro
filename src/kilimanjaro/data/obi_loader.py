@@ -7,7 +7,9 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+from kilimanjaro.data.root import data_root as _hase_data_root
+
+_DEFAULT_DATA_ROOT = _hase_data_root()
 
 _VALID_DEPTHS = frozenset([1, 3, 5, 10])
 _VALID_HALFLIVES = frozenset([10, 30, 60, 120, 300])

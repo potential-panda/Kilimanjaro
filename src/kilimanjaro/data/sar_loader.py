@@ -7,12 +7,12 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+from kilimanjaro.data.root import data_root
+
 
 def _features_root() -> Path:
-    from qate.env import sys_env
-    from qate.store.parquet_store import Layer, ParquetStore
-
-    return ParquetStore(sys_env.PARQUET_ROOT_DIR).layer_dir[Layer.FEATURE]
+    """Feature layer under the Hase/Komachi-managed data root."""
+    return data_root() / "feature"
 
 
 def _flip_glob(
@@ -54,13 +54,16 @@ def load_sar_flips(
         features_root = _features_root()
     glob = _flip_glob(exchange, symbol, box_size_rate, sar_step, features_root)
     con = duckdb.connect()
-    # sar_up as a tiebreaker: rapid flip bursts can put two flips on the same
-    # ts, and LEAD over a tied ORDER BY is nondeterministic across runs
-    # (measured: up to 0.036 bps avg_net jitter between identical grid runs).
-    return con.sql(f"""
-        SELECT ts, sar_up,
-               LEAD(ts) OVER (ORDER BY ts, sar_up) AS exit_ts
-        FROM read_parquet('{glob}', hive_partitioning=true)
-        WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
-        ORDER BY ts, sar_up
-    """).df()
+    try:
+        # sar_up as a tiebreaker: rapid flip bursts can put two flips on the same
+        # ts, and LEAD over a tied ORDER BY is nondeterministic across runs
+        # (measured: up to 0.036 bps avg_net jitter between identical grid runs).
+        return con.sql(f"""
+            SELECT ts, sar_up,
+                   LEAD(ts) OVER (ORDER BY ts, sar_up) AS exit_ts
+            FROM read_parquet('{glob}', hive_partitioning=true)
+            WHERE date >= DATE '{start_date}' AND date <= DATE '{end_date}'
+            ORDER BY ts, sar_up
+        """).df()
+    finally:
+        con.close()

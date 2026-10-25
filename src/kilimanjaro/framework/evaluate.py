@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import datetime
 import itertools
+import math
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -123,7 +124,9 @@ def _resolve_rank_metric(rows: list[dict], prefix: str, rank_metric: str) -> str
     if rank_metric == "t_stat":
         return rank_metric
     key = f"{prefix}{rank_metric}"
-    if any(isinstance(r.get(key), (int, float)) and r.get(key) == r.get(key) for r in rows):
+    if any(
+        isinstance(r.get(key), (int, float)) and r.get(key) == r.get(key) for r in rows
+    ):
         return rank_metric
     return "t_stat"
 
@@ -455,12 +458,12 @@ def _classify(r: dict, cutoff: float) -> str:
     pos_train = r["train_pos_month_share"]
     pos_holdout = r["holdout_pos_month_share"]
     plateau = r["train_plateau"]
-    on_plateau = plateau != plateau or plateau >= 0.5  # NaN → benefit of doubt
+    on_plateau = not math.isfinite(plateau) or plateau >= 0.5  # NaN → benefit of doubt
 
-    if train_top and pos_train == pos_train and pos_train >= 0.7 and on_plateau:
-        if pos_holdout == pos_holdout and pos_holdout <= 1 / 3:
+    if train_top and math.isfinite(pos_train) and pos_train >= 0.7 and on_plateau:
+        if math.isfinite(pos_holdout) and pos_holdout <= 1 / 3:
             return "decayed"
         return "regime_dependent"
-    if train_top and pos_train == pos_train and 0.4 <= pos_train < 0.7:
+    if train_top and math.isfinite(pos_train) and 0.4 <= pos_train < 0.7:
         return "regime_dependent"
     return "noise"

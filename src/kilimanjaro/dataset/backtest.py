@@ -55,10 +55,9 @@ _GMO_MAINTENANCE_SAT_HOURS: list[int] = [9, 10, 11]
 
 
 def _features_root() -> Path:
-    from qate.env import sys_env
-    from qate.store.parquet_store import Layer, ParquetStore
+    from kilimanjaro.data.root import data_root
 
-    return ParquetStore(sys_env.PARQUET_ROOT_DIR).layer_dir[Layer.FEATURE]
+    return data_root() / "feature"
 
 
 def _flip_glob(exchange, symbol, box_size_rate, sar_step, features_root):

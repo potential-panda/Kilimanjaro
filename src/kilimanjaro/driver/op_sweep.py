@@ -189,9 +189,11 @@ def _measure_base(args) -> list[dict]:
             row[f"net{h}"] = net
             row[f"se{h}"] = se
             row["n_fire"] = n_fire
-            if ric == ric and (peak_ic != peak_ic or abs(ric) > abs(peak_ic)):
+            if np.isfinite(ric) and (
+                not np.isfinite(peak_ic) or abs(ric) > abs(peak_ic)
+            ):
                 peak_ic, peak_h = ric, h
-            if net == net and net > best_net:
+            if np.isfinite(net) and net > best_net:
                 best_net, best_net_h = net, h
         row["n"] = n_min or 0
         row["peak_ic"] = peak_ic

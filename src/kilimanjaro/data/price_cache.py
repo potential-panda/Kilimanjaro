@@ -25,8 +25,9 @@ import duckdb
 import numpy as np
 
 from kilimanjaro.data.price_loader import mp_glob
+from kilimanjaro.data.root import data_root as _hase_data_root
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = _hase_data_root()
 
 
 class TargetPrices(NamedTuple):

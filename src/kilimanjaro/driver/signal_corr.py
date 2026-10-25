@@ -365,7 +365,7 @@ def _factor_dist(
     v = v_full[win_idx]
     s = pd.Series(v[np.isfinite(v)])
     # best horizon = max |rank_ic|
-    valid = {h: r for h, r in per_h.items() if r == r}
+    valid = {h: r for h, r in per_h.items() if np.isfinite(r)}
     best_h = max(valid, key=lambda h: abs(valid[h])) if valid else max(per_h)
     best_ic = per_h.get(best_h, float("nan"))
     # monthly IC at best horizon → fraction of months matching the overall sign.
@@ -382,7 +382,7 @@ def _factor_dist(
     mv, mr, mvr = gm[("v", "mean")], gm[("r", "mean")], gm[("vr", "mean")]
     denom = np.sqrt((gm[("v2", "mean")] - mv**2) * (gm[("r2", "mean")] - mr**2))
     mic = ((mvr - mv * mr) / denom).where(n_m > 30).dropna()
-    sign = np.sign(best_ic) if best_ic == best_ic else 0
+    sign = np.sign(best_ic) if np.isfinite(best_ic) else 0
     pos_frac = (
         float((np.sign(mic) == sign).mean()) if len(mic) and sign else float("nan")
     )

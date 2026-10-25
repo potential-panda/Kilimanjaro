@@ -340,7 +340,12 @@ def exit_mode_distribution(
     from kilimanjaro.framework.performance import compute_path_metrics
 
     path = compute_path_metrics(net, trades["ts"].to_numpy(dtype=float))
-    rnd = lambda v: round(float(v), 3) if v == v else None  # NaN -> None
+
+    def rnd(value: float | None) -> float | None:
+        """Round finite metrics for JSON; represent NaN and infinity as null."""
+        return (
+            round(float(value), 3) if value is not None and np.isfinite(value) else None
+        )
 
     return {
         "expr": label,

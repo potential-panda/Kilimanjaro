@@ -35,7 +35,9 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+from kilimanjaro.data.root import data_root as _hase_data_root
+
+_DEFAULT_DATA_ROOT = _hase_data_root()
 _DEFAULT_FFILL_LIMIT_S = 300
 
 _OBI_RAW_RE = re.compile(r"^obi_k(\d+)$")

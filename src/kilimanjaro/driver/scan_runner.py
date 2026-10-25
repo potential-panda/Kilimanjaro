@@ -233,7 +233,7 @@ def run_grid_scan(
         costs_bps = ROUND_TRIP_COST_BPS
     split = split or default_split(start, end)
     if scan_id is None:
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d_%H%M%S")
         scan_id = f"{scan_name}_{start}_{end}_{ts}"
     if out_dir is None:
         out_dir = results_root / scan_id

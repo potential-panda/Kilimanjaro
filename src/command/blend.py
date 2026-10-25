@@ -19,6 +19,7 @@ blend.
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 
 import yaml
@@ -111,7 +112,7 @@ def _run_blend(args: argparse.Namespace) -> int:
     dr = res["diversification_ratio"]
     print(
         f"  diversification ratio (blend/best) = "
-        f"{dr:.2f}" + ("  (>1 = combination helped)" if dr == dr else "")
+        f"{dr:.2f}" + ("  (>1 = combination helped)" if math.isfinite(dr) else "")
     )
 
     out_dir = (
@@ -202,4 +203,4 @@ def _run_step2(specs, factors, res, target, split, args, out_dir) -> None:
 
 
 def _f(v) -> str:
-    return f"{v:.3f}" if isinstance(v, (int, float)) and v == v else "—"
+    return f"{v:.3f}" if isinstance(v, (int, float)) and math.isfinite(v) else "—"

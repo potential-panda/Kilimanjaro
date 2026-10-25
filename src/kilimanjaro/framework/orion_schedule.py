@@ -31,7 +31,10 @@ for _p in (_ORION_SRC, _QATE_SRC):
         sys.path.append(str(_p))
 
 _JST_OFFSET = 9 * 3600
-_REF_MONDAY = _dt.datetime(2026, 2, 2)  # a Monday: probe every (weekday, hour)
+_JST = _dt.timezone(_dt.timedelta(hours=9))
+_REF_MONDAY = _dt.datetime(
+    2026, 2, 2, tzinfo=_JST
+)  # a Monday: probe every (weekday, hour)
 
 
 @cache

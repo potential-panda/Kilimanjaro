@@ -22,6 +22,7 @@ matched PnL.
 from __future__ import annotations
 
 import datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -167,9 +168,7 @@ def render_compare(result: dict, *, title: str = "", value_fmt: str = ".6f") -> 
     lines = []
     if title:
         lines.append(title)
-    match_rate = (
-        cov["n_matched"] / cov["n_local"] * 100 if cov["n_local"] else 0.0
-    )
+    match_rate = cov["n_matched"] / cov["n_local"] * 100 if cov["n_local"] else 0.0
     lines.append(
         f"  coverage: local={cov['n_local']} remote={cov['n_remote']} "
         f"matched={cov['n_matched']} ({match_rate:.1f}%)  "
@@ -202,15 +201,13 @@ def influx_client(timeout: int = 120_000):
 
 def influx_range_jst(start_date: str, end_date: str) -> tuple[str, str]:
     """(start, stop) UTC RFC3339 covering JST [start_date 00:00, end_date+1 00:00)."""
-    jst = datetime.timedelta(hours=9)
-    start = (datetime.datetime.strptime(start_date, "%Y-%m-%d") - jst).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-    stop = (
-        datetime.datetime.strptime(end_date, "%Y-%m-%d")
-        + datetime.timedelta(days=1)
-        - jst
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    jst = ZoneInfo("Asia/Tokyo")
+    start = datetime.datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=jst)
+    stop = datetime.datetime.strptime(end_date, "%Y-%m-%d").replace(
+        tzinfo=jst
+    ) + datetime.timedelta(days=1)
+    start = start.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stop = stop.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return start, stop
 
 
@@ -255,7 +252,9 @@ def build_flux(
     return "\n".join(lines)
 
 
-def load_influx(qapi, *, add_ts: bool = True, ts_col: str = "ts", **flux_kwargs) -> pd.DataFrame:
+def load_influx(
+    qapi, *, add_ts: bool = True, ts_col: str = "ts", **flux_kwargs
+) -> pd.DataFrame:
     """Run `build_flux(**flux_kwargs)` and return the DataFrame, adding a unix
     `ts_col` (seconds) derived from `_time` when present."""
     df = query_df(qapi, build_flux(**flux_kwargs))

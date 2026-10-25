@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a hypothesis spec's data requirements against a live Makalu
+"""Validate a hypothesis spec's data requirements against a live Hase
 inventory (task 5): the third layer of spec checking, after schema (task 2,
 tools/validate_spec.py) and SQL safety (task 6, tools/sql_safety.py). Those
 two only ever say valid/invalid; this one decides which of the three
@@ -138,8 +138,7 @@ def _filesystem_distinct_days(
 
 def assess_data_readiness(
     spec: dict,
-    makalu_root: Path = _inventory._DEFAULT_MAKALU_ROOT,
-    data_root: Path = _inventory._DEFAULT_DATA_ROOT,
+    data_root: Path | None = None,
 ) -> dict:
     """Returns {"status", "decision_reason", "needs_tooling_reasons",
     "needs_more_data_reasons", "datasets_checked"}. Assumes the spec
@@ -149,18 +148,30 @@ def assess_data_readiness(
     needs_tooling_reasons = _unsupported_transform_reasons(h)
     needs_more_data_reasons: list[str] = []
 
-    catalog = {e["dataset_name"]: e for e in _inventory.load_catalog(makalu_root)}
-    registered = _inventory.query_list(makalu_root)
+    inventory = _inventory.build_inventory(
+        [
+            {"exchange": exchange, "symbol": symbol}
+            for _, exchange, symbol in _dataset_market_pairs(h)
+        ],
+        data_root=data_root,
+    )
+    available = {
+        (
+            entry["dataset_name"],
+            entry["availability"]["exchange"],
+            entry["availability"]["symbol"],
+        ): entry
+        for entry in inventory["datasets"]
+    }
     dr = h.get("data_requirements") or {}
     minimum_distinct_days = dr.get("minimum_distinct_days", 1)
 
     datasets_checked = []
     for dataset_name, exchange, symbol in _dataset_market_pairs(h):
-        catalog_entry = catalog.get(dataset_name)
-        if catalog_entry is None:
+        entry = available.get((dataset_name, exchange, symbol))
+        if entry is None:
             needs_tooling_reasons.append(
-                f"{exchange}/{symbol}/{dataset_name}: no Makalu catalog entry at all -- "
-                "no existing pipeline can produce it"
+                f"{exchange}/{symbol}/{dataset_name}: no Hase-managed dataset exists"
             )
             datasets_checked.append(
                 {
@@ -174,42 +185,16 @@ def assess_data_readiness(
             )
             continue
 
-        query_verified = dataset_name in registered
-        resolved_layer = (
-            catalog_entry["layer"]
-            if query_verified
-            else _inventory.resolve_actual_layer(
-                dataset_name, catalog_entry["layer"], data_root
-            )
-        )
-        columns = (
-            _inventory.describe_view(dataset_name.lower(), makalu_root)
-            if query_verified
-            else None
-        )
-
+        resolved_layer = entry["resolved_layer"]
+        columns = entry["columns"]["names"]
+        existing = entry["availability"]["existing_dates"]
         if resolved_layer is None:
-            distinct_days: int | None = 0
+            distinct_days = 0
             needs_more_data_reasons.append(
                 f"{exchange}/{symbol}/{dataset_name}: no populated data found in any layer"
             )
-        elif _inventory.needs_extra_partitions(catalog_entry):
-            # v1 limitation shared with tools/inventory.py: date coverage
-            # for extra-partition datasets isn't checked here either --
-            # not enough signal to confidently block or pass on it.
-            distinct_days = None
         else:
-            probe = _inventory.data_check(
-                dataset_name, exchange, symbol, makalu_root=makalu_root
-            )
-            if probe.get("status") == "unsupported_by_data_check":
-                distinct_days = _filesystem_distinct_days(
-                    dataset_name, resolved_layer, exchange, symbol, data_root
-                )
-            elif probe.get("status") == "missing":
-                distinct_days = 0
-            else:
-                distinct_days = _distinct_days_from_probe(probe)
+            distinct_days = len(existing)
 
             if distinct_days is not None and distinct_days < minimum_distinct_days:
                 needs_more_data_reasons.append(
@@ -223,7 +208,7 @@ def assess_data_readiness(
                 "exchange": exchange,
                 "symbol": symbol,
                 "in_catalog": True,
-                "query_verified": query_verified,
+                "query_verified": entry["query_verified"],
                 "resolved_layer": resolved_layer,
                 "distinct_days": distinct_days,
                 "columns": columns,
@@ -266,12 +251,13 @@ def main() -> int:
         description="Check a hypothesis spec's data requirements against a live Makalu inventory"
     )
     parser.add_argument("spec_path")
-    parser.add_argument("--makalu-root", default=str(_inventory._DEFAULT_MAKALU_ROOT))
-    parser.add_argument("--data-root", default=str(_inventory._DEFAULT_DATA_ROOT))
+    parser.add_argument("--data-root")
     args = parser.parse_args()
 
     spec = yaml.safe_load(Path(args.spec_path).read_text())
-    result = assess_data_readiness(spec, Path(args.makalu_root), Path(args.data_root))
+    result = assess_data_readiness(
+        spec, Path(args.data_root) if args.data_root else None
+    )
     print(json.dumps(result, indent=2))
     return 0 if result["status"] == "scan-ready" else 1
 
