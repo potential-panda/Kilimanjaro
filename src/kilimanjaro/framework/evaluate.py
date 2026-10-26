@@ -1,7 +1,7 @@
 """Train/holdout grid evaluation with rank-stability selection.
 
 This is the framework's anti-overfitting layer, and the default way to run a
-grid. Lesson learned the hard way (2026-07-13 flip grid): selecting on the
+grid. Selecting on the
 same window you report on manufactured 110 ETH "winners" of which 0 survived
 a held-out four months. With hundreds of correlated combos, a p<=0.05 filter
 alone passes ~5% by luck every time.

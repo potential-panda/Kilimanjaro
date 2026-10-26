@@ -142,9 +142,7 @@ def _evaluate_continuous_spec(
 
     A clock (`clock.kind`: time/volume/dollar/tick/range) emits neutral decision points;
     `direction_expr` picks the side at each; consecutive same-direction bars are held as
-    ONE position, so cost is paid per direction change. SAR is then just one possible
-    direction rule rather than also being the clock — which is what made the earlier
-    same-clock comparison unfair to every non-SAR rule.
+    one position, so cost is paid per direction change.
 
     Swept over the clock parameter (seconds / units / notional / move).
     """
@@ -160,7 +158,7 @@ def _evaluate_continuous_spec(
         DEFAULT_DD_WINDOW_SECONDS,
         RollingDrawdownGate,
     )
-    from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
+    from kilimanjaro.framework.schedule import schedule_from_config
     from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
     from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
 
@@ -170,7 +168,7 @@ def _evaluate_continuous_spec(
     dir_expr = spec["direction_expr"]
     qty_col = clock.get("qty_col", "a_ta_total_qty_1s")
     dir_thr = float(spec.get("direction_threshold", 0.0))
-    sched = OrionScheduleFilter(spec.get("schedule", "nofilter"))
+    sched = schedule_from_config(spec.get("schedule"))
     dd_bps = DEFAULT_DD_THRESHOLD_BPS if dd_threshold_bps is None else dd_threshold_bps
 
     load_start = (
@@ -224,7 +222,8 @@ def _evaluate_continuous_spec(
         sigs = sigs[sigs.ts >= start_ts]
         n_bars = int((ci >= np.searchsorted(ts, start_ts)).sum())
         tr = BetweenSignalReturn().compute(sigs, target, start, end, data_root)
-        tr, _ = sched.apply(tr)
+        if sched is not None:
+            tr, _ = sched.apply(tr)
         n_pre = len(tr)
         if dd_bps and np.isfinite(dd_bps):
             tr, _ = RollingDrawdownGate(
@@ -245,127 +244,6 @@ def _evaluate_continuous_spec(
                 "n_bars": n_bars,
                 "n_trades": n,
                 "bars_per_trade": round(n_bars / n, 1) if n else 0.0,
-                "n_gated_out": n_pre - n,
-                "total_bps": round(gross, 1),
-                "avg_bps": round(gross / n, 3) if n else 0.0,
-                "net_total_bps": round(net, 1),
-                "net_avg_bps": round(net / n, 3) if n else 0.0,
-                "sharpe": round(
-                    float(tr.return_bps.sub(cost_bps).mean() / sd * np.sqrt(n)), 2
-                )
-                if sd > 0
-                else 0.0,
-                "avg_hold_s": round(
-                    float((tr.exit_exec_ts - tr.entry_exec_ts).mean()), 0
-                )
-                if n
-                else 0.0,
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def _evaluate_flip_spec(
-    spec: dict,
-    target,
-    start: str,
-    end: str,
-    boxes=None,
-    *,
-    cost_bps: float = 1.0,
-    dd_threshold_bps: float | None = None,
-    data_root=None,
-):
-    """Stage 15 for the flip mechanism: sweep box size, one row per box.
-
-    Same standardized economics as the expression path, so flip and expression
-    candidates are directly comparable — plus `box`/`step` in place of `threshold`.
-    """
-    import numpy as np
-    import pandas as pd
-
-    from kilimanjaro.framework.gate import (
-        DEFAULT_DD_COOLDOWN_SECONDS,
-        DEFAULT_DD_THRESHOLD_BPS,
-        DEFAULT_DD_WINDOW_SECONDS,
-        RollingDrawdownGate,
-    )
-    from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
-    from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
-    from kilimanjaro.signal.sar_flip import SARFlipSignal
-
-    flip = spec["flip"]
-    step = float(spec.get("step", 0.04))
-    boxes = boxes if boxes is not None else spec.get("boxes", [0.003])
-    sched = OrionScheduleFilter(spec.get("schedule", "nofilter"))
-    # Flip-mechanism gate defaults (3h/500bps/6h) — NOT aquila's (6h/200bps/1h).
-    dd_bps = DEFAULT_DD_THRESHOLD_BPS if dd_threshold_bps is None else dd_threshold_bps
-
-    # CONTINUOUS-BET FRAMING: the flip events are only a CLOCK (when to re-decide);
-    # the direction rule is pluggable. `direction_expr` swaps SAR's "which way did the
-    # leader just move" for any measured factor, holding the clock fixed so the two are
-    # compared on identical entry/exit times — the only difference is the side taken.
-    dir_expr = spec.get("direction_expr")
-    dir_vals = None
-    if dir_expr:
-        from datetime import datetime, timedelta
-
-        from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
-
-        load_start = (
-            datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=_JST)
-            - timedelta(days=2)
-        ).strftime("%Y-%m-%d")
-        frame = ExpressionSignal.create(
-            markets=spec["markets"],
-            expr=dir_expr,
-            threshold=0.0,
-            min_age=None,
-            max_age=None,
-            invert=False,
-            label="dir",
-        ).load_data(load_start, end, data_root)
-        dir_ts = frame["ts"].to_numpy(dtype=float)
-        dir_vals = (dir_ts, np.asarray(eval_expr(dir_expr, frame), dtype=float))
-
-    rows = []
-    for box in boxes:
-        sig = SARFlipSignal(flip["exchange"], flip["symbol"], float(box), step)
-        sigs = sig.generate(sig.load_data(start, end, data_root))
-        if dir_vals is not None:
-            # Causal read: the 1s value for second t is not knowable until t closes, so
-            # take the last completed second STRICTLY before the flip (searchsorted on
-            # ts-1). Zero/NaN factor values leave the flip untraded rather than guessing.
-            gts, gv = dir_vals
-            idx = (
-                np.searchsorted(
-                    gts, sigs["ts"].to_numpy(dtype=float) - 1.0, side="right"
-                )
-                - 1
-            )
-            ok = idx >= 0
-            v = np.where(ok, gv[np.clip(idx, 0, len(gv) - 1)], np.nan)
-            sigs = sigs.assign(direction=np.sign(v))
-            sigs = sigs[np.isfinite(sigs.direction) & (sigs.direction != 0)]
-        tr = BetweenSignalReturn().compute(sigs, target, start, end, data_root)
-        tr, _ = sched.apply(tr)
-        n_pre = len(tr)
-        if dd_bps and np.isfinite(dd_bps):
-            tr, _ = RollingDrawdownGate(
-                window_seconds=DEFAULT_DD_WINDOW_SECONDS,
-                threshold_bps=dd_bps,
-                cooldown_seconds=DEFAULT_DD_COOLDOWN_SECONDS,
-            ).apply(tr)
-        tr = tr.dropna(subset=["return_bps"])
-        n = len(tr)
-        gross = float(tr.return_bps.sum()) if n else 0.0
-        net = gross - cost_bps * n
-        sd = float(tr.return_bps.std()) if n > 1 else 0.0
-        rows.append(
-            {
-                "box": float(box),
-                "step": step,
-                "n_trades": n,
                 "n_gated_out": n_pre - n,
                 "total_bps": round(gross, 1),
                 "avg_bps": round(gross / n, 3) if n else 0.0,
@@ -441,23 +319,6 @@ def evaluate_spec(
     t = spec["target"]
     target = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
 
-    # ── flip mechanism (SAR flips + between-signal) ───────────────────────────
-    # The one CALIBRATED mechanism (ETH, 98.3% PnL-exact vs the backtest), so it runs
-    # through its own certified pieces: SARFlipSignal (exit_ts = the NEXT flip, so exits
-    # are driven by ALL flips even when the schedule blocks an entry — the backtest's
-    # NO_ENTRY close behaviour), BetweenSignalReturn, orion's OWN schedule module, and
-    # the flip gate defaults from framework.gate. Swept over box size, not threshold.
-    if spec.get("signal") == "sar_flip":
-        return _evaluate_flip_spec(
-            spec,
-            target,
-            start,
-            end,
-            thresholds,
-            cost_bps=cost_bps,
-            dd_threshold_bps=dd_threshold_bps,
-            data_root=data_root,
-        )
     if spec.get("signal") == "continuous":
         return _evaluate_continuous_spec(
             spec,

@@ -1,7 +1,7 @@
 [project]
 name = "kilimanjaro"
 version = "0.1.0"
-description = "Orchestration workspace for AI-assisted trading strategy discovery"
+description = "Data-driven alpha and edge discovery system"
 requires-python = ">=3.13"
 dependencies = [
     "pyyaml>=6.0",
@@ -9,13 +9,22 @@ dependencies = [
     "referencing>=0.30",
     "duckdb>=1.0",
     "pandas>=2.0",
-    "matplotlib>=3.9",
-    "sqlglot>=25.0",
     "scipy>=1.11",
     "numpy>=1.24",
+    "pyarrow>=22.0",
     "flask>=3.0",
     "kamakuraquantlab-hase>=0.8.0",
+    "kamakuraquantlab-qate>=0.4.0",
     "makalu>=0.1.0",
+    "influxdb-client>=1.49.0",
+    "lightgbm>=4.0.0",
+    "scikit-learn>=1.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
 ]
 
 [tool.setuptools.packages.find]

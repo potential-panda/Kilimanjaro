@@ -1,21 +1,17 @@
 # Scan Evaluation: Split, Rank Stability, and Verdicts
 
 How every grid scan in this repo is judged. Implemented in
-`src/kilimanjaro/framework/evaluate.py` (`run_grid_split`); used by all
-every grid-scan flavour (`cli.py grid {flip,obi,expr}`, one shared core in
+`src/kilimanjaro/framework/evaluate.py` (`run_grid_split`); used by every
+expression grid scan (`cli.py grid horizon`, one shared core in
 `driver/scan_runner.run_grid_scan`). Every run records its outcome as a
 `scan_attached` ledger event.
 
 ## Why this exists
 
-On 2026-07-13, the flip-scan parameter grid (245 combos/market) was
-re-evaluated with a chronological split for the first time. Of the combos
-that passed the in-sample filters (avg_net ≥ 0, t ≥ 1.5, p ≤ 0.05) on
-2025-07..2026-02, **0/110 ETH and 0/105 XRP survived the held-out
-2026-03..06 window** (ledger evt-20260713-001/002/003). With hundreds of
-correlated combos, a p ≤ 0.05 filter passes ~5% by luck every time; the
-data that selects a winner cannot also certify it. Since then, the
-discipline lives in the framework, not in the operator's memory.
+With hundreds of correlated combinations, a p ≤ 0.05 filter admits false
+positives by construction; the data that selects a winner cannot also certify
+it. The chronological split therefore lives in the framework rather than in
+operator convention.
 
 ## The forced train/holdout split
 
@@ -31,7 +27,7 @@ candidates.
 - A holdout only protects the first pass — repeatedly tweaking until the
   holdout looks good quietly turns it into training data. Final tests for
   promotion candidates use *forward* data that did not exist at selection
-  time (see hyp-20260713-002's `forward-window-decay` test).
+time.
 
 ## Selection: rank stability, not p-values
 
@@ -81,27 +77,10 @@ Rules (`_classify`, cutoff = 1 − top_quantile):
 Verdict counts go into each run's ledger event (`details.verdicts`), so
 "0/245 stable (10 decayed)" is distinguishable from "0/245 stable" forever.
 
-## What the verdicts said about the flip grids (2026-07-14)
-
-Full-year grids, train 2025-07..2026-02, holdout 2026-03..06:
-
-| market | stable | decayed | regime_dependent | noise | reading |
-|---|---|---|---|---|---|
-| ETH | 1* | 10 | 14 | 220 | the box≈0.0025 region genuinely worked (plateau 1.0, 87–100% positive train months, train t up to 4.6) and stopped in March — a real decay |
-| XRP | 4* | 0 | 21 | 220 | no clean decay: its strong combos alternated months all along (us_off box=0.002 train t 4.1 but 50–75% positive holdout months) |
-| BTC | 1 | 0 | 23 | 221 | the one stable combo is box=0.0015/step=0.05/active — every month positive in BOTH windows; independently re-derives hyp-20260713-002 |
-
-\* rank-stable but weak absolute holdout t (≈0.7–1.0): "best of a bad
-regime". The verdict is relative by design; read the absolute columns
-before acting.
-
-So "what changed in March 2026" is mostly an **ETH** story (decay), not a
-board-wide regime shift: XRP was never cleanly persistent, and BTC held.
-
 ## Output files per run
 
 ```
-results/grid_scan/{flip,horizon,expr}/{scan_id}/
+results/grid_scan/{horizon,expr}/{scan_id}/
     params.json          full config: windows, grid, gates, ranking params
     output.csv           all combos: params + train_* + holdout_* + rank
                          pcts + pos_month_shares + train_plateau + verdict
@@ -111,11 +90,6 @@ results/grid_scan/{flip,horizon,expr}/{scan_id}/
 
 ## Speed and determinism
 
-The full-year 245-combo train/holdout flip grid runs in ~40 s (was ~35 min
-before `data/price_cache.py`; target prices load once per window, joins are
-in-memory searchsorted). Two consecutive runs produce byte-identical
-outputs — tied-timestamp flip ordering is pinned in `sar_loader`
-(`ORDER BY ts, sar_up`), which removed a pre-existing ±0.036 bps
-run-to-run jitter. Cheap + deterministic is deliberate: the psychological
-cost of testing an idea should be near zero, and regression checks should
-be a `diff`.
+Target prices load once per window and joins use in-memory search. Runs with the
+same inputs and seed must produce byte-identical outputs. Cheap, deterministic
+evaluation keeps regression checks straightforward.

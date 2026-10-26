@@ -124,7 +124,7 @@ class TripleBarrierReturn:
         # Fill model: the strategy detects the signal, buffers the order, and the
         # exchange fills at the NEXT available market price (Himalaya). For a signal
         # on the 1s composite grid that price is the first tick at/after ts+fill_delay
-        # (the 1s bar closes at ts+1). fill_delay=0 keeps the certified flip behaviour
+        # (the 1s bar closes at ts+1). fill_delay=0 supports tick-known signals
         # (fires on a tick, so at-or-after is exact). The time cap is from the entry.
         fd = self.fill_delay_seconds
         entry_idx = mp.first_at_or_after(ts + fd)

@@ -47,7 +47,7 @@ hypothesis:
   signal_style: precision  # required: precision | skew
                            # precision = high win rate, fixed-horizon scan, IC metric
                            # skew = trend-following, between-signal scan, avg_net_return metric
-                           # scanner.py is used for precision; flip_scan.py for skew
+                           # the declared evaluation mechanism selects the mode
   created_at: "2026-06-18T00:00:00Z"
   owner: agent|human
   summary: ""

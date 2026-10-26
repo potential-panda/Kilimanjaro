@@ -1,9 +1,7 @@
-"""Between-signal return: hold from entry flip until the next flip (any direction).
+"""Between-signal return: hold from one signal event until its supplied exit.
 
-This is the "skew" style used by the SAR flip scan — enter at the flip price,
-exit when the next SAR cross fires. Exit is always driven by ALL flip events,
-even if the schedule filter would have blocked that flip as an entry. This
-matches the backtest's NO_ENTRY close behaviour.
+Exit timestamps are determined by the signal generator before entry filters are
+applied, so filtering an entry never changes another event's exit.
 
 BUY (direction=+1): enter at ask, exit at bid.
 SELL (direction=-1): enter at bid, exit at ask.
@@ -33,15 +31,15 @@ _DEFAULT_DATA_ROOT = None
 
 @dataclass(frozen=True)
 class BetweenSignalReturn:
-    """Compute return from entry flip to the next SAR flip (all flips, pre-filter).
+    """Compute returns between each signal's entry and exit timestamps.
 
     entry_price: ask (BUY) or bid (SELL) at first MarketPrice tick after entry ts
     exit_price:  bid (BUY) or ask (SELL) at first MarketPrice tick after exit_ts
     return_bps = direction × (exit_price - entry_price) / entry_price × 10000
     holding_seconds = exit_exec_ts - entry_exec_ts
 
-    Signals must include exit_ts (from SARFlipSignal.generate()).
-    jst_hour and jst_weekday are derived from exit_ts (backtest decision point);
+    Signals must include ``exit_ts``.
+    jst_hour and jst_weekday are derived from exit_ts;
     jst_date is derived from ts (entry date, for date blocking).
     """
 

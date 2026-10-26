@@ -9,7 +9,7 @@ readiness.
 
 | Milestone | Implemented evidence | Remaining acceptance |
 |---|---|---|
-| M0 baseline | CLI repaired, retry dedup corrected, packets publish before terminal status, explicit data roots resolved at call time including SAR | No known blocker in the baseline suite |
+| M0 baseline | CLI repaired, retry dedup corrected, packets publish before terminal status, explicit data roots resolved at call time | No known blocker in the baseline suite |
 | M1 contracts and state | Campaign JSON Schema plus semantic validation; content/source/package identities; immutable artifacts; WAL SQLite jobs, attempts, exposures, trials, outbox, freezes and certificates | Single-host trusted-process boundary; no distributed coordination |
 | M2 providers | Recursive plans, schema/footer/timestamp/checksum validation, JST partitions, isolated Hase/Makalu/OBI adapters, explicit missing/structural gaps | Hase MarketPrice and Makalu BookState exercised with real installed providers on fixtures; other adapters require further market-specific integration coverage |
 | M3 worker | Leases and fencing, inherited process lock, process-group cleanup, durable program budgets, bounded retries, disk/time/RSS controls, outbox replay and torn-tail recovery | Long-duration resource behavior is part of the running soak |

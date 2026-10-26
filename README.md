@@ -6,35 +6,26 @@ tests trading-signal formulas — the built system, not a planning workspace.
 ## The loop
 
 1. **generate** a formula → 2. **scan** it over a parameter grid → 3.
-**verify/report** → 4. **filter** survivors → 5. build a qate strategy → 6.
-Himalaya backtest → 7. prod. Steps **1–4 run autonomously**; **5–7 are
-human-gated** (the driver attaches evidence to the ledger and parks survivors at
-a review packet — it never promotes).
+**verify/report** → 4. **filter** survivors. These discovery stages run
+autonomously; the driver attaches evidence to the ledger and parks survivors at
+a human review packet. Strategy implementation, replay, and deployment live
+outside this repository.
 
 The moat is the reward function — a judge that says *no* cheaply and honestly
 (train/holdout rank stability, block-bootstrap + FDR, a bid/ask cost policy,
-path-aware Martin/Calmar metrics, and per-mechanism scan↔Himalaya calibration).
+path-aware Martin/Calmar metrics, and explicit mechanism-calibration status).
 
-Start here: **`CLAUDE.md`** (architecture, CLI, data paths, cost/verification
-policy) and **`doc/direction/alpha-factory-roadmap.md`** (what's built and what's
-next). `src/cli.py` is the single entry point.
+Start here: **`CLAUDE.md`** (architecture, dependency boundary, and operating
+rules). `src/cli.py` is the single entry point.
 
 ## Existing Tools
 
 Kilimanjaro should reuse existing systems instead of rebuilding them.
 
-### potential-panda-core
+### Qate
 
-Path: `/home/lulurun/workspace/potential-panda-core`
-
-Role:
-
-- Core trading abstractions.
-- Strategy base classes and variant contracts.
-- Exchange and simulator abstractions.
-- Shared utilities and storage primitives.
-
-Use it when a generated strategy needs to become executable code.
+Kilimanjaro uses the published Qate package only for shared data-definition
+objects needed at the Hase/Makalu boundary. It does not import strategy code.
 
 ### Makalu
 
@@ -50,20 +41,6 @@ Role:
 
 Makalu is currently the most important source of research edge because the
 bronze data contains order book snapshots and trades.
-
-### Himalaya
-
-Path: `/home/lulurun/workspace/Himalaya`
-
-Role:
-
-- Backtest engine.
-- Replays stored market data through a simulator gateway.
-- Runs strategies and parameter grids.
-- Writes results to InfluxDB, Parquet, and run logs.
-
-Use it for candidate strategy evaluation, optimization, retesting, and
-cross-period validation.
 
 ## Product Thesis
 
@@ -86,7 +63,7 @@ bar data alone.
 
 ## Non-Goals
 
-- Do not rebuild Makalu, Himalaya, or potential-panda-core here.
+- Do not rebuild Hase, Makalu, or strategy/runtime systems here.
 - Do not turn AI output directly into a live strategy.
 - Do not accept PnL-only evidence.
 - Do not optimize parameters on one period and call it discovery.
@@ -101,16 +78,14 @@ Everything runs through `python src/cli.py <command>`:
 | command | what it does |
 |--|--|
 | `generate` | the generator — propose new formula specs into the queue (deduped, data-gated) |
-| `grid {flip,expr,obi}` | run a parameter-grid scan (train/holdout split + rank stability) |
+| `grid horizon` | run an expression parameter-grid scan (train/holdout split + rank stability) |
 | `loop` | the scanner loop — one pass over the spec queue (validate → dedup → scan → verdict → ledger → review packet) |
 | `factory` | the cadence — bounded or daemon generate+scan, never promotes |
 | `ledger {append,search}` | the append-only research memory |
-| `verify-scan` | scan↔Himalaya-backtest fidelity check (ORDER + EVAL) |
-| `populate` / `verify` | populate a dataset; verify a dataset vs backtest InfluxDB |
+| `populate obi-feature` | materialize the local OBI feature dataset from Makalu data |
 
-Promotion (steps 5–7) stays human: the loop parks survivors at a `REVIEW_PACKET.md`
-stamped CALIBRATED / TREND-ONLY; a human records the `human_approval` and drafts a
-handoff (`cycle/18_handoffs/`). See `doc/requirements/agent-loop-design.md` for the state
+Promotion stays human: the loop parks survivors at a `REVIEW_PACKET.md` stamped
+CALIBRATED / TREND-ONLY. See `doc/requirements/agent-loop-design.md` for the state
 machine.
 
 ## Artifacts
@@ -121,7 +96,7 @@ All research-cycle data lives under `cycle/`, numbered in pipeline order (see
 
 - `cycle/11_hypotheses/` — hypothesis specs (`hyp-YYYYMMDD-NNN.yaml`)
 - `cycle/12_specs/` — the loop's working scan specs (expression formulas + sweeps)
-- `cycle/15_return_eval/grid_scan/{flip,expr,horizon}/` — grid-scan outputs (`output.csv`, `output_stable.csv`, `params.json`, …)
+- `cycle/15_return_eval/grid_scan/{expr,horizon}/` — grid-scan outputs (`output.csv`, `output_stable.csv`, `params.json`, …)
 - `cycle/17_ledger/` — append-only research memory (`events.jsonl`)
 - `cycle/18_handoffs/` — human-approved backtest handoff packages (`hyp-YYYYMMDD-NNN.yaml`/`.md`)
 - `cycle/03_inventory/` — Makalu data inventory snapshots (`inventory-YYYYMMDDTHHMMSSZ.yaml`)
@@ -158,7 +133,6 @@ regenerate it on demand from bronze `OrderBook` with
 
 - **[`doc/continuous-discovery-implementation-plan.md`](doc/continuous-discovery-implementation-plan.md)** — next-version implementation plan: data planning, durable jobs, connected research stages, fresh-data confirmation, adaptive search, and unattended operation; milestone acceptance gates for coding agents.
 - **[`CLAUDE.md`](CLAUDE.md)** — architecture, CLI, data paths, cost + verification policy (start here).
-- **[`doc/direction/alpha-factory-roadmap.md`](doc/direction/alpha-factory-roadmap.md)** — the tracked roadmap to a full alpha discovery factory.
 - [`doc/scan-evaluation.md`](doc/scan-evaluation.md) — how every grid scan is judged: train/holdout split, rank-stability selection, verdict taxonomy.
 - [`doc/calibration.md`](doc/calibration.md) — calibrating the scan against Himalaya, per mechanism; the calibration registry (CALIBRATED / trend-only).
 - [`doc/overlapping-returns.md`](doc/overlapping-returns.md) — why overlapping-horizon returns inflate significance, the defenses, and how an episode is defined.
@@ -184,7 +158,7 @@ step) -- the same file layout convention as Makalu's own `src/api.py`/`web/`.
 Read-only, two views:
 
 - **Scans** (`#/scans`) -- every grid-scan run under `cycle/15_return_eval/grid_scan/`
-  (flip / horizon / expr), newest first, with verdict counts. A run's
+  (horizon / expr), newest first, with verdict counts. A run's
   detail view renders each CSV (`output.csv`, `output_stable.csv`,
   `output_monthly.csv`, ...) as a table sortable by any column (click a
   header to sort, click again to flip direction), with a text filter,

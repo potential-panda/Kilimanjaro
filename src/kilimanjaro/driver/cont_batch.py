@@ -11,8 +11,8 @@ all of its wall time re-reading identical data, so this runner inverts the loop:
 Only the target prices and the gate are per-cell. That turns an O(cells) sequence of
 frame loads into O(1), which is what makes a wide sweep practical on this box.
 
-Every cell still goes through the SAME stage-15 pieces as a single run — orion's
-schedule, the rolling drawdown gate, BetweenSignalReturn — so batch results are
+Every cell still goes through the same stage-15 pieces as a single run — the
+declarative schedule, rolling drawdown gate, and BetweenSignalReturn — so results are
 directly comparable with `cli.py return-eval` output rather than a parallel universe.
 """
 
@@ -47,8 +47,8 @@ def run_batch(
         DEFAULT_DD_WINDOW_SECONDS,
         RollingDrawdownGate,
     )
-    from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
     from kilimanjaro.framework.protocol import MarketConfig
+    from kilimanjaro.framework.schedule import schedule_from_config
     from kilimanjaro.return_calc.between_signal import BetweenSignalReturn
     from kilimanjaro.return_calc.continuous_barrier import ContinuousBarrierReturn
     from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
@@ -63,11 +63,14 @@ def run_batch(
     # the earlier grid exactly and any difference is attributable to the barrier.
     barriers: list[dict] = cfg.get("barriers", [{}])
     qty_col = cfg.get("qty_col", "a_ta_total_qty_1s")
-    # Schedule is a swept axis, not a fixed setting: orion's versions are (weekday, hour)
-    # tables and `default_active`/`default_inactive` OVERLAP rather than partition, so the
-    # only honest way to compare them is to run the same cells under each.
-    sched_names = cfg.get("schedules") or [cfg.get("schedule", "nofilter")]
-    scheds = [(nm, OrionScheduleFilter(nm)) for nm in sched_names]
+    schedule_configs = cfg.get("schedules") or [cfg.get("schedule")]
+    scheds = [
+        (
+            (item.get("name", "custom") if isinstance(item, dict) else "nofilter"),
+            schedule_from_config(item),
+        )
+        for item in schedule_configs
+    ]
 
     # ── one frame for everything ──────────────────────────────────────────────
     load_start = (
@@ -150,7 +153,7 @@ def run_batch(
                     )
                     tr_all = calc.compute(sigs, target, start, end, data_root)
                     for sched_name, sched in scheds:
-                        tr, _ = sched.apply(tr_all)
+                        tr = tr_all if sched is None else sched.apply(tr_all)[0]
                         n_pre_gate = len(tr)
                         tr, _ = RollingDrawdownGate(
                             window_seconds=DEFAULT_DD_WINDOW_SECONDS,

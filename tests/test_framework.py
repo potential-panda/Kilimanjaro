@@ -22,6 +22,7 @@ from kilimanjaro.framework import (
     block_bootstrap_pvalue,
     run_grid,
     run_grid_split,
+    schedule_from_config,
     split_windows,
 )
 from kilimanjaro.framework.evaluate import default_split
@@ -31,11 +32,13 @@ TARGET = MarketConfig("GMO", "ETH_JPY", "0.3")
 
 def _trades(ts, returns, exit_offset=60.0):
     ts = np.asarray(ts, dtype=float)
-    return pd.DataFrame({
-        "ts": ts,
-        "exit_ts": ts + exit_offset,
-        "return_bps": np.asarray(returns, dtype=float),
-    })
+    return pd.DataFrame(
+        {
+            "ts": ts,
+            "exit_ts": ts + exit_offset,
+            "return_bps": np.asarray(returns, dtype=float),
+        }
+    )
 
 
 class TestRollingDrawdownGate(unittest.TestCase):
@@ -117,9 +120,14 @@ class StubSignal:
         # Real signals carry a varying strength (a z-score), so IC is defined;
         # a fixed seed keeps it deterministic and identical across windows.
         strength = np.random.default_rng(7).normal(0.0, 1.0, n)
-        return pd.DataFrame({
-            "ts": ts, "direction": 1.0, "strength": strength, "exit_ts": ts + 1800.0,
-        })
+        return pd.DataFrame(
+            {
+                "ts": ts,
+                "direction": 1.0,
+                "strength": strength,
+                "exit_ts": ts + 1800.0,
+            }
+        )
 
 
 class StubReturn:
@@ -190,6 +198,16 @@ class TestRunGrid(unittest.TestCase):
         rows = run_grid(combos, TARGET, "2026-01-01", "2026-02-01")
         self.assertEqual(rows[0]["schedule"], "myschedule")
 
+    def test_schedule_config_is_local_and_declarative(self):
+        self.assertIsNone(schedule_from_config(None))
+        self.assertIsNone(schedule_from_config("nofilter"))
+        schedule = schedule_from_config(
+            {"name": "weekdays", "block_weekend_hours": list(range(24))}
+        )
+        self.assertEqual(schedule.name, "weekdays")
+        with self.assertRaises(TypeError):
+            schedule_from_config("external-strategy-schedule")
+
     def test_gate_counts_merged_into_row(self):
         gate = RollingDrawdownGate(1e9, 1.0, 1e9)  # huge window, tiny threshold
         combos = [(GainAwareSignal("a", -50.0), StubReturn(60))]
@@ -224,8 +242,14 @@ class TestRunGridSplit(unittest.TestCase):
             (GainAwareSignal("a", float(g)), StubReturn(60 + g)) for g in range(1, 11)
         ]
         res = run_grid_split(
-            combos, TARGET, "2026-01-01", "2026-03-01", "2026-04-01",
-            rank_metric="t_stat_eff", top_quantile=0.10, min_n=10,
+            combos,
+            TARGET,
+            "2026-01-01",
+            "2026-03-01",
+            "2026-04-01",
+            rank_metric="t_stat_eff",
+            top_quantile=0.10,
+            min_n=10,
         )
         self.assertFalse(any("train_t_stat_eff" in r for r in res["rows"]))
         ranked = [r for r in res["rows"] if r["train_rank_pct"] == r["train_rank_pct"]]
@@ -239,8 +263,13 @@ class TestRunGridSplit(unittest.TestCase):
             (GainAwareSignal("a", float(g)), StubReturn(60 + g)) for g in range(1, 11)
         ]
         res = run_grid_split(
-            combos, TARGET, "2026-01-01", "2026-03-01", "2026-04-01",
-            top_quantile=0.10, min_n=10,
+            combos,
+            TARGET,
+            "2026-01-01",
+            "2026-03-01",
+            "2026-04-01",
+            top_quantile=0.10,
+            min_n=10,
         )
         rows = res["rows"]
         self.assertEqual(len(rows), 10)
@@ -258,7 +287,11 @@ class TestRunGridSplit(unittest.TestCase):
     def test_min_n_excludes_from_ranking(self):
         combos = [(GainAwareSignal("a", 10.0), StubReturn(60))]
         res = run_grid_split(
-            combos, TARGET, "2026-01-01", "2026-03-01", "2026-04-01",
+            combos,
+            TARGET,
+            "2026-01-01",
+            "2026-03-01",
+            "2026-04-01",
             min_n=10_000,  # stub only produces 200 trades
         )
         r = res["rows"][0]
@@ -296,11 +329,15 @@ class TestVerdictClassification(unittest.TestCase):
 
     def _row(self, **kw):
         base = {
-            "train_status": "ok", "holdout_status": "ok",
+            "train_status": "ok",
+            "holdout_status": "ok",
             "stable": False,
-            "train_rank_pct": 0.95, "holdout_rank_pct": 0.2,
-            "train_avg_net": 2.0, "holdout_avg_net": -0.1,
-            "train_pos_month_share": 1.0, "holdout_pos_month_share": 0.0,
+            "train_rank_pct": 0.95,
+            "holdout_rank_pct": 0.2,
+            "train_avg_net": 2.0,
+            "holdout_avg_net": -0.1,
+            "train_pos_month_share": 1.0,
+            "holdout_pos_month_share": 0.0,
             "train_plateau": 1.0,
         }
         base.update(kw)
@@ -308,16 +345,19 @@ class TestVerdictClassification(unittest.TestCase):
 
     def test_decayed(self):
         from kilimanjaro.framework.evaluate import _classify
+
         # top-ranked, every train month positive, on a plateau, all holdout months bad
         self.assertEqual(_classify(self._row(), 0.9), "decayed")
 
     def test_isolated_winner_is_noise_not_decayed(self):
         from kilimanjaro.framework.evaluate import _classify
+
         # identical profile but parameter neighbors disagree → selection luck
         self.assertEqual(_classify(self._row(train_plateau=0.0), 0.9), "noise")
 
     def test_alternating_train_months_is_regime_dependent(self):
         from kilimanjaro.framework.evaluate import _classify
+
         self.assertEqual(
             _classify(self._row(train_pos_month_share=0.5), 0.9),
             "regime_dependent",
@@ -325,6 +365,7 @@ class TestVerdictClassification(unittest.TestCase):
 
     def test_mixed_holdout_is_regime_dependent_not_decayed(self):
         from kilimanjaro.framework.evaluate import _classify
+
         self.assertEqual(
             _classify(self._row(holdout_pos_month_share=0.5), 0.9),
             "regime_dependent",
@@ -332,16 +373,19 @@ class TestVerdictClassification(unittest.TestCase):
 
     def test_stable_wins(self):
         from kilimanjaro.framework.evaluate import _classify
+
         self.assertEqual(_classify(self._row(stable=True), 0.9), "stable")
 
     def test_error_rows_are_no_data(self):
         from kilimanjaro.framework.evaluate import _classify
+
         self.assertEqual(
             _classify(self._row(holdout_status="no_signals"), 0.9), "no_data"
         )
 
     def test_pos_month_share_respects_min_n(self):
         from kilimanjaro.framework.evaluate import _pos_month_share
+
         monthly = {"2026-01": (100, 1.0), "2026-02": (3, -5.0), "2026-03": (50, -1.0)}
         # the 3-trade month is ignored → 1 of 2 qualified months positive
         self.assertEqual(_pos_month_share(monthly, 10), 0.5)
@@ -349,27 +393,42 @@ class TestVerdictClassification(unittest.TestCase):
 
     def test_plateau_neighbors(self):
         from kilimanjaro.framework.evaluate import _add_plateau
+
         # grid over box×step; the (2, 20) cell is an isolated winner
         rows = []
         for box in (1, 2, 3):
             for step in (10, 20, 30):
                 win = (box, step) == (2, 20)
-                rows.append({
-                    "box": box, "step": step, "schedule": "x",
-                    "train_avg_net": 1.0 if win else -1.0,
-                    "n_combos_tested": 9,
-                })
+                rows.append(
+                    {
+                        "box": box,
+                        "step": step,
+                        "schedule": "x",
+                        "train_avg_net": 1.0 if win else -1.0,
+                        "n_combos_tested": 9,
+                    }
+                )
         _add_plateau(rows)
         center = next(r for r in rows if (r["box"], r["step"]) == (2, 20))
-        self.assertEqual(center["train_plateau"], 0.0)  # isolated winner: all 4 neighbors negative
+        self.assertEqual(
+            center["train_plateau"], 0.0
+        )  # isolated winner: all 4 neighbors negative
         edge = next(r for r in rows if (r["box"], r["step"]) == (2, 10))
-        self.assertEqual(edge["train_plateau"], 1 / 3)  # neighbors (1,10)−, (3,10)−, (2,20)+
+        self.assertEqual(
+            edge["train_plateau"], 1 / 3
+        )  # neighbors (1,10)−, (3,10)−, (2,20)+
 
     def test_monthly_rows_and_verdict_in_split(self):
         combos = [(GainAwareSignal("a", float(g)), StubReturn(60)) for g in (1, 5, 10)]
         res = run_grid_split(
-            combos, TARGET, "2026-01-01", "2026-03-01", "2026-04-01",
-            top_quantile=0.34, min_n=10, min_month_n=1,
+            combos,
+            TARGET,
+            "2026-01-01",
+            "2026-03-01",
+            "2026-04-01",
+            top_quantile=0.34,
+            min_n=10,
+            min_month_n=1,
         )
         self.assertTrue(res["monthly_rows"])
         m = res["monthly_rows"][0]

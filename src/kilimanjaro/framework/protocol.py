@@ -35,7 +35,7 @@ class SignalDef(Protocol):
     signals DataFrame must have columns: [ts, direction, strength]
         ts         float64  Unix timestamp of the signal event
         direction  float64  +1 (long) or -1 (short)
-        strength   float64  raw signal value (OBI, sar_up, etc.)
+        strength   float64  raw signal value
     It may also carry extra columns (e.g. exit_ts for between-signal returns).
     """
 

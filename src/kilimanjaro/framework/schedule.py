@@ -40,14 +40,14 @@ def add_jst_columns(
         Column to derive jst_hour and jst_weekday from.
     date_ts_col : str, optional
         Column to derive jst_date from (defaults to ts_col).
-        Pass the entry ts when using exit_ts for hour/weekday (SAR style).
+        Pass the entry timestamp when hour/weekday and date use different events.
     """
     import numpy as np
 
     df = df.copy()
 
-    # ts_col may contain NaN (e.g. exit_exec_ts for the last flip which has no
-    # next flip). Only convert valid rows to int64; leave NaN rows as NaN.
+    # ts_col may contain NaN when the last event has no exit. Only convert valid
+    # rows to int64; leave NaN rows as NaN.
     valid = df[ts_col].notna()
     df["jst_hour"] = np.nan
     df["jst_weekday"] = np.nan
@@ -82,7 +82,7 @@ class ScheduleFilter:
         When True, additionally blocks Saturday JST 09–11 (GMO maintenance window).
     has_exit_col : str | None
         If set, only apply hour/weekday/GMO filters to rows where this column
-        is not-null. Rows without an exit (last flip) are never hour-blocked.
+        is not-null. Rows without an exit are never hour-blocked.
     """
 
     block_weekday_hours: list[int] = field(default_factory=list)
@@ -147,3 +147,21 @@ class ScheduleFilter:
             "n_weekday_blocked": n_weekday_blocked,
             "n_sat_blocked": n_sat_blocked,
         }
+
+
+def schedule_from_config(config: dict | str | None) -> ScheduleFilter | None:
+    """Build a repository-owned filter from a declarative scan-spec value.
+
+    ``None`` and ``"nofilter"`` mean unrestricted. Named strategy schedules are
+    deliberately unsupported: discovery specs must describe filters as data
+    using :class:`ScheduleFilter` field names.
+    """
+    if config is None or config == "nofilter":
+        return None
+    if isinstance(config, str):
+        raise TypeError(
+            f"named schedule {config!r} is not supported; use a schedule mapping"
+        )
+    if not isinstance(config, dict):
+        raise TypeError("schedule must be a mapping, 'nofilter', or null")
+    return ScheduleFilter(**config)

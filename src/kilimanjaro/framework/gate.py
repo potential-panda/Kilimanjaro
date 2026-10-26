@@ -54,7 +54,7 @@ def default_drawdown_gate() -> RollingDrawdownGate:
 
 @dataclass(frozen=True)
 class RollingDrawdownGate:
-    """Rolling drawdown gate (the original flip-scan gate, now shared).
+    """Rolling drawdown gate shared by non-overlapping return mechanisms.
 
     Closes the gate when cumulative return_bps within the trailing
     window_seconds falls below -threshold_bps. While closed, trades are
@@ -62,7 +62,7 @@ class RollingDrawdownGate:
     the window reset.
 
     Expects columns: ts, return_bps (NaN allowed), and optionally exit_ts
-    (NaN for the last flip; falls back to ts when absent).
+    (NaN for an event without an exit; falls back to ts when absent).
     """
 
     window_seconds: float

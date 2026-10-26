@@ -1,8 +1,7 @@
 # Alpha Discovery Design
 
 Recorded from session 2026-07-01. Extends `workflow-strategy.md` with
-decisions specific to the new-alpha track (as opposed to the existing
-SAR-validation track). All decisions here are directional; scanner code should
+decisions specific to the alpha-discovery track. All decisions here are directional; scanner code should
 explicitly implement the distinctions below.
 
 ---
@@ -24,7 +23,7 @@ for this distinction going forward.
 ### Skew style
 - Magnitude drives expectancy: P(win) is low, but E[win] >> E[loss].
 - PnL distribution is right-skewed (many small losses, occasional large wins).
-- Typical mechanisms: trend-following, momentum, range-bar SAR, breakout.
+- Typical mechanisms: trend-following, momentum, and breakout.
 - Scanner mode: **between-signal** — measure the return from signal entry to
   the next signal reversal (exit = next flip, not a fixed horizon). A
   fixed-horizon window is the wrong lens: it exits before the trend completes
@@ -145,14 +144,11 @@ The scanner should flag isolated winners explicitly in its output.
 
 ## 4. Relationship to existing work
 
-- The SAR validation track (hyp-20260624-*) used the between-signal mode
-  (`flip_scan_v1`). That is correctly categorized as **skew style**.
 - New hypotheses from the taxonomy (order book imbalance, trade aggression,
   microprice reversion) are primarily **precision style** and should use the
   fixed-horizon mode with the dynamic horizon dataset.
-- The scanner code (`tools/scanner.py`, `tools/flip_scan.py`) should be
-  refactored or extended so the style is an explicit input and the scan path
-  branches accordingly. The two code paths should not share a function that
+- The scanner should use style as an explicit input and the scan path should
+  branch accordingly. The two code paths should not share a function that
   silently applies one mode to both styles.
 
 ---

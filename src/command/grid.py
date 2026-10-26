@@ -1,8 +1,7 @@
 """`cli.py grid` — parameter-grid scans (train/holdout split + rank stability).
 
-Two flavours, one shared core (driver/scan_runner.run_grid_scan):
+Expression grids run through the shared ``driver.scan_runner`` core:
 
-    python src/cli.py grid flip    --market btc --start 2025-07-01 --end 2026-06-30
     python src/cli.py grid horizon --spec my_grid.yaml --start ... --end ...
 
 `horizon` runs any expression spec (formula signals over the feature frame,
@@ -20,17 +19,10 @@ from pathlib import Path
 
 import yaml
 
-from kilimanjaro.driver import flip_grid, ledger_io
-from kilimanjaro.driver.scan_runner import build_combos, run_grid_scan, run_spec
-from kilimanjaro.framework import MarketConfig, RollingDrawdownGate
-from kilimanjaro.framework.gate import (
-    DEFAULT_DD_COOLDOWN_SECONDS,
-    DEFAULT_DD_THRESHOLD_BPS,
-    DEFAULT_DD_WINDOW_SECONDS,
-)
+from kilimanjaro.driver import ledger_io
+from kilimanjaro.driver.scan_runner import build_combos, run_spec
 
 _RESULTS = Path("cycle/15_return_eval/grid_scan")
-_FLIP_HYP = "hyp-20260703-002"  # schedule-adaptive flip-scan spec (box×step×sched)
 
 
 # ── argparse ─────────────────────────────────────────────────────────────────
@@ -39,20 +31,6 @@ def register(sub: argparse._SubParsersAction) -> None:
         "grid", help="Parameter-grid scans (train/holdout + rank stability)"
     )
     gsub = p.add_subparsers(dest="grid_cmd", required=True)
-
-    pf = gsub.add_parser("flip", help="Range-bar SAR flip grid (box × step × schedule)")
-    pf.add_argument("--market", required=True, choices=list(flip_grid.MARKET_CONFIGS))
-    _common(pf)
-    pf.add_argument("--size", default=None, help="Override execution_size")
-    pf.add_argument(
-        "--dd-window-seconds", type=float, default=DEFAULT_DD_WINDOW_SECONDS
-    )
-    pf.add_argument("--dd-threshold-bps", type=float, default=DEFAULT_DD_THRESHOLD_BPS)
-    pf.add_argument(
-        "--dd-cooldown-seconds", type=float, default=DEFAULT_DD_COOLDOWN_SECONDS
-    )
-    pf.add_argument("--hypothesis-id", default=_FLIP_HYP)
-    pf.set_defaults(func=_run_flip)
 
     ph = gsub.add_parser(
         "horizon",
@@ -142,47 +120,6 @@ def _finish(
 
 
 # ── flavours ─────────────────────────────────────────────────────────────────
-def _run_flip(args: argparse.Namespace) -> int:
-    cfg = dict(flip_grid.MARKET_CONFIGS[args.market])
-    if args.size:
-        cfg["execution_size"] = args.size
-    target = MarketConfig(
-        cfg["target_exchange"], cfg["target_symbol"], cfg["execution_size"]
-    )
-    combos = flip_grid.build_combos(cfg)
-    gate = RollingDrawdownGate(
-        window_seconds=args.dd_window_seconds,
-        threshold_bps=args.dd_threshold_bps,
-        cooldown_seconds=args.dd_cooldown_seconds,
-    )
-    print(f"Flip grid: {args.market.upper()} — {len(combos)} combos")
-    res, out_dir, scan_id = run_grid_scan(
-        combos,
-        target,
-        args.start,
-        args.end,
-        results_root=_RESULTS / "flip",
-        scan_name=args.market.upper(),
-        out_dir=Path(args.out) if args.out else None,
-        csv_fields=flip_grid.CSV_FIELDS,
-        split=args.split,
-        gates=[gate],
-        param_meta={
-            "market": args.market,
-            "grid": {
-                "boxes": flip_grid.BOXES,
-                "steps": flip_grid.STEPS,
-                "schedule_source": "orion.schedule",
-            },
-        },
-        rank_metric=args.rank_metric,
-        top_quantile=args.top_quantile,
-        min_n=args.min_n,
-        on_result=_progress(len(combos)),
-    )
-    return _finish(res, out_dir, scan_id, args, args.market, "grid-flip")
-
-
 def _run_horizon(args: argparse.Namespace) -> int:
     if args.list_features:
         from kilimanjaro.data.feature_frame import available_features

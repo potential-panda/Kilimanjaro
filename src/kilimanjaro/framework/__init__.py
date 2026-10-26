@@ -7,7 +7,7 @@ from kilimanjaro.framework.gate import (
 from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
 from kilimanjaro.framework.report import write_csv, write_scan_folder
 from kilimanjaro.framework.runner import run_grid
-from kilimanjaro.framework.schedule import ScheduleFilter
+from kilimanjaro.framework.schedule import ScheduleFilter, schedule_from_config
 from kilimanjaro.framework.stats import block_bootstrap_pvalue, compute_stats
 
 __all__ = [
@@ -23,6 +23,7 @@ __all__ = [
     "default_split",
     "run_grid",
     "run_grid_split",
+    "schedule_from_config",
     "split_windows",
     "write_csv",
     "write_scan_folder",

@@ -13,10 +13,7 @@ verifiers never were.
 - `load_influx(...)` / `influx_range_jst(...)` build and run the standard
   pivoted flux query both backtest streams (BAR / ORDER / EVAL) use.
 
-Callers (`dataset.range_sar_store.verify`, `dataset.backtest.verify`) supply the
-store loader, the field mapping, and the tolerance; the backtest verifier
-additionally layers Sharpe/Calmar/Martin (see `framework.performance`) on the
-matched PnL.
+Callers supply the store loader, field mapping, and tolerance.
 """
 
 from __future__ import annotations
@@ -63,7 +60,7 @@ def _greedy_match(
     """Two-pointer nearest-match within `tolerance` over two SORTED 1-D arrays.
 
     Returns (local_positions, remote_positions) of matched pairs — the same
-    greedy rule the flip-scan verify has always used.
+    deterministic greedy rule used by time-series comparisons.
     """
     n_l, n_r = len(local_ts), len(remote_ts)
     l_pos: list[int] = []

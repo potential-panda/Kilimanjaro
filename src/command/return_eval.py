@@ -39,7 +39,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--thresholds",
         default=None,
-        help="comma list to sweep (default: the spec's own thresholds; for a sar_flip spec this sweeps BOX SIZE)",
+        help="comma-separated threshold or clock-parameter sweep",
     )
     p.add_argument(
         "--cost-bps",
@@ -66,26 +66,17 @@ def _run(args) -> int:
     thresholds = (
         [float(x) for x in args.thresholds.split(",")] if args.thresholds else None
     )
-    is_flip = spec.get("signal") in ("sar_flip", "continuous")
+    is_continuous = spec.get("signal") == "continuous"
     jst = tuple(range(24)) if args.all_hours else (22, 23, 0, 1, 2)
-    # A flip spec carries its own schedule (orion's module) and its own gate defaults
-    # (3h/500bps/6h, framework.gate) — passing None lets those defaults stand rather
-    # than silently imposing aquila's 200bps expression-strategy gate on it.
-    dd = float("inf") if args.no_dd_gate else (None if is_flip else 200.0)
+    dd = float("inf") if args.no_dd_gate else (None if is_continuous else 200.0)
 
     t = spec["target"]
     rc = (
-        "between_signal"
-        if spec.get("signal") == "sar_flip"
-        else f"continuous:{spec['clock']['kind']}"
+        f"continuous:{spec['clock']['kind']}"
         if spec.get("signal") == "continuous"
         else spec.get("return_calc", "trailing_stop")
     )
-    where = (
-        f"orion:{spec.get('schedule', 'nofilter')}"
-        if is_flip
-        else ("all-hours" if args.all_hours else "US-session")
-    )
+    where = "all-hours" if args.all_hours else "US-session"
     print(
         f"return-eval: {Path(args.spec).stem} | {t['exchange']}:{t['symbol']} | {rc} | "
         f"{where}"
@@ -103,15 +94,11 @@ def _run(args) -> int:
     )
 
     maker = "fill_rate" in df.columns  # maker runs carry the mechanism diagnostics
-    flip = "box" in df.columns  # flip runs sweep box size, not threshold
     cont = "clock" in df.columns  # continuous runs sweep the clock parameter
-    sweep_col, sweep_hdr = (
-        ("param", "param") if cont else ("box", "box") if flip else ("threshold", "thr")
-    )
+    sweep_col, sweep_hdr = ("param", "param") if cont else ("threshold", "thr")
     print(
         f"\n  {sweep_hdr:>6} {'nTrades':>8} {'totalBps':>9} {'avgBps':>7} | "
         f"{'netTotal':>9} {'netAvg':>7} {'sharpe':>7} {'holdS':>7}"
-        + (f" | {'gatedOut':>8}" if flip else "")
         + (f" | {'nBars':>9} {'bars/tr':>8} {'gatedOut':>8}" if cont else "")
         + (f" | {'fillRate':>8} {'forced':>7}" if maker else "")
     )
@@ -119,7 +106,6 @@ def _run(args) -> int:
         print(
             f"  {r[sweep_col]:>6} {int(r.n_trades):>8} {r.total_bps:>+9.1f} {r.avg_bps:>+7.3f} | "
             f"{r.net_total_bps:>+9.1f} {r.net_avg_bps:>+7.3f} {r.sharpe:>+7.2f} {int(r.avg_hold_s):>7}"
-            + (f" | {int(r.n_gated_out):>8}" if flip else "")
             + (
                 f" | {int(r.n_bars):>9} {r.bars_per_trade:>8.1f} {int(r.n_gated_out):>8}"
                 if cont

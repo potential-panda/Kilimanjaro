@@ -9,10 +9,8 @@ different equity curves: one grinds up steadily, the other makes all its money
 in four months and sits in a 73%-of-profit drawdown the rest of the time. A
 trader would never treat those as equal, yet the trade-distribution metrics do.
 
-That blindness is how the flip scan handed off a param whose per-trade edge was
-robust but whose *curve* was the worst of the survivors. To rank params the way
-a trader actually would, we have to score the **path**: mostly the drawdown you
-have to sit through to earn the return.
+To rank parameters realistically, we also score the **path**: especially the
+drawdown endured to earn the return.
 
 What it measures
 ----------------

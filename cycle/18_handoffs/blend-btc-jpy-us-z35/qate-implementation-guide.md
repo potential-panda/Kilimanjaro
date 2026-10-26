@@ -56,7 +56,7 @@ signal live from the tick stream (Section 2). Precompute is replay-only.
 
 ### Reference strategies to follow
 
-Three existing strategies are the patterns to copy — read them before writing code:
+Two existing strategies are the patterns to copy — read them before writing code:
 
 1. **corvus** — `potential-panda-core/src/qate/strategy/corvus/` (`config.py`,
    `v1.py`). The **minimal complete `Strategy`**: the smallest working shape to
@@ -66,20 +66,14 @@ Three existing strategies are the patterns to copy — read them before writing 
    example**: how to source features (`source.py`), how to do **time-of-day
    scheduling** (`schedule.py` — directly relevant to our JST-hours filter),
    inventory handling, and multi-version layout with a design doc.
-3. **orion** — `potential-panda-orion/src/orion/` (`schedule.py`, `risk.py`,
-   `circuit_breaker.py`, `regime.py`, `template.py`, `v1.py`…`v6*.py`). The
-   flagship **taker** strategy — the same execution style this edge targets — and
-   the reference for **production concerns**: scheduling, risk / circuit-breaker
-   (the live drawdown-gate analogue), regime handling, and versioned variants.
-
 Suggested mapping: start from **corvus** for the skeleton, take **pisces**'s
 `source.py`/`schedule.py` patterns for feature sourcing + the JST-hours filter, and
-follow **orion** for the taker execution + risk/circuit-breaker wiring.
+implement execution and risk from the approved runtime contracts.
 
 ### 2.1 Strategy skeleton
 
 Subclass `qate.trading.strategy.Strategy` (skeleton: **corvus**; fuller patterns:
-**pisces**, **orion** — see above). You receive **both markets'** streams — BINANCE
+**pisces** — see above). You receive **both markets'** streams — BINANCE
 BTC_USDT (leader, alias `a`, carries all 19 factors) and COINCHECK BTC_SPOT
 (target/execution, alias `b` — used only for `b_mid` in the basis terms):
 
@@ -169,7 +163,7 @@ Per 1s step, once features are computed:
 
 ## 3. Parity harness — the pass/fail gate
 
-**A port is not trustworthy until this passes.** It is the `verify-scan` analogue
+**A port is not trustworthy until this passes.** It is the replay-parity check
 for this mechanism (`doc/calibration.md`, `doc/verification`).
 
 1. Pick a fixed replay window (e.g. one active US-session day of BTC).

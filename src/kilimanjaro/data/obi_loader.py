@@ -57,7 +57,7 @@ def load_obi_series(
     glob = _obi_glob(exchange, symbol, data_root)
     # Hold the connection in a local until .df() materializes — an inline
     # duckdb.connect().sql(...).df() lets the connection be GC'd mid-query
-    # ("Connection has already been closed"), same bug fixed in sar_loader.
+    # Keep the connection alive while DuckDB materializes the result.
     con = duckdb.connect()
     try:
         return con.sql(f"""

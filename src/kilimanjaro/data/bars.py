@@ -9,7 +9,7 @@ Why the clock is a first-class choice, and not just "range bars":
 
     A RANGE bar closes exactly when price has moved +/-B, so every decision point is
     a local extreme and you transact at the worst instant by construction. Measured
-    on the SAR flip clock: an execution toll of 3.49-4.91 bps against a 2.78 median-
+    on an event clock: an execution toll of 3.49-4.91 bps against a 2.78 median-
     conditions cost on COINCHECK, and — the tell — 1.71-2.28 bps against a 1.00 floor
     on BINANCE, where the spread is ~0. That ~1-2 bps excess is pure adverse TIMING,
     not spread width.

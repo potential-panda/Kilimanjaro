@@ -1,10 +1,8 @@
 """Scan core: combos -> run_grid_split -> output folder.
 
 Canonical home for the run/write pipeline shared by every scan flavour.
-`run_grid_scan` is the generic core; `run_spec` is the expression-spec flavour
-on top of it. The flip flavour lives in driver/flip_grid.py, and cli.py
-`grid {flip,horizon}` is the thin CLI over both. The scanner loop calls run_spec
-directly.
+`run_grid_scan` is the generic core and `run_spec` is the expression-spec
+flavour on top of it. The scanner loop calls ``run_spec`` directly.
 
 A scan-spec is the YAML consumed by the expression funnel:
 
@@ -39,7 +37,6 @@ from kilimanjaro.framework.gate import (
     RollingDrawdownGate,
     default_drawdown_gate,
 )
-from kilimanjaro.framework.orion_schedule import OrionScheduleFilter
 from kilimanjaro.return_calc.episode import EpisodeReturn
 from kilimanjaro.return_calc.fixed_horizon import FixedHorizonReturn
 from kilimanjaro.return_calc.trailing_stop import TrailingStopReturn
@@ -113,7 +110,6 @@ def _return_calcs(spec: dict) -> list:
         return [FixedHorizonReturn(horizon_seconds=h) for h in spec["horizons"]]
     # Expression signals fire on the 1s composite grid, so the realistic taker fill is
     # the next available price after the bar closes: fill_delay_seconds=1.0 (default).
-    # Certified flip mechanism fires on a tick and constructs its calcs directly (delay 0).
     fd = float(spec.get("fill_delay_seconds", 1.0))
     if kind == "triple_barrier":
         return [
@@ -220,8 +216,8 @@ def run_grid_scan(
 ) -> tuple[dict, Path, str]:
     """THE shared scan core: run a combo grid through the train/holdout split and
     write the standard output folder (params.json, output.csv, output_stable.csv,
-    output_monthly.csv). Every scan flavour (flip, expression, OBI) calls this;
-    they differ only in how `combos` / `csv_fields` are built.
+    output_monthly.csv). Scan flavours differ only in how ``combos`` and
+    ``csv_fields`` are built.
 
     row_transform: optional per-row map applied before writing (default `_round`;
     the OBI flavour passes a labeler that recovers depth/halflife). on_data_loaded
@@ -326,16 +322,12 @@ def gates_for_spec(spec: dict, return_calc: str | None = None) -> list:
 
 
 def _target_and_schedule(spec: dict):
-    """Target MarketConfig + schedule filter for a spec — shared by run_spec and
-    the episode re-test so both execute under identical venue rules."""
+    """Build the target and an optional repository-owned schedule filter."""
     t = spec["target"]
     target = MarketConfig(t["exchange"], t["symbol"], t["execution_size"])
-    # Unified schedule: orion is the source of truth (framework/orion_schedule).
-    schedule = (
-        OrionScheduleFilter(spec.get("schedule_version", "nofilter"))
-        if t["exchange"].upper() == "GMO"
-        else None
-    )
+    from kilimanjaro.framework.schedule import schedule_from_config
+
+    schedule = schedule_from_config(spec.get("schedule"))
     return target, schedule
 
 
@@ -354,9 +346,8 @@ def run_spec(
 ) -> tuple[dict, Path, str]:
     """Expression-scan flavour: build combos from a spec, run through the core.
 
-    `schedule` overrides the spec's default venue schedule when given (e.g. to
-    restrict trading to specific JST hours) — otherwise the target's own venue
-    rules apply.
+    ``schedule`` overrides a declarative schedule in the spec when given. With
+    neither value, the scan is unrestricted.
     """
     target, default_schedule = _target_and_schedule(spec)
     return run_grid_scan(

@@ -42,10 +42,7 @@ import inventory as _inventory
 
 _SUPPORTED_TARGET_TYPES = {"next_return", "spread_adjusted_return"}
 _SUPPORTED_DATASET = "OrderBook"  # v1 scanner.py only reads bronze OrderBook
-# Precomputed feature datasets accepted as a feature source (never as a
-# target). Populated into Makalu's feature layer, so availability is checked
-# against the Makalu inventory like any other dataset -- no local tree.
-_PRECOMPUTED_FEATURE_DATASETS = {"ChartRangeSAR"}
+_PRECOMPUTED_FEATURE_DATASETS: set[str] = set()
 
 
 def _unsupported_transform_reasons(h: dict) -> list[str]:

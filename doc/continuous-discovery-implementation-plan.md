@@ -44,9 +44,8 @@ of time-dependent or external-integration gates.
 This is the implementation sequence for the next version. Keep the stage meanings in
 [research-pipeline.md](research-pipeline.md), the artifact history in
 [data-contract.md](requirements/data-contract.md), and the approval transitions in
-[agent-loop-design.md](requirements/agent-loop-design.md). The older
-[factory roadmap](direction/alpha-factory-roadmap.md) records the earlier generator
-and scanner work. Update affected contracts alongside each milestone; do not leave
+[agent-loop-design.md](requirements/agent-loop-design.md). Update affected
+contracts alongside each milestone; do not leave
 two conflicting definitions of the new behavior.
 
 Older documents contain historical paths, CLI commands, data-availability assumptions,

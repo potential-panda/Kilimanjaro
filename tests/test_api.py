@@ -69,12 +69,10 @@ class TestApi(unittest.TestCase):
     def test_hypotheses(self):
         hyps = self.client.get("/api/hypotheses").get_json()
         ids = {h["id"] for h in hyps}
-        self.assertIn("hyp-20260703-002", ids)
-        retired = next(h for h in hyps if h["id"] == "hyp-20260703-002")
-        self.assertEqual(retired["status"], "retired")
+        self.assertIn("hyp-20260714-002", ids)
 
-        d = self.client.get("/api/hypotheses/hyp-20260713-002").get_json()
-        self.assertEqual(d["summary"]["id"], "hyp-20260713-002")
+        d = self.client.get("/api/hypotheses/hyp-20260714-002").get_json()
+        self.assertEqual(d["summary"]["id"], "hyp-20260714-002")
         self.assertGreater(len(d["events"]), 0)
         self.assertIn("hypothesis", d["spec"])
 

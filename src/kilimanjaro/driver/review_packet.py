@@ -132,7 +132,7 @@ def write_review_packet(
             "- **Do NOT promote on the scan's absolute PnL/Sharpe.** They are not "
             "Himalaya-verified for this mechanism — treat direction, magnitude-order "
             "and param-ranking as indicative only. Himalaya calibration here is "
-            "blocked on a step-5 signal strategy (orion has only SAR-flip)."
+            "pending an independent replay implementation for this mechanism."
         )
 
     md = f"""# Review packet — {hyp} (scan-passed)

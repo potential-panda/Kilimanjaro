@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 """Kilimanjaro research CLI.
 
-Usage examples:
-  python src/cli.py populate chart-range-sar \\
-      --exchange BINANCE --symbol ETH_USDT \\
-      --box-size-rate 0.004 --step 0.05 \\
-      --start 2026-05-01 --end 2026-05-31
-
-  python src/cli.py verify chart-range-sar \\
-      --exchange BINANCE --symbol ETH_USDT \\
-      --box-size-rate 0.004 --step 0.05 \\
-      --start 2026-05-01 --end 2026-05-31
+Use ``python src/cli.py --help`` to list the available discovery commands.
 """
 
 import argparse
@@ -52,8 +43,6 @@ def main() -> int:
         research,
         return_eval,
         signal_corr,
-        verify,
-        verify_scan,
     )
 
     parser = argparse.ArgumentParser(prog="cli", description="Kilimanjaro research CLI")
@@ -62,8 +51,6 @@ def main() -> int:
     populate.register(sub)
     research.register(sub)
     return_eval.register(sub)
-    verify.register(sub)
-    verify_scan.register(sub)
     grid.register(sub)
     learn.register(sub)
     blend.register(sub)

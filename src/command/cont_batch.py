@@ -1,7 +1,7 @@
 """cli.py cont-batch — batch the continuous-barrier grid (direction x clock x dead band).
 
 Shares one feature-frame load across every cell, so a wide grid is practical. Each
-cell still runs through the same stage-15 pieces (orion schedule, drawdown gate,
+cell still runs through the same stage-15 pieces (schedule, drawdown gate,
 BetweenSignalReturn) as a single `return-eval`, and carries se/t so thin cells cannot
 masquerade as winners.
 

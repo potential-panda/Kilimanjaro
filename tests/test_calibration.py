@@ -10,10 +10,6 @@ from kilimanjaro.framework import calibration as C
 
 
 class TestCalibrationRegistry(unittest.TestCase):
-    def test_flip_is_calibrated(self):
-        self.assertTrue(C.is_calibrated("flip+between_signal"))
-        self.assertEqual(C.lookup("flip+between_signal").status, C.CALIBRATED)
-
     def test_expression_mechanisms_are_trend_only(self):
         self.assertFalse(C.is_calibrated("expression+fixed_horizon"))
         self.assertFalse(C.is_calibrated("expression+episode"))
@@ -24,10 +20,6 @@ class TestCalibrationRegistry(unittest.TestCase):
         self.assertFalse(cal.is_calibrated)
 
     def test_spec_mechanism_derivation(self):
-        flip = {"signal_family": "flip", "markets": {}, "target": {}}
-        self.assertEqual(C.spec_mechanism(flip), "flip+between_signal")
-        # a spec without `expressions` is the flip grid
-        self.assertEqual(C.spec_mechanism({"target": {}}), "flip+between_signal")
         fh = {
             "markets": {"a": {}},
             "expressions": [{"expr": "x"}],
