@@ -23,6 +23,11 @@ import yaml
 from kilimanjaro.driver import flip_grid, ledger_io
 from kilimanjaro.driver.scan_runner import build_combos, run_grid_scan, run_spec
 from kilimanjaro.framework import MarketConfig, RollingDrawdownGate
+from kilimanjaro.framework.gate import (
+    DEFAULT_DD_COOLDOWN_SECONDS,
+    DEFAULT_DD_THRESHOLD_BPS,
+    DEFAULT_DD_WINDOW_SECONDS,
+)
 
 _RESULTS = Path("cycle/15_return_eval/grid_scan")
 _FLIP_HYP = "hyp-20260703-002"  # schedule-adaptive flip-scan spec (box×step×sched)
@@ -40,13 +45,11 @@ def register(sub: argparse._SubParsersAction) -> None:
     _common(pf)
     pf.add_argument("--size", default=None, help="Override execution_size")
     pf.add_argument(
-        "--dd-window-seconds", type=float, default=flip_grid.DD_WINDOW_SECONDS
+        "--dd-window-seconds", type=float, default=DEFAULT_DD_WINDOW_SECONDS
     )
+    pf.add_argument("--dd-threshold-bps", type=float, default=DEFAULT_DD_THRESHOLD_BPS)
     pf.add_argument(
-        "--dd-threshold-bps", type=float, default=flip_grid.DD_THRESHOLD_BPS
-    )
-    pf.add_argument(
-        "--dd-cooldown-seconds", type=float, default=flip_grid.DD_COOLDOWN_SECONDS
+        "--dd-cooldown-seconds", type=float, default=DEFAULT_DD_COOLDOWN_SECONDS
     )
     pf.add_argument("--hypothesis-id", default=_FLIP_HYP)
     pf.set_defaults(func=_run_flip)

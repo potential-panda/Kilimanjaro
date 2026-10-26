@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.data.sar_loader import load_sar_flips
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 
 @dataclass(frozen=True)
@@ -47,9 +48,10 @@ class SARFlipSignal:
         return (self.flip_exchange, self.flip_symbol, self.box_size_rate, self.sar_step)
 
     def load_data(
-        self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT
+        self, start: str, end: str, data_root: Path | None = _DEFAULT_DATA_ROOT
     ) -> pd.DataFrame:
         """Load all flip events with LEAD-derived exit_ts."""
+        data_root = _resolve_data_root(data_root)
         return load_sar_flips(
             exchange=self.flip_exchange,
             symbol=self.flip_symbol,
@@ -57,6 +59,7 @@ class SARFlipSignal:
             end_date=end,
             box_size_rate=self.box_size_rate,
             sar_step=self.sar_step,
+            features_root=data_root / "feature",
         )
 
     def generate(self, data: pd.DataFrame) -> pd.DataFrame:

@@ -37,30 +37,43 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.price_cache import load_target_prices
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 
 def _empty() -> pd.DataFrame:
-    return pd.DataFrame(columns=[
-        "ts", "direction", "strength", "entry_exec_ts", "entry_price",
-        "exit_exec_ts", "exit_price", "return_bps", "holding_seconds",
-        "filled", "exit_forced",
-    ])
+    return pd.DataFrame(
+        columns=[
+            "ts",
+            "direction",
+            "strength",
+            "entry_exec_ts",
+            "entry_price",
+            "exit_exec_ts",
+            "exit_price",
+            "return_bps",
+            "holding_seconds",
+            "filled",
+            "exit_forced",
+        ]
+    )
 
 
 @dataclass
 class MakerFEPReturn:
-    offset_bps: float = 0.0        # post distance from mid (0 = at the mid; >0 = further out)
-    fill_window_s: float = 30.0    # max wait for the entry maker fill; else no trade
-    hold_s: float = 30.0           # hold after entry fill before posting the exit
-    exit_window_s: float = 60.0    # max wait for the exit maker fill; else force-take
-    maker_fee_bps: float = 0.0     # PER-FILL fee; NEGATIVE = rebate (GMO SPOT -1, BITBANK -2)
-    taker_fee_bps: float = 5.0     # per-fill fee on a FORCED exit (GMO SPOT 5, BITBANK 12)
-    long_only: bool = False        # spot venues: skip SELL (short) signals
-    price_unit: float = 0.0        # tick; qate fills at ask<=P-price_unit (0 = ask<=P)
+    offset_bps: float = 0.0  # post distance from mid (0 = at the mid; >0 = further out)
+    fill_window_s: float = 30.0  # max wait for the entry maker fill; else no trade
+    hold_s: float = 30.0  # hold after entry fill before posting the exit
+    exit_window_s: float = 60.0  # max wait for the exit maker fill; else force-take
+    maker_fee_bps: float = (
+        0.0  # PER-FILL fee; NEGATIVE = rebate (GMO SPOT -1, BITBANK -2)
+    )
+    taker_fee_bps: float = 5.0  # per-fill fee on a FORCED exit (GMO SPOT 5, BITBANK 12)
+    long_only: bool = False  # spot venues: skip SELL (short) signals
+    price_unit: float = 0.0  # tick; qate fills at ask<=P-price_unit (0 = ask<=P)
     non_overlapping: bool = True
     # You cannot POST an order on a signal you do not have yet. A 1s-composite for second
     # t is only knowable once t closes, so the limit goes on the book at t+1 — the same
@@ -77,22 +90,53 @@ class MakerFEPReturn:
     @property
     def params(self) -> dict:
         return {
-            "return_calc": "maker_fep", "offset_bps": self.offset_bps,
-            "fill_window_s": self.fill_window_s, "hold_s": self.hold_s,
-            "exit_window_s": self.exit_window_s, "maker_fee_bps": self.maker_fee_bps,
-            "taker_fee_bps": self.taker_fee_bps, "long_only": self.long_only,
+            "return_calc": "maker_fep",
+            "offset_bps": self.offset_bps,
+            "fill_window_s": self.fill_window_s,
+            "hold_s": self.hold_s,
+            "exit_window_s": self.exit_window_s,
+            "maker_fee_bps": self.maker_fee_bps,
+            "taker_fee_bps": self.taker_fee_bps,
+            "long_only": self.long_only,
             "fill_delay_seconds": self.fill_delay_seconds,
         }
 
-    def compute(self, signals: pd.DataFrame, target: MarketConfig,
-                start_date: str, end_date: str,
-                data_root: Path = _DEFAULT_DATA_ROOT) -> pd.DataFrame:
-        mp = load_target_prices(target.exchange, target.symbol, target.execution_size,
-                                start_date, end_date, data_root)
+    def compute(
+        self,
+        signals: pd.DataFrame,
+        target: MarketConfig,
+        start_date: str,
+        end_date: str,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
+    ) -> pd.DataFrame:
+        data_root = _resolve_data_root(data_root)
+        if self.long_only:
+            signals = signals.loc[signals["direction"] > 0]
+        if signals.empty:
+            self.last_stats = {
+                "n_posted": 0,
+                "n_filled": 0,
+                "n_forced": 0,
+                "fill_rate": float("nan"),
+            }
+            return add_jst_columns(_empty(), ts_col="ts")
+        mp = load_target_prices(
+            target.exchange,
+            target.symbol,
+            target.execution_size,
+            start_date,
+            end_date,
+            data_root,
+        )
         n_mp = len(mp.ts)
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
         if len(sig) == 0 or n_mp == 0:
-            self.last_stats = {"n_posted": 0, "n_filled": 0, "n_forced": 0, "fill_rate": float("nan")}
+            self.last_stats = {
+                "n_posted": 0,
+                "n_filled": 0,
+                "n_forced": 0,
+                "fill_rate": float("nan"),
+            }
             return add_jst_columns(_empty(), ts_col="entry_exec_ts", date_ts_col="ts")
 
         ts, bid, ask, mid = mp.ts, mp.bid, mp.ask, mp.mid
@@ -121,8 +165,9 @@ class MakerFEPReturn:
             # ── entry: post a passive limit, wait for the book to cross it ──
             n_posted += 1
             hi_e = self._idx_at(ts, ts[e0] + self.fill_window_s, n_mp)
-            entry_fill = self._maker_fill(d, m0 * (1 - off) if d > 0 else m0 * (1 + off),
-                                          e0, hi_e, ask, bid, pu)
+            entry_fill = self._maker_fill(
+                d, m0 * (1 - off) if d > 0 else m0 * (1 + off), e0, hi_e, ask, bid, pu
+            )
             if entry_fill is None:  # book never crossed within the window → no trade
                 continue
             ej, entry_price = entry_fill
@@ -133,8 +178,9 @@ class MakerFEPReturn:
             hi_x = self._idx_at(ts, ts[x0] + self.exit_window_s, n_mp)
             xm = mid[x0]
             xd = -d  # exit is the opposite side
-            exit_fill = self._maker_fill(xd, xm * (1 - off) if xd > 0 else xm * (1 + off),
-                                         x0, hi_x, ask, bid, pu)
+            exit_fill = self._maker_fill(
+                xd, xm * (1 - off) if xd > 0 else xm * (1 + off), x0, hi_x, ask, bid, pu
+            )
             if exit_fill is not None:
                 xj, exit_price = exit_fill
                 exit_forced = False
@@ -147,19 +193,31 @@ class MakerFEPReturn:
                 n_forced += 1
 
             gross = d * (exit_price - entry_price) / entry_price * 10000.0
-            net = gross - self.maker_fee_bps - exit_fee  # entry always maker; exit maker|taker
-            rows.append({
-                "ts": sig_ts[i], "direction": d, "strength": strength[i],
-                "entry_exec_ts": ts[ej], "entry_price": entry_price,
-                "exit_exec_ts": ts[xj], "exit_price": exit_price,
-                "return_bps": net, "holding_seconds": ts[xj] - ts[ej],
-                "filled": True, "exit_forced": exit_forced,
-            })
+            net = (
+                gross - self.maker_fee_bps - exit_fee
+            )  # entry always maker; exit maker|taker
+            rows.append(
+                {
+                    "ts": sig_ts[i],
+                    "direction": d,
+                    "strength": strength[i],
+                    "entry_exec_ts": ts[ej],
+                    "entry_price": entry_price,
+                    "exit_exec_ts": ts[xj],
+                    "exit_price": exit_price,
+                    "return_bps": net,
+                    "holding_seconds": ts[xj] - ts[ej],
+                    "filled": True,
+                    "exit_forced": exit_forced,
+                }
+            )
             if self.non_overlapping:
                 last_exit_ts = ts[xj]
 
         self.last_stats = {
-            "n_posted": n_posted, "n_filled": n_filled, "n_forced": n_forced,
+            "n_posted": n_posted,
+            "n_filled": n_filled,
+            "n_forced": n_forced,
             "fill_rate": (n_filled / n_posted) if n_posted else float("nan"),
         }
         trades = pd.DataFrame(rows) if rows else _empty()
@@ -170,17 +228,24 @@ class MakerFEPReturn:
         return int(min(np.searchsorted(ts, when, side="left"), n_mp - 1))
 
     @staticmethod
-    def _maker_fill(d: float, limit: float, lo: int, hi: int,
-                    ask: np.ndarray, bid: np.ndarray, pu: float):
+    def _maker_fill(
+        d: float,
+        limit: float,
+        lo: int,
+        hi: int,
+        ask: np.ndarray,
+        bid: np.ndarray,
+        pu: float,
+    ):
         """qate contract: BUY fills at the first tick ask<=limit-pu (fill=ask);
         SELL fills at the first tick bid>=limit+pu (fill=bid). None if no cross in [lo,hi]."""
         if d > 0:
-            cross = np.flatnonzero(ask[lo:hi + 1] <= limit - pu)
+            cross = np.flatnonzero(ask[lo : hi + 1] <= limit - pu)
             if cross.size:
                 j = lo + int(cross[0])
                 return j, ask[j]
         else:
-            cross = np.flatnonzero(bid[lo:hi + 1] >= limit + pu)
+            cross = np.flatnonzero(bid[lo : hi + 1] >= limit + pu)
             if cross.size:
                 j = lo + int(cross[0])
                 return j, bid[j]

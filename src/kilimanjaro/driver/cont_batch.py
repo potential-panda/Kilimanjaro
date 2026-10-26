@@ -24,7 +24,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+from kilimanjaro.data.root import data_root as _resolve_data_root
+
+_DEFAULT_DATA_ROOT = None
 
 
 def run_batch(
@@ -33,10 +35,11 @@ def run_batch(
     end: str,
     *,
     cost_bps: float = 1.0,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
     progress=print,
 ) -> pd.DataFrame:
     """Run the full direction x clock x dead-band grid for one market pair."""
+    data_root = _resolve_data_root(data_root)
     from kilimanjaro.data.bars import bar_closes, hysteresis, runs_to_signals
     from kilimanjaro.framework.gate import (
         DEFAULT_DD_COOLDOWN_SECONDS,
@@ -90,9 +93,7 @@ def run_batch(
     ts = frame["ts"].to_numpy(dtype=float)
     mid = np.asarray(eval_expr("a_mid", frame), dtype=float)
     qty = np.asarray(eval_expr(qty_col, frame), dtype=float)
-    start_ts = (
-        datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=UTC).timestamp()
-    )
+    start_ts = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=UTC).timestamp()
     progress(f"  frame {len(ts):,} rows")
 
     dvals = {}

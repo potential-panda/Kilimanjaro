@@ -1,0 +1,21 @@
+[Unit]
+Description=Bounded Kilimanjaro research pilot
+
+[Service]
+Type=simple
+# Replace these paths with this checkout and the Python environment containing
+# Hase, Makalu and Kilimanjaro's dependencies before installing as a user unit.
+WorkingDirectory=/home/lulurun/workspace/potential-panda/Kilimanjaro
+ExecStart=/home/lulurun/.pyenv/versions/3.13.9/bin/python src/cli.py research serve --config cycle/04_campaigns/discovery-soak.yaml
+Restart=on-failure
+RestartSec=15
+KillMode=control-group
+TimeoutStopSec=15
+MemoryMax=2500M
+TasksMax=256
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=OMP_NUM_THREADS=1
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

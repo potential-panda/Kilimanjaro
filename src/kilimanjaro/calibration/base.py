@@ -21,8 +21,9 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.calibration.compare import CalibResult, compare
+from kilimanjaro.data.root import data_root as _resolve_data_root
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 _TRADING_MEASUREMENT = "TRADING"  # qate create_trading_metric -> Measurement.TRADING
 
 # Warmup the offline rolling windows to the SAME converged state Himalaya has at the
@@ -61,13 +62,14 @@ class FactorCalib:
         markets: dict,
         start: str,
         end: str,
-        data_root: Path = _DEFAULT_DATA_ROOT,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
         warmup_days: int = _WARMUP_DAYS,
     ) -> pd.Series:
         """Per-second factor series from the feature frame (index = integer second).
 
         Loads from `start - warmup_days` so the rolling windows converge before the
         compared window; the extra warmup seconds are dropped by the compare intersect."""
+        data_root = _resolve_data_root(data_root)
         from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
 
         sig = ExpressionSignal.create(
@@ -118,9 +120,10 @@ class FactorCalib:
         bucket: str,
         start: str,
         end: str,
-        data_root: Path = _DEFAULT_DATA_ROOT,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
         tol: float | None = None,
     ) -> CalibResult:
+        data_root = _resolve_data_root(data_root)
         off = self.offline_series(markets, start, end, data_root)
         on = self.online_series(bucket, start, end)
         return compare(self.name, off, on, tol=self.tol if tol is None else tol)

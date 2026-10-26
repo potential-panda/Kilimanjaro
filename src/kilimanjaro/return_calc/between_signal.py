@@ -24,10 +24,11 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.price_cache import load_target_prices
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,7 @@ class BetweenSignalReturn:
         target: MarketConfig,
         start_date: str,
         end_date: str,
-        data_root: Path = _DEFAULT_DATA_ROOT,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
     ) -> pd.DataFrame:
         """Join signals with cached target prices and compute between-signal returns.
 
@@ -63,6 +64,7 @@ class BetweenSignalReturn:
                  exit_exec_ts, exit_price, return_bps, holding_seconds,
                  jst_hour, jst_weekday, jst_date].
         """
+        data_root = _resolve_data_root(data_root)
         mp = load_target_prices(
             target.exchange,
             target.symbol,

@@ -1,0 +1,10 @@
+schema_version: 1
+campaigns: [discovery-btc-pilot.yaml]
+poll_seconds: 60
+max_hours: 72
+max_jobs_per_tick: 10
+max_minutes_per_tick: 10
+max_proposals: 5
+audit_every_polls: 60
+adaptive: true
+rolling: false

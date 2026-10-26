@@ -33,6 +33,7 @@ from typing import Any
 
 import pandas as pd
 
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.gate import Gate
 from kilimanjaro.framework.performance import (
@@ -43,7 +44,7 @@ from kilimanjaro.framework.protocol import MarketConfig, ReturnCalc, SignalDef
 from kilimanjaro.framework.schedule import ScheduleFilter
 from kilimanjaro.framework.stats import compute_stats
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 
 def _base_row(
@@ -69,7 +70,7 @@ def run_grid(
     costs_bps: float = ROUND_TRIP_COST_BPS,
     schedule: ScheduleFilter | None = None,
     gates: list[Gate] | None = None,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
     on_data_loaded: Callable[[tuple, Any], None] | None = None,
     on_result: Callable[[dict], None] | None = None,
 ) -> list[dict]:
@@ -110,6 +111,7 @@ def run_grid(
         combo's ScheduleFilter has one), "n_trades" (post-gate, pre-dropna),
         gate scalar counts, and compute_stats() fields.
     """
+    data_root = _resolve_data_root(data_root)
     n_combos = len(combos)
 
     # Normalize to (cache_key, combo_id, sig, rc, sched); sort so groupby works
@@ -133,7 +135,7 @@ def run_grid(
 
         try:
             data = sig0.load_data(start_date, end_date, data_root)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - retain errors for every affected grid row
             for _, combo_id, sig, rc, sched in group:
                 _emit(
                     {
@@ -215,7 +217,7 @@ def run_grid(
                         for m, g in valid["return_bps"].groupby(months)
                     }
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - one failed combination must not lose the grid
                 row = {**base, "status": f"ERROR: {e}"}
 
             _emit(row)

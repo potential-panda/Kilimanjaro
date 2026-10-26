@@ -1,0 +1,44 @@
+schema_version: 1
+name: btc-discovery-pilot
+program: btc-discovery-pilot-v1
+description: Small historical smoke run on verified July 10 market and OBI coverage.
+hypothesis: Binance momentum and order-book imbalance may precede GMO executable returns.
+falsification: Validation returns disappear after bid/ask execution and declared costs.
+data_root: /panda/makalu-data
+research_root: /home/lulurun/workspace/potential-panda/Kilimanjaro/cycle/discovery-pilot
+markets:
+  a: {exchange: BINANCE, symbol: BTC_USDT, execution_size: '0.002'}
+  b: {exchange: GMO, symbol: BTC_JPY, execution_size: '0.002'}
+target: b
+features:
+  - {name: leader_momentum, expr: 'ret(a_mid, 5)'}
+  - {name: leader_imbalance, expr: a_obi_k1}
+windows:
+  train: {start: '2026-07-10T00:00:00Z', end: '2026-07-10T01:00:00Z'}
+  validation: {start: '2026-07-10T01:00:00Z', end: '2026-07-10T02:00:00Z'}
+horizons: [5, 10, 30]
+execution:
+  threshold: 1
+  round_trip_fee_bps: 0
+  round_trip_slippage_bps: 1
+  max_quote_delay_seconds: 2
+budgets:
+  max_jobs: 120
+  daily_jobs: 40
+  memory_mb: 2048
+  disk_mb: 2048
+  job_timeout_seconds: 120
+  max_attempts: 3
+  max_variants: 100
+seed: 17
+warmup_seconds: 300
+max_staleness_seconds: 2
+trial_policy:
+  program_alpha: 0.05
+  min_trades: 100
+  min_days: 20
+  bootstrap_samples: 4999
+  max_drawdown_bps: 500
+  max_trades_per_day: 1000
+  max_profit_day_share: 0.25
+  min_coverage: 0.95

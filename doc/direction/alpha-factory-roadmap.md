@@ -1,5 +1,11 @@
 # Alpha Discovery Factory — Readiness Roadmap
 
+For the next implementation phase, follow
+[Continuous Alpha Discovery: Implementation Plan](../continuous-discovery-implementation-plan.md).
+It defines ordered milestones and acceptance tests for the full data-planning,
+research, confirmation, and continuous-operation lifecycle. The checklist below
+records the earlier generator/scanner work and is not a current runtime audit.
+
 **Goal:** drive this repo to a self-feeding alpha discovery factory — the 1–7
 loop running forever, with steps 1–4 autonomous and 5–7 human-gated:
 

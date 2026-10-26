@@ -10,8 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def data_root() -> Path:
-    """Return the configured Hase data root without performing network I/O."""
+def data_root(override: str | Path | None = None) -> Path:
+    """Resolve at call time; an explicit research/test root never imports Hase."""
+    if override is not None:
+        return Path(override).expanduser()
     try:
         from hase.bronze import data_root as hase_data_root
     except ImportError as exc:  # pragma: no cover - installation error

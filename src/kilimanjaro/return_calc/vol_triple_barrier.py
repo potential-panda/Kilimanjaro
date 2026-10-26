@@ -32,11 +32,12 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.price_cache import load_target_prices
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
 from kilimanjaro.return_calc.fixed_horizon import _nonoverlap_indices
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 
 @dataclass(frozen=True)
@@ -106,14 +107,19 @@ class VolScaledTripleBarrierReturn:
         target: MarketConfig,
         start_date: str,
         end_date: str,
-        data_root: Path = _DEFAULT_DATA_ROOT,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
     ) -> pd.DataFrame:
         """Input signals: [ts, direction, strength]. Returns one row per trade with
         the same columns as TripleBarrierReturn plus `barrier_bps` (the realized
         per-entry barrier)."""
+        data_root = _resolve_data_root(data_root)
         mp = load_target_prices(
-            target.exchange, target.symbol, target.execution_size,
-            start_date, end_date, data_root,
+            target.exchange,
+            target.symbol,
+            target.execution_size,
+            start_date,
+            end_date,
+            data_root,
         )
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
         if self.non_overlapping and len(sig) > 1:
@@ -130,7 +136,9 @@ class VolScaledTripleBarrierReturn:
         entry_idx = mp.first_at_or_after(ts)
         has_entry = entry_idx < n_mp
         e = np.clip(entry_idx, 0, max(n_mp - 1, 0))
-        cap = np.clip(mp.first_at_or_after(ts + self.time_cap_seconds), 0, max(n_mp - 1, 0))
+        cap = np.clip(
+            mp.first_at_or_after(ts + self.time_cap_seconds), 0, max(n_mp - 1, 0)
+        )
 
         barrier_bps = self._entry_barriers_bps(ts, mp)
         b = barrier_bps / 10000.0
@@ -169,8 +177,13 @@ class VolScaledTripleBarrierReturn:
                 "entry_price": entry_price,
                 "exit_exec_ts": np.where(has_entry, mp.ts[exit_i], np.nan),
                 "exit_price": exit_price,
-                "return_bps": direction * (exit_price - entry_price) / entry_price * 10000.0,
-                "holding_seconds": np.where(has_entry, mp.ts[exit_i] - mp.ts[e], np.nan),
+                "return_bps": direction
+                * (exit_price - entry_price)
+                / entry_price
+                * 10000.0,
+                "holding_seconds": np.where(
+                    has_entry, mp.ts[exit_i] - mp.ts[e], np.nan
+                ),
             }
         )
         if "episode" in sig.columns:

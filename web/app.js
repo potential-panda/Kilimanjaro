@@ -309,6 +309,22 @@ async function viewHypDetail(hypId) {
     el("pre", { class: "spec" }, JSON.stringify(d.spec, null, 2)));
 }
 
+async function viewResearch(runId) {
+  const data = await getJSON(runId ? `/api/research/${encodeURIComponent(runId)}` : "/api/research");
+  const jobs = (data.jobs || []).map(j => el("tr", {},
+    el("td", {}, el("a", {href: `#/research/${j.campaign_id}`}, j.campaign_id)),
+    el("td", {}, j.stage), el("td", {}, j.state), el("td", {}, String(j.attempt)),
+    el("td", {}, j.error || "")));
+  const details = ["summary", "freshness", "candidates", "lineage", "report", "correlation"].filter(k => data[k]);
+  $main.replaceChildren(el("h1", {}, "Continuous research"),
+    el("p", {}, "Development results are exploratory. Confirmation and mechanism calibration have separate evidence records."),
+    el("p", {}, data.last_poll ? `Last poll: ${fmt.date(data.last_poll)}` : (data.state || data.data_role || "Development run")),
+    el("div", {class: "table-scroll"}, el("table", {class: "grid"},
+      el("thead", {}, el("tr", {}, ...["Run", "Stage", "State", "Attempts", "Reason"].map(h => el("th", {}, h)))),
+      el("tbody", {}, ...jobs))),
+    ...details.map(k => el("details", {}, el("summary", {}, k), el("pre", {}, JSON.stringify(data[k], null, 2)))));
+}
+
 /* ── router ─────────────────────────────────────────────────────────────── */
 
 async function route() {
@@ -324,6 +340,7 @@ async function route() {
     else if (view === "factors") await viewFactors();
     else if (view === "hyps" && parts[1]) await viewHypDetail(parts[1]);
     else if (view === "hyps") await viewHyps();
+    else if (view === "research") await viewResearch(parts[1]);
     else location.hash = "#/scans";
   } catch (err) {
     $main.replaceChildren(el("div", { class: "error" }, String(err)));

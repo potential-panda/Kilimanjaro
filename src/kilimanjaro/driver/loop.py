@@ -142,6 +142,12 @@ def process_spec(
                 best=None,
             )
 
+        # Publish the packet before the terminal event so a failed publication
+        # remains retryable rather than permanently losing a survivor's evidence.
+        packet = None
+        if outcome.passed:
+            packet = write_review_packet(spec, res, outcome, out_dir, s, e, fp)
+
         # Step 10-11: verdict.
         ledger_io.record_status(
             hyp,
@@ -157,12 +163,6 @@ def process_spec(
             },
             ledger_path=lp,
         )
-        # Step 12: review packet for a survivor (built on the screening result,
-        # which carries the full grid + verdict mix; the episode edge is in the
-        # headline and best).
-        packet = None
-        if outcome.passed:
-            packet = write_review_packet(spec, res, outcome, out_dir, s, e, fp)
         return {
             **base,
             "status": outcome.status,
@@ -176,7 +176,7 @@ def process_spec(
     except Exception as ex:
         LOG.exception("scan failed for %s (%s)", scan_name, hyp)
         # No terminal status recorded -> retryable when the cause (e.g. missing
-        # data) clears. Fingerprint stays un-recorded so it is retried.
+        # data) clears. The scan-ready attempt does not suppress a retry.
         return {**base, "status": "error", "error": f"{type(ex).__name__}: {ex}"}
 
 

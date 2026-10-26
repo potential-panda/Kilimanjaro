@@ -40,11 +40,12 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.price_cache import load_target_prices
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework import MarketConfig, split_windows
 from kilimanjaro.return_calc.fixed_horizon import _nonoverlap_indices
 from kilimanjaro.signal.expression import eval_expr, validate_expr
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 
 @dataclass(frozen=True)
@@ -135,7 +136,7 @@ def build_panel(
     start: str,
     end: str,
     horizon: int,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> pd.DataFrame:
     """Continuous-factor panel for one window: columns = one per factor (raw
     factor value on the 1s grid) + `fwd_ret` (mid-to-mid forward return), inner-
@@ -144,6 +145,7 @@ def build_panel(
 
     Returns a DataFrame [ts, <factor.name> ..., fwd_ret]; empty if no overlap.
     """
+    data_root = _resolve_data_root(data_root)
     from kilimanjaro.data.feature_frame import load_feature_frame
 
     series: dict[str, pd.Series] = {}
@@ -270,7 +272,7 @@ def blend(
     split: str,
     end: str,
     horizon: int,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> dict:
     """Fit the IC-weighted blend on train, evaluate on holdout.
 
@@ -279,6 +281,7 @@ def blend(
     blended IC on both windows, and the best single-factor holdout |IC| (the
     thing the blend must beat to have bought any diversification).
     """
+    data_root = _resolve_data_root(data_root)
     tr_start, tr_end, ho_start, ho_end = split_windows(start, split, end)
     train = build_panel(factors, target, tr_start, tr_end, horizon, data_root)
     holdout = build_panel(factors, target, ho_start, ho_end, horizon, data_root)
@@ -407,7 +410,7 @@ def scan_blends(
     horizon: int,
     ridge: float = 0.2,
     use_lgbm: bool = False,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> dict:
     """Build + rank candidate blends of `factors`. Methods (all fit on TRAIN):
       single_best  — the top-|IC| single factor (the blend-of-one to beat)
@@ -417,10 +420,28 @@ def scan_blends(
       lgbm         — (use_lgbm) gradient-boosted nonlinear capacity ceiling; not a formula
     Each is evaluated on the untouched HOLDOUT. Returns ranked results + per-factor IC.
     """
+    data_root = _resolve_data_root(data_root)
     tr_s, tr_e, ho_s, ho_e = split_windows(start, split, end)
     train = build_panel(factors, target, tr_s, tr_e, horizon, data_root)
     holdout = build_panel(factors, target, ho_s, ho_e, horizon, data_root)
     names = [f.name for f in factors]
+    return scan_panels(train, holdout, names, horizon, ridge=ridge, use_lgbm=use_lgbm)
+
+
+def scan_panels(
+    train: pd.DataFrame,
+    holdout: pd.DataFrame,
+    names: list[str],
+    horizon: int,
+    *,
+    ridge: float = 0.2,
+    use_lgbm: bool = False,
+) -> dict:
+    """The same blend engine over caller-validated point-in-time panels.
+
+    Normalization and score scale are returned so a frozen candidate can be
+    evaluated without fitting anything on validation/confirmation observations.
+    """
     if train.empty or holdout.empty:
         return {
             "results": [],
@@ -430,6 +451,14 @@ def scan_blends(
         }
 
     Ztr, Zho, ic_tr, ic_ho, r_tr, r_ho = _standardize(train, holdout, names)
+    normalization = {}
+    for name in names:
+        values = train[name].to_numpy(dtype=float)
+        mu, sd = float(np.nanmean(values)), float(np.nanstd(values))
+        normalization[name] = {
+            "mean": mu if np.isfinite(mu) else 0.0,
+            "std": sd if np.isfinite(sd) and sd > 0 else 1.0,
+        }
     k = len(names)
     Sigma = np.corrcoef(Ztr.T) if k > 1 else np.array([[1.0]])
     Sigma = np.nan_to_num(Sigma, nan=0.0)
@@ -457,6 +486,8 @@ def scan_blends(
                 if best_single_ho
                 else float("nan"),
                 "weights": used,
+                "signal_mean": float(np.mean(Ztr @ w)),
+                "signal_scale": max(float(np.std(Ztr @ w)), 1e-12),
             }
         )
     lgbm_importances = None
@@ -499,6 +530,7 @@ def scan_blends(
         "holdout_n": len(holdout),
         "best_single_holdout_ic": best_single_ho,
         "lgbm_importances": lgbm_importances,
+        "normalization": normalization,
     }
 
 

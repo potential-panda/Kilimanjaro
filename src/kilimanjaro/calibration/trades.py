@@ -32,7 +32,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+from kilimanjaro.data.root import data_root as _resolve_data_root
+
+_DEFAULT_DATA_ROOT = None
 
 # Aquila run config (config.py:default_params) — the scan must replicate it to match.
 US_JST_HOURS = (22, 23, 0, 1, 2)
@@ -125,8 +127,9 @@ class TradeCalib:
 
     # ---- offline: the scan's trades -------------------------------------------
     def offline_trades(
-        self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT
+        self, start: str, end: str, data_root: Path | None = _DEFAULT_DATA_ROOT
     ) -> pd.DataFrame:
+        data_root = _resolve_data_root(data_root)
         from kilimanjaro.calibration.base import _WARMUP_DAYS, _shift_date
         from kilimanjaro.framework.protocol import MarketConfig
         from kilimanjaro.framework.schedule import ScheduleFilter
@@ -252,88 +255,100 @@ class TradeCalib:
         bucket: str,
         start: str,
         end: str,
-        data_root: Path = _DEFAULT_DATA_ROOT,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
         px_tol: float = 1.0,
         ts_tol: float = 0.001,
         ret_tol: float = 0.5,
         max_div: int = 15,
     ) -> TradeCalibResult:
+        data_root = _resolve_data_root(data_root)
         sc = self.offline_trades(start, end, data_root)
         ht = self.online_trades(bucket, start, end)
-        # restrict scan to Himalaya's covered window (first open .. last close)
-        if not ht.empty:
-            sc = sc[
-                (sc.entry_exec_ts >= ht.e_ts.min() - 5)
-                & (sc.entry_exec_ts <= ht.e_ts.max() + 5)
-            ].reset_index(drop=True)
-
-        s_e = sc["entry_exec_ts"].to_numpy() if len(sc) else np.array([])
-        idx = (
-            np.clip(np.searchsorted(s_e, ht["e_ts"].to_numpy()), 0, len(s_e) - 1)
-            if len(s_e)
-            else np.array([], dtype=int)
+        return compare_trade_frames(
+            sc, ht, px_tol=px_tol, ts_tol=ts_tol, ret_tol=ret_tol, max_div=max_div
         )
 
-        side_m = ets_m = xts_m = epx_m = xpx_m = ret_m = matched = 0
-        scan_g: list[float] = []
-        hima_g: list[float] = []
-        divs: list = []
-        for k in range(len(ht)):
-            if not len(s_e):
-                break
-            cands = [c for c in (idx[k] - 1, idx[k]) if 0 <= c < len(s_e)]
-            j = min(cands, key=lambda c: abs(s_e[c] - ht["e_ts"][k])) if cands else None
-            if j is None or abs(s_e[j] - ht["e_ts"][k]) > 3:
-                if len(divs) < max_div:
-                    divs.append(
-                        f"no scan trade near hima open {ht['e_ts'][k]:.0f} "
-                        f"side {ht['side'][k]:+d}"
-                    )
-                continue
-            matched += 1
-            sr = sc.iloc[j]
-            es = abs(sr["entry_exec_ts"] - ht["e_ts"][k]) <= ts_tol
-            xs = abs(sr["exit_exec_ts"] - ht["x_ts"][k]) <= ts_tol
-            sd = int(sr["direction"]) == int(ht["side"][k])
-            ep = abs(sr["entry_price"] - ht["e_px"][k]) <= px_tol
-            xp = abs(sr["exit_price"] - ht["x_px"][k]) <= px_tol
-            rm = abs(sr["return_bps"] - ht["gross_bps"][k]) <= ret_tol
-            side_m += sd
-            ets_m += es
-            xts_m += xs
-            epx_m += ep
-            xpx_m += xp
-            ret_m += rm
-            scan_g.append(sr["return_bps"])
-            hima_g.append(ht["gross_bps"][k])
-            if (not (es and xs and sd and ep and xp and rm)) and len(divs) < max_div:
+
+def compare_trade_frames(sc, ht, *, px_tol=1.0, ts_tol=0.001, ret_tol=0.5, max_div=15):
+    """Compare existing offline/online trade artifacts without starting a replay."""
+    # restrict scan to Himalaya's covered window (first open .. last close)
+    if not ht.empty:
+        sc = sc[
+            (sc.entry_exec_ts >= ht.e_ts.min() - 5)
+            & (sc.entry_exec_ts <= ht.e_ts.max() + 5)
+        ].reset_index(drop=True)
+
+    s_e = sc["entry_exec_ts"].to_numpy() if len(sc) else np.array([])
+    idx = (
+        np.clip(np.searchsorted(s_e, ht["e_ts"].to_numpy()), 0, len(s_e) - 1)
+        if len(s_e)
+        else np.array([], dtype=int)
+    )
+
+    side_m = ets_m = xts_m = epx_m = xpx_m = ret_m = matched = 0
+    scan_g: list[float] = []
+    hima_g: list[float] = []
+    divs: list = []
+    for k in range(len(ht)):
+        if not len(s_e):
+            break
+        cands = [c for c in (idx[k] - 1, idx[k]) if 0 <= c < len(s_e)]
+        j = min(cands, key=lambda c: abs(s_e[c] - ht["e_ts"][k])) if cands else None
+        if j is None or abs(s_e[j] - ht["e_ts"][k]) > 3:
+            if len(divs) < max_div:
                 divs.append(
-                    f"e {sr['entry_exec_ts']:.0f}/{ht['e_ts'][k]:.0f} "
-                    f"x {sr['exit_exec_ts']:.0f}/{ht['x_ts'][k]:.0f} "
-                    f"sd {int(sr['direction'])}/{int(ht['side'][k])} "
-                    f"epx {sr['entry_price']:.0f}/{ht['e_px'][k]:.0f} "
-                    f"g {sr['return_bps']:+.1f}/{ht['gross_bps'][k]:+.1f}"
+                    f"no scan trade near hima open {ht['e_ts'][k]:.0f} "
+                    f"side {ht['side'][k]:+d}"
                 )
-        sg = np.array(scan_g)
-        hg = np.array(hima_g)
-        corr = float(np.corrcoef(sg, hg)[0, 1]) if len(sg) > 1 else float("nan")
-        return TradeCalibResult(
-            n_scan=len(sc),
-            n_hima=len(ht),
-            n_matched=matched,
-            side_match=side_m,
-            entry_ts_exact=ets_m,
-            exit_ts_exact=xts_m,
-            entry_px_match=epx_m,
-            exit_px_match=xpx_m,
-            scan_total_bps=float(sg.sum()),
-            hima_total_bps=float(hg.sum()),
-            scan_mean_bps=float(sg.mean()) if len(sg) else 0.0,
-            hima_mean_bps=float(hg.mean()) if len(hg) else 0.0,
-            ret_corr=corr,
-            ret_match=ret_m,
-            px_tol=px_tol,
-            ts_tol=ts_tol,
-            ret_tol=ret_tol,
-            divergences=divs,
-        )
+            continue
+        matched += 1
+        sr = sc.iloc[j]
+        es = abs(sr["entry_exec_ts"] - ht["e_ts"][k]) <= ts_tol
+        xs = abs(sr["exit_exec_ts"] - ht["x_ts"][k]) <= ts_tol
+        sd = int(sr["direction"]) == int(ht["side"][k])
+        ep = abs(sr["entry_price"] - ht["e_px"][k]) <= px_tol
+        xp = abs(sr["exit_price"] - ht["x_px"][k]) <= px_tol
+        rm = abs(sr["return_bps"] - ht["gross_bps"][k]) <= ret_tol
+        side_m += sd
+        ets_m += es
+        xts_m += xs
+        epx_m += ep
+        xpx_m += xp
+        ret_m += rm
+        scan_g.append(sr["return_bps"])
+        hima_g.append(ht["gross_bps"][k])
+        if (not (es and xs and sd and ep and xp and rm)) and len(divs) < max_div:
+            divs.append(
+                f"e {sr['entry_exec_ts']:.0f}/{ht['e_ts'][k]:.0f} "
+                f"x {sr['exit_exec_ts']:.0f}/{ht['x_ts'][k]:.0f} "
+                f"sd {int(sr['direction'])}/{int(ht['side'][k])} "
+                f"epx {sr['entry_price']:.0f}/{ht['e_px'][k]:.0f} "
+                f"g {sr['return_bps']:+.1f}/{ht['gross_bps'][k]:+.1f}"
+            )
+    sg = np.array(scan_g)
+    hg = np.array(hima_g)
+    corr = (
+        float(np.corrcoef(sg, hg)[0, 1])
+        if len(sg) > 1 and sg.std() > 0 and hg.std() > 0
+        else float("nan")
+    )
+    return TradeCalibResult(
+        n_scan=len(sc),
+        n_hima=len(ht),
+        n_matched=matched,
+        side_match=side_m,
+        entry_ts_exact=ets_m,
+        exit_ts_exact=xts_m,
+        entry_px_match=epx_m,
+        exit_px_match=xpx_m,
+        scan_total_bps=float(sg.sum()),
+        hima_total_bps=float(hg.sum()),
+        scan_mean_bps=float(sg.mean()) if len(sg) else 0.0,
+        hima_mean_bps=float(hg.mean()) if len(hg) else 0.0,
+        ret_corr=corr,
+        ret_match=ret_m,
+        px_tol=px_tol,
+        ts_tol=ts_tol,
+        ret_tol=ret_tol,
+        divergences=divs,
+    )

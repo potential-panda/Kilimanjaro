@@ -32,36 +32,65 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.price_cache import load_target_prices
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
-_COLS = ["ts", "direction", "strength", "entry_exec_ts", "entry_price",
-         "exit_exec_ts", "exit_price", "return_bps", "holding_seconds", "exit_reason"]
+_COLS = [
+    "ts",
+    "direction",
+    "strength",
+    "entry_exec_ts",
+    "entry_price",
+    "exit_exec_ts",
+    "exit_price",
+    "return_bps",
+    "holding_seconds",
+    "exit_reason",
+]
 
 
 @dataclass(frozen=True)
 class ContinuousBarrierReturn:
-    tp_bps: float | None = None       # take-profit, bps in favour of the position
-    sl_bps: float | None = None       # stop-loss, bps against
-    max_hold_s: float | None = None   # timeout
-    fill_delay_seconds: float = 0.0   # entries already carry the clock delay upstream
+    tp_bps: float | None = None  # take-profit, bps in favour of the position
+    sl_bps: float | None = None  # stop-loss, bps against
+    max_hold_s: float | None = None  # timeout
+    fill_delay_seconds: float = 0.0  # entries already carry the clock delay upstream
 
     @property
     def params(self) -> dict:
-        return {"return_calc": "continuous_barrier", "tp_bps": self.tp_bps,
-                "sl_bps": self.sl_bps, "max_hold_s": self.max_hold_s}
+        return {
+            "return_calc": "continuous_barrier",
+            "tp_bps": self.tp_bps,
+            "sl_bps": self.sl_bps,
+            "max_hold_s": self.max_hold_s,
+        }
 
-    def compute(self, signals: pd.DataFrame, target: MarketConfig, start_date: str,
-                end_date: str, data_root: Path = _DEFAULT_DATA_ROOT) -> pd.DataFrame:
-        mp = load_target_prices(target.exchange, target.symbol, target.execution_size,
-                                start_date, end_date, data_root)
+    def compute(
+        self,
+        signals: pd.DataFrame,
+        target: MarketConfig,
+        start_date: str,
+        end_date: str,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
+    ) -> pd.DataFrame:
+        data_root = _resolve_data_root(data_root)
+        mp = load_target_prices(
+            target.exchange,
+            target.symbol,
+            target.execution_size,
+            start_date,
+            end_date,
+            data_root,
+        )
         n_mp = len(mp.ts)
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
         if len(sig) == 0 or n_mp == 0:
-            return add_jst_columns(pd.DataFrame(columns=_COLS),
-                                   ts_col="entry_exec_ts", date_ts_col="ts")
+            return add_jst_columns(
+                pd.DataFrame(columns=_COLS), ts_col="entry_exec_ts", date_ts_col="ts"
+            )
 
         ts, bid, ask, mid = mp.ts, mp.bid, mp.ask, mp.mid
         s_ts = sig["ts"].to_numpy(dtype=float)
@@ -77,35 +106,58 @@ class ContinuousBarrierReturn:
                 continue
             d = d_all[k]
             # The run's natural end, capped by the timeout.
-            hard = x_ts[k] if self.max_hold_s is None else min(x_ts[k], ts[a] + self.max_hold_s)
+            hard = (
+                x_ts[k]
+                if self.max_hold_s is None
+                else min(x_ts[k], ts[a] + self.max_hold_s)
+            )
             b = int(min(np.searchsorted(ts, hard, side="left"), n_mp - 1))
             if b <= a:
                 continue
 
             m0 = mid[a]
-            j, reason = b, ("timeout" if (self.max_hold_s is not None
-                                          and hard < x_ts[k]) else "direction")
+            j, reason = (
+                b,
+                (
+                    "timeout"
+                    if (self.max_hold_s is not None and hard < x_ts[k])
+                    else "direction"
+                ),
+            )
             if self.tp_bps is not None or self.sl_bps is not None:
-                seg = (mid[a:b + 1] - m0) / m0 * 1e4 * d      # signed move in our favour
-                hit_sl = (np.flatnonzero(seg <= -self.sl_bps) if self.sl_bps is not None
-                          else np.empty(0, dtype=int))
-                hit_tp = (np.flatnonzero(seg >= self.tp_bps) if self.tp_bps is not None
-                          else np.empty(0, dtype=int))
+                seg = (mid[a : b + 1] - m0) / m0 * 1e4 * d  # signed move in our favour
+                hit_sl = (
+                    np.flatnonzero(seg <= -self.sl_bps)
+                    if self.sl_bps is not None
+                    else np.empty(0, dtype=int)
+                )
+                hit_tp = (
+                    np.flatnonzero(seg >= self.tp_bps)
+                    if self.tp_bps is not None
+                    else np.empty(0, dtype=int)
+                )
                 first_sl = a + int(hit_sl[0]) if hit_sl.size else None
                 first_tp = a + int(hit_tp[0]) if hit_tp.size else None
                 if first_sl is not None and (first_tp is None or first_sl <= first_tp):
-                    j, reason = first_sl, "stop"       # ties go to the stop, never the TP
+                    j, reason = first_sl, "stop"  # ties go to the stop, never the TP
                 elif first_tp is not None:
                     j, reason = first_tp, "take_profit"
 
             entry = ask[a] if d > 0 else bid[a]
             exit_ = bid[j] if d > 0 else ask[j]
-            rows.append({
-                "ts": s_ts[k], "direction": d, "strength": strength[k],
-                "entry_exec_ts": ts[a], "entry_price": entry,
-                "exit_exec_ts": ts[j], "exit_price": exit_,
-                "return_bps": d * (exit_ - entry) / entry * 1e4,
-                "holding_seconds": ts[j] - ts[a], "exit_reason": reason,
-            })
+            rows.append(
+                {
+                    "ts": s_ts[k],
+                    "direction": d,
+                    "strength": strength[k],
+                    "entry_exec_ts": ts[a],
+                    "entry_price": entry,
+                    "exit_exec_ts": ts[j],
+                    "exit_price": exit_,
+                    "return_bps": d * (exit_ - entry) / entry * 1e4,
+                    "holding_seconds": ts[j] - ts[a],
+                    "exit_reason": reason,
+                }
+            )
         trades = pd.DataFrame(rows) if rows else pd.DataFrame(columns=_COLS)
         return add_jst_columns(trades, ts_col="entry_exec_ts", date_ts_col="ts")

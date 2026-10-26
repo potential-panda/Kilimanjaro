@@ -11,7 +11,9 @@ carry that descriptive content, only the spec does.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -81,7 +83,7 @@ def next_event_id(existing_events: list[dict], at: datetime) -> str:
     seqs = [
         int(e["event_id"][len(prefix) :])
         for e in existing_events
-        if e["event_id"].startswith(prefix)
+        if e["event_id"].startswith(prefix) and e["event_id"][len(prefix) :].isdigit()
     ]
     return f"{prefix}{(max(seqs) + 1) if seqs else 1:03d}"
 
@@ -89,12 +91,21 @@ def next_event_id(existing_events: list[dict], at: datetime) -> str:
 def load_events(ledger_path: Path = _DEFAULT_LEDGER_PATH) -> list[dict]:
     if not ledger_path.exists():
         return []
-    events = []
-    for line in ledger_path.read_text().splitlines():
-        line = line.strip()
-        if line:
-            events.append(json.loads(line))
-    return events
+    with ledger_path.open() as stream:
+        fcntl.flock(stream, fcntl.LOCK_SH)
+        events = []
+        lines = stream.readlines()
+        for i, line in enumerate(lines):
+            if not line.strip():
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                if i != len(lines) - 1 or line.endswith("\n"):
+                    raise
+                # A killed append may leave a torn final line. The exclusive
+                # writer archives and repairs it before replaying the outbox.
+        return events
 
 
 def append_event(
@@ -108,18 +119,19 @@ def append_event(
     artifact_ids: dict | None = None,
     details: dict | None = None,
     ledger_path: Path = _DEFAULT_LEDGER_PATH,
+    event_id: str | None = None,
+    created_at: str | None = None,
 ) -> dict:
     """Validate and append one event. Returns the written event dict."""
-    existing = load_events(ledger_path)
     now = datetime.now(UTC)
     event = {
         "schema_version": 1,
-        "event_id": next_event_id(existing, now),
+        "event_id": event_id,
         "hypothesis_id": hypothesis_id,
         "event_type": event_type,
         "actor_type": actor_type,
         "actor_id": actor_id,
-        "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at": created_at or now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     if from_status is not None:
         event["from_status"] = from_status
@@ -132,17 +144,58 @@ def append_event(
     if details is not None:
         event["details"] = details
 
-    validator = _ledger_event_validator()
-    errors = [
-        f"{'/'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}"
-        for e in validator.iter_errors(event)
-    ]
-    if errors:
-        raise ValueError("invalid ledger event: " + "; ".join(errors))
-
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(ledger_path, "a") as f:
-        f.write(json.dumps(event) + "\n")
+    with ledger_path.open("a+") as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        stream.seek(0)
+        lines = stream.readlines()
+        existing = []
+        good_end = 0
+        for i, line in enumerate(lines):
+            try:
+                if line.strip():
+                    existing.append(json.loads(line))
+            except json.JSONDecodeError:
+                if i != len(lines) - 1 or line.endswith("\n"):
+                    raise
+                from kilimanjaro.research.identity import identity
+
+                archive = ledger_path.with_name(
+                    ledger_path.name + ".torn-" + identity("tail", line)
+                )
+                with archive.open("a") as saved:
+                    if saved.tell() == 0:
+                        saved.write(line)
+                        saved.flush()
+                        os.fsync(saved.fileno())
+                stream.seek(good_end)
+                stream.truncate()
+                stream.flush()
+                os.fsync(stream.fileno())
+                break
+            good_end += len(line.encode())
+        event["event_id"] = event_id or next_event_id(existing, now)
+        for old in existing:
+            if old["event_id"] == event["event_id"]:
+                if old != event:
+                    raise ValueError(
+                        "Conflicting content for an existing ledger event id"
+                    )
+                return old
+        errors = [e.message for e in _ledger_event_validator().iter_errors(event)]
+        if errors:
+            raise ValueError("invalid ledger event: " + "; ".join(errors))
+        stream.seek(0, os.SEEK_END)
+        if (
+            existing
+            and lines
+            and not lines[-1].endswith("\n")
+            and good_end == stream.tell()
+        ):
+            stream.write("\n")
+        stream.write(json.dumps(event) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
     return event
 
 

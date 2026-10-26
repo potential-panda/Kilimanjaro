@@ -399,7 +399,9 @@ _CALIB_DD = {
     "window_s": 21600,
     "cooldown_s": 3600,
 }  # aquila DD gate
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+from kilimanjaro.data.root import data_root as _resolve_data_root
+
+_DEFAULT_DATA_ROOT = None
 
 
 def evaluate_spec(
@@ -415,7 +417,7 @@ def evaluate_spec(
     dd_window_s: float = _CALIB_DD["window_s"],
     dd_cooldown_s: float = _CALIB_DD["cooldown_s"],
     warmup_days: int = 2,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ):
     """Run `spec` through its trading mechanism over a threshold sweep; one row per
     threshold with standardized economics:
@@ -423,6 +425,7 @@ def evaluate_spec(
       net_total_bps, net_avg_bps    (minus `cost_bps` latency slippage — the verdict)
       sharpe, avg_hold_s
     The frame is loaded once (warmup-padded) and reused across thresholds."""
+    data_root = _resolve_data_root(data_root)
     from datetime import datetime, timedelta
 
     import numpy as np

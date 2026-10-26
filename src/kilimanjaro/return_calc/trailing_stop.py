@@ -37,10 +37,11 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.price_cache import load_target_prices
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,9 @@ class TrailingStopReturn:
     """
 
     barrier_bps: float
-    time_cap_seconds: int | None = None  # far safety bound only; stop/flip are the exits
+    time_cap_seconds: int | None = (
+        None  # far safety bound only; stop/flip are the exits
+    )
     non_overlapping: bool = True  # trades are one-at-a-time by construction
     fill_delay_seconds: float = 0.0  # next available price after the 1s bar closes
 
@@ -74,13 +77,18 @@ class TrailingStopReturn:
         target: MarketConfig,
         start_date: str,
         end_date: str,
-        data_root: Path = _DEFAULT_DATA_ROOT,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
     ) -> pd.DataFrame:
         """Input signals: [ts, direction, strength] (ALL fires, not decimated — the
         subsequent same-side fires ratchet the stop). Returns one row per trade."""
+        data_root = _resolve_data_root(data_root)
         mp = load_target_prices(
-            target.exchange, target.symbol, target.execution_size,
-            start_date, end_date, data_root,
+            target.exchange,
+            target.symbol,
+            target.execution_size,
+            start_date,
+            end_date,
+            data_root,
         )
         sig = signals.sort_values("ts", kind="stable").reset_index(drop=True)
         n_mp = len(mp.ts)
@@ -118,11 +126,13 @@ class TrailingStopReturn:
             e = int(entry_idx[i])
             if e >= n_mp:
                 continue
-            if mp.ts[e] <= last_exit_ts:  # inside a still-open trade -> non-overlap skip
+            if (
+                mp.ts[e] <= last_exit_ts
+            ):  # inside a still-open trade -> non-overlap skip
                 continue
             d = direction[i]
             same = buy_fire if d > 0 else sell_fire  # confirming -> ratchet
-            opp = sell_fire if d > 0 else buy_fire    # reversal -> flip out
+            opp = sell_fire if d > 0 else buy_fire  # reversal -> flip out
             # No time cap: walk to end of data; time_cap (if set) is only a far safety.
             hi = int(cap_idx[i]) if capped else n_mp - 1
             anchor = mid[e]
@@ -155,18 +165,23 @@ class TrailingStopReturn:
             )
             entry_price = mp.ask[e] if d > 0 else mp.bid[e]
             exit_price = mp.bid[exit_fill] if d > 0 else mp.ask[exit_fill]
-            rows.append({
-                "ts": ts[i],
-                "direction": d,
-                "strength": strength[i],
-                "entry_exec_ts": mp.ts[e],
-                "entry_price": entry_price,
-                "exit_exec_ts": mp.ts[exit_fill],
-                "exit_price": exit_price,
-                "return_bps": d * (exit_price - entry_price) / entry_price * 10000.0,
-                "holding_seconds": mp.ts[exit_fill] - mp.ts[e],
-                "exit_reason": reason,
-            })
+            rows.append(
+                {
+                    "ts": ts[i],
+                    "direction": d,
+                    "strength": strength[i],
+                    "entry_exec_ts": mp.ts[e],
+                    "entry_price": entry_price,
+                    "exit_exec_ts": mp.ts[exit_fill],
+                    "exit_price": exit_price,
+                    "return_bps": d
+                    * (exit_price - entry_price)
+                    / entry_price
+                    * 10000.0,
+                    "holding_seconds": mp.ts[exit_fill] - mp.ts[e],
+                    "exit_reason": reason,
+                }
+            )
             last_exit_ts = mp.ts[exit_fill]
 
         trades = pd.DataFrame(rows) if rows else _empty()
@@ -178,7 +193,15 @@ class TrailingStopReturn:
 def _empty() -> pd.DataFrame:
     return pd.DataFrame(
         columns=[
-            "ts", "direction", "strength", "entry_exec_ts", "entry_price",
-            "exit_exec_ts", "exit_price", "return_bps", "holding_seconds", "exit_reason",
+            "ts",
+            "direction",
+            "strength",
+            "entry_exec_ts",
+            "entry_price",
+            "exit_exec_ts",
+            "exit_price",
+            "return_bps",
+            "holding_seconds",
+            "exit_reason",
         ]
     )

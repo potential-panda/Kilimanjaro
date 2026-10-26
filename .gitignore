@@ -8,6 +8,11 @@ __pycache__/
 .cadence.pid
 .cadence.log*
 
+# Durable research state is backed up separately; never version SQLite WAL files.
+cycle/17_ledger/research.sqlite*
+cycle/17_ledger/research-worker.lock
+cycle/05_experiments/*/
+
 # Regenerable scan diagnostics — OBI-age histograms (~12MB each). The scan's
 # large per-combo diagnostics regenerate on the next `grid obi` run.
 cycle/15_return_eval/**/age_hist/
@@ -25,3 +30,6 @@ cycle/16_calibration/*/
 # Editor-local settings
 .vscode/
 .claude
+# Research artifacts from the explicitly bounded local pilot.
+cycle/discovery-pilot/
+research-service.lock

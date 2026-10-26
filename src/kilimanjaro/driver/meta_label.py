@@ -37,13 +37,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.driver.blend_corr import Factor
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
 from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 # Trade-count budgets (as a fraction of the holdout candidate pool) at which the
 # meta ranking is compared to the |z| ranking.
@@ -67,7 +68,7 @@ def build_candidate_table(
     barrier_bps: float,
     time_cap: int,
     jst_hours: set[int] | None = None,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> pd.DataFrame:
     """Fire the composite (loose primary), label each trade by triple-barrier net
     return, attach point-in-time factor features. One row per non-overlapping
@@ -75,6 +76,7 @@ def build_candidate_table(
     jst_hour, jst_weekday, fac_00..fac_kk]. Every factor gets a column (NaN if it
     can't be built in the window) so train/holdout columns always align.
     """
+    data_root = _resolve_data_root(data_root)
     sig = ExpressionSignal.create(
         markets=markets, expr=composite_expr, threshold=primary_threshold
     )

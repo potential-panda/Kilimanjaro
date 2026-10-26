@@ -34,9 +34,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.driver.signal_corr import _executable_bps
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 _WARMUP_DAYS = 2
 _IC_SUBSAMPLE = 1_500_000
 
@@ -221,11 +222,12 @@ def run_sweep(
     fire_threshold: float = 2.0,
     cost_bps: float = 1.0,
     workers: int | None = None,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
     warmup_days: int = _WARMUP_DAYS,
     progress=print,
 ) -> pd.DataFrame:
     """Run the full base x op grid for one market pair. Parallel over BASE columns."""
+    data_root = _resolve_data_root(data_root)
     import multiprocessing as mp
 
     a, b = (_mkt(cfg["market_a"]), _mkt(cfg["market_b"]))

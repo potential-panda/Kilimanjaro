@@ -7,9 +7,9 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-from kilimanjaro.data.root import data_root as _hase_data_root
+from kilimanjaro.data.root import data_root as _resolve_data_root
 
-_DEFAULT_DATA_ROOT = _hase_data_root()
+_DEFAULT_DATA_ROOT = None
 
 _VALID_DEPTHS = frozenset([1, 3, 5, 10])
 _VALID_HALFLIVES = frozenset([10, 30, 60, 120, 300])
@@ -38,7 +38,7 @@ def load_obi_series(
     end_date: str,
     depth: int,
     obi_halflife: int | None,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> pd.DataFrame:
     """Load the full 1s OBI series for one (depth, halflife) over a date range.
 
@@ -46,6 +46,7 @@ def load_obi_series(
     Feed the result into the feature frame / ExpressionSignal path to avoid
     re-reading parquet on every threshold/horizon combo in a grid sweep.
     """
+    data_root = _resolve_data_root(data_root)
     if depth not in _VALID_DEPTHS:
         raise ValueError(f"depth must be one of {sorted(_VALID_DEPTHS)}, got {depth}")
     if obi_halflife is not None and obi_halflife not in _VALID_HALFLIVES:

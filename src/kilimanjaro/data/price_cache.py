@@ -21,13 +21,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import NamedTuple
 
-import duckdb
 import numpy as np
 
 from kilimanjaro.data.price_loader import mp_glob
-from kilimanjaro.data.root import data_root as _hase_data_root
+from kilimanjaro.data.root import data_root as _resolve_data_root
 
-_DEFAULT_DATA_ROOT = _hase_data_root()
+_DEFAULT_DATA_ROOT = None
 
 
 class TargetPrices(NamedTuple):
@@ -62,7 +61,9 @@ def _load(
     data_root: str,
 ) -> TargetPrices:
     glob = mp_glob(exchange, symbol, execution_size, Path(data_root))
-    con = duckdb.connect()
+    from kilimanjaro.data.connection import connect
+
+    con = connect()
     try:
         df = con.sql(f"""
             SELECT ts, bid, ask
@@ -85,7 +86,8 @@ def load_target_prices(
     execution_size: str,
     start_date: str,
     end_date: str,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> TargetPrices:
     """Cached (ts, bid, ask) arrays for one market over one date window."""
+    data_root = _resolve_data_root(data_root)
     return _load(exchange, symbol, execution_size, start_date, end_date, str(data_root))

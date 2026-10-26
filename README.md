@@ -156,6 +156,7 @@ regenerate it on demand from bronze `OrderBook` with
 
 ## Docs
 
+- **[`doc/continuous-discovery-implementation-plan.md`](doc/continuous-discovery-implementation-plan.md)** — next-version implementation plan: data planning, durable jobs, connected research stages, fresh-data confirmation, adaptive search, and unattended operation; milestone acceptance gates for coding agents.
 - **[`CLAUDE.md`](CLAUDE.md)** — architecture, CLI, data paths, cost + verification policy (start here).
 - **[`doc/direction/alpha-factory-roadmap.md`](doc/direction/alpha-factory-roadmap.md)** — the tracked roadmap to a full alpha discovery factory.
 - [`doc/scan-evaluation.md`](doc/scan-evaluation.md) — how every grid scan is judged: train/holdout split, rank-stability selection, verdict taxonomy.
@@ -221,3 +222,11 @@ support this (in `/home/lulurun/workspace/Makalu`, not this repo):
   raw-data gaps (e.g. `BINANCE/ETH_USDT` is missing an entire month). Fixed
   to log a warning and skip the gap instead of crashing the whole populate
   command.
+
+## Continuous discovery
+
+The opt-in `python src/cli.py research` workflow provides persistent jobs, isolated
+Hase/Makalu prerequisites, development experiments, frozen confirmation protocols,
+bounded proposals, and a read-only Research viewer. See the
+[runbook](doc/continuous-discovery-runbook.md) and
+[implementation/validation status](doc/discovery-implementation-status.md).

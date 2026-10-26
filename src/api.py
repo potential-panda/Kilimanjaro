@@ -24,6 +24,7 @@ GET /api/ledger                         raw ledger events
 
 import csv
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -44,6 +45,9 @@ from kilimanjaro.ledger.core import (
 )
 
 app = Flask(__name__, static_folder=str(_WEB_DIR))
+app.config["RESEARCH_DATABASE"] = os.environ.get(
+    "KILIMANJARO_RESEARCH_DB", str(_ROOT / "cycle" / "17_ledger" / "research.sqlite")
+)
 
 # scan-list cache: scan folder path -> (mtime, summary dict)
 _scan_cache: dict[str, tuple[float, dict]] = {}
@@ -306,6 +310,68 @@ def api_hypothesis_detail(hyp_id: str):
 @app.route("/api/ledger")
 def api_ledger():
     return jsonify(load_events(_LEDGER_PATH))
+
+
+@app.route("/api/research")
+def api_research():
+    from kilimanjaro.research.service import summary
+    from kilimanjaro.research.store import Store
+
+    database = Path(app.config["RESEARCH_DATABASE"])
+    if not database.is_file():
+        return jsonify({"state": "not_initialized", "jobs": [], "summary": {}})
+    with Store(database, readonly=True) as store:
+        latest = store.db.execute(
+            "SELECT recorded,payload FROM service_ticks ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return jsonify(
+            {
+                "state": "available",
+                **store.status(),
+                "summary": summary(store),
+                "last_poll": latest["recorded"] if latest else None,
+                "freshness": json.loads(latest["payload"])["inventory"]
+                if latest
+                else {},
+                "lineage": [
+                    dict(r)
+                    for r in store.db.execute(
+                        "SELECT id,parent_run,lane,reason,run_id FROM proposals ORDER BY created"
+                    )
+                ],
+            }
+        )
+
+
+@app.route("/api/research/<run_id>")
+def api_research_run(run_id):
+    from kilimanjaro.research.artifacts import read_json, verify
+    from kilimanjaro.research.store import Store
+
+    database = Path(app.config["RESEARCH_DATABASE"])
+    if not database.is_file():
+        abort(404)
+    with Store(database, readonly=True) as store:
+        try:
+            campaign = store.campaign(run_id)
+        except KeyError:
+            abort(404)
+        result = store.status(run_id)
+        if campaign["spec"].get("_mode") == "confirmation":
+            # No interim confirmation metrics through a search/viewer interface.
+            return jsonify({**result, "data_role": "sealed_confirmation"})
+        result["campaign"] = campaign
+        for stage, filename in (
+            ("report", "report.json"),
+            ("correlation", "relationships.json"),
+        ):
+            for job in result["jobs"]:
+                if job["stage"] == stage and job["state"] == "succeeded":
+                    full = store.job(job["id"])
+                    folder = Path(job["artifact_dir"])
+                    verify(folder, full["manifest"])
+                    result[stage] = read_json(folder / filename)
+        return jsonify(result)
 
 
 # -- Static / SPA --------------------------------------------------------

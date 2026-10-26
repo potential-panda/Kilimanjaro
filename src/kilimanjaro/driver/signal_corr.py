@@ -28,7 +28,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+from kilimanjaro.data.root import data_root as _resolve_data_root
+
+_DEFAULT_DATA_ROOT = None
 _WARMUP_DAYS = 2  # converge the factors' rolling windows before the compared window
 
 
@@ -128,10 +130,11 @@ def compute(
     start: str,
     end: str,
     horizons: list[int],
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
     warmup_days: int = _WARMUP_DAYS,
     fire_threshold: float = 2.0,
     target_alias: str = "b",
+    frame: pd.DataFrame | None = None,
 ) -> SignalCorrResult:
     """Per-factor IC (vs `target_mid_expr` forward return) + factor-value corr matrix,
     plus per-horizon EXECUTABLE economics at bid/ask.
@@ -147,6 +150,7 @@ def compute(
     minus the flat latency cost (framework.costs). net > 0 is the step-1 gate that IC
     alone cannot express.
     """
+    data_root = _resolve_data_root(data_root)
     from datetime import datetime, timedelta
 
     from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
@@ -163,15 +167,19 @@ def compute(
         " + ".join(f"({f.expr})" for f in factors)
         + f" + ({target_mid_expr}) + ({bid_expr}) + ({ask_expr})"
     )
-    frame = ExpressionSignal.create(
-        markets=markets,
-        expr=load_expr,
-        threshold=0.0,
-        min_age=None,
-        max_age=None,
-        invert=False,
-        label="signal_corr",
-    ).load_data(load_start, end, data_root)
+    frame = (
+        frame
+        if frame is not None
+        else ExpressionSignal.create(
+            markets=markets,
+            expr=load_expr,
+            threshold=0.0,
+            min_age=None,
+            max_age=None,
+            invert=False,
+            label="signal_corr",
+        ).load_data(load_start, end, data_root)
+    )
 
     ts = frame["ts"].to_numpy(dtype=float)
     sec = np.floor(ts).astype(np.int64)

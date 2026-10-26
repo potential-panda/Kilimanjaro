@@ -30,8 +30,9 @@ from pathlib import Path
 import yaml
 
 from kilimanjaro.data.feature_frame import available_features
+from kilimanjaro.data.root import data_root as _resolve_data_root
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 LOG = logging.getLogger(__name__)
 
 # (leader exchange, leader symbol, target exchange, target symbol).
@@ -472,7 +473,7 @@ def propose_specs(
     *,
     seen: set[str] | None = None,
     seq_start: int = 1,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
     pairs: list[tuple] = PAIRS,
     families: list[dict] = FAMILIES,
     family_priority: dict[str, float] | None = None,
@@ -483,6 +484,7 @@ def propose_specs(
     `family_priority` (e.g. from family_scores) biases which families lead —
     feedback toward what has survived. None keeps the equal round-robin.
     """
+    data_root = _resolve_data_root(data_root)
     feat: dict[tuple, dict] = {}
 
     def features(ex, sym):
@@ -556,7 +558,7 @@ def generate(
     date_str: str,
     *,
     scan_dirs: list[Path] | None = None,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
     feedback: bool = True,
 ) -> list[Path]:
     """Full stage-B step: dedup against existing specs, propose, write to queue.
@@ -564,6 +566,7 @@ def generate(
     feedback=True biases family selection toward what has survived (family_scores
     from the ledger); it degrades to equal round-robin when there is no history.
     """
+    data_root = _resolve_data_root(data_root)
     scan_dirs = scan_dirs or [Path("cycle/12_specs")]
     seen = existing_signatures(*scan_dirs)
     idea_ids = existing_idea_ids(*scan_dirs)

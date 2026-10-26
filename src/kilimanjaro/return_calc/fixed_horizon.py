@@ -30,10 +30,11 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.price_cache import load_target_prices
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 
 def _nonoverlap_indices(ts: np.ndarray, gap: float) -> np.ndarray:
@@ -75,7 +76,10 @@ class FixedHorizonReturn:
 
     @property
     def params(self) -> dict:
-        return {"horizon": self.horizon_seconds, "non_overlapping": self.non_overlapping}
+        return {
+            "horizon": self.horizon_seconds,
+            "non_overlapping": self.non_overlapping,
+        }
 
     def compute(
         self,
@@ -83,7 +87,7 @@ class FixedHorizonReturn:
         target: MarketConfig,
         start_date: str,
         end_date: str,
-        data_root: Path = _DEFAULT_DATA_ROOT,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
     ) -> pd.DataFrame:
         """Join signals with cached target prices and compute fixed-horizon returns.
 
@@ -91,6 +95,7 @@ class FixedHorizonReturn:
         Returns [ts, direction, strength, entry_price, exit_price, return_bps,
                  jst_hour, jst_weekday, jst_date].
         """
+        data_root = _resolve_data_root(data_root)
         mp = load_target_prices(
             target.exchange,
             target.symbol,
@@ -104,7 +109,9 @@ class FixedHorizonReturn:
         # return window would overlap the previous kept one, up front, so the
         # measurement is on independent samples (and cheaper — fewer lookups).
         if self.non_overlapping and len(sig) > 1:
-            keep = _nonoverlap_indices(sig["ts"].to_numpy(), float(self.horizon_seconds))
+            keep = _nonoverlap_indices(
+                sig["ts"].to_numpy(), float(self.horizon_seconds)
+            )
             sig = sig.iloc[keep].reset_index(drop=True)
         direction = sig["direction"].values
         n_mp = len(mp.ts)

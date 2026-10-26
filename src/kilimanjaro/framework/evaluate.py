@@ -35,6 +35,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.gate import Gate
 
@@ -47,7 +48,7 @@ from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.runner import run_grid
 from kilimanjaro.framework.schedule import ScheduleFilter
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 # Stat fields that get train_/holdout_ prefixes in merged rows. Everything
 # else in a row (signal/return-calc params, schedule, status) is combo
@@ -164,7 +165,7 @@ def run_grid_split(
     costs_bps: float = ROUND_TRIP_COST_BPS,
     schedule: ScheduleFilter | None = None,
     gates: list[Gate] | None = None,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
     rank_metric: str = "t_stat",
     top_quantile: float = 0.10,
     min_n: int = 30,
@@ -206,6 +207,7 @@ def run_grid_split(
         windows        {"train": [start, end], "holdout": [start, end]}
         params         reproducibility block
     """
+    data_root = _resolve_data_root(data_root)
     train_start, train_end, holdout_start, holdout_end = split_windows(
         start_date, split_date, end_date
     )

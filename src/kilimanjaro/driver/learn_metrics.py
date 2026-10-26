@@ -21,10 +21,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.op.age import threshold_age
 from kilimanjaro.signal.expression import ExpressionSignal, eval_expr
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 AGE_STAT_FIELDS = [
     "expr",
@@ -84,7 +85,7 @@ def learn_age(
     start: str,
     end: str,
     *,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> list[dict]:
     """Age-distribution rows for every (expression, threshold) in a spec.
 
@@ -92,6 +93,7 @@ def learn_age(
     spec threshold — the frame depends on markets+columns, not the threshold, so
     the eval is done once per expression.
     """
+    data_root = _resolve_data_root(data_root)
     import datetime as _dt
 
     days = max((_dt.date.fromisoformat(end) - _dt.date.fromisoformat(start)).days, 1)
@@ -212,13 +214,14 @@ def learn_return_dist(
     *,
     thresholds: list[float] | None = None,
     horizon: int = 300,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> list[dict]:
     """Return-distribution rows for every (expression, threshold) in a spec.
 
     Answers "is the signal's directional edge spread across time, or driven by a
     few events?" — mid-to-mid, no cost. Needs the spec's `target` for prices.
     """
+    data_root = _resolve_data_root(data_root)
     from kilimanjaro.data.price_cache import load_target_prices
 
     markets = spec["markets"]
@@ -379,7 +382,7 @@ def learn_exit_mode(
     barriers: list[float] | None = None,
     time_caps: list[int] | None = None,
     jst_hours: set[int] | None = None,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> list[dict]:
     """Exit-mode rows for every (expression, threshold, barrier, time_cap).
 
@@ -388,6 +391,7 @@ def learn_exit_mode(
     `jst_hours` restricts to a session (e.g. the US window) to match a tradeable
     config. No drawdown gate — this measures the exit mechanism on the fired
     trades, which the gate (an entry overlay) does not change."""
+    data_root = _resolve_data_root(data_root)
     from kilimanjaro.framework.protocol import MarketConfig
     from kilimanjaro.return_calc.triple_barrier import TripleBarrierReturn
 

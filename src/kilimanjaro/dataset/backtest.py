@@ -20,6 +20,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.costs import ROUND_TRIP_COST_BPS
 from kilimanjaro.framework.performance import (
     compute_path_metrics,
@@ -33,7 +34,7 @@ from kilimanjaro.framework.verify import (
     render_compare,
 )
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 # BINANCE ETH raw-data outage (missing days) — blocked in every flip scan.
 DEFAULT_BLOCK_JST_DATES: list[str] = [
@@ -160,6 +161,7 @@ def verify(
     Runs the basic parquet↔InfluxDB compare (framework.verify.compare_frames) on
     entry fills and per-trade PnL, then layers the scan's own risk-adjusted
     performance (Sharpe/Calmar/Martin via framework.performance)."""
+    data_root = _resolve_data_root(data_root)
     if features_root is None:
         features_root = _features_root()
 

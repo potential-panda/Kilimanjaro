@@ -67,7 +67,9 @@ from kilimanjaro.op.age import sign_age as _sign_age
 
 LOG = logging.getLogger(__name__)
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+from kilimanjaro.data.root import data_root as _resolve_data_root
+
+_DEFAULT_DATA_ROOT = None
 
 _EMA_DEPTHS = [1, 3, 5, 10]
 _EMA_HALFLIVES_S = [10, 30, 60, 120, 300]
@@ -143,12 +145,13 @@ def populate(
     start_date: str,
     end_date: str,
     recreate: bool = False,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> int:
     """Populate OBIFeature parquet files for exchange/symbol over the date range.
 
     Returns the number of dates written (skipped dates not counted).
     """
+    data_root = _resolve_data_root(data_root)
     import duckdb
 
     dates = _date_range(start_date, end_date)

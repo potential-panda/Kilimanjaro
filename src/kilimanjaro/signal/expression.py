@@ -35,10 +35,11 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.feature_frame import load_feature_frame
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.op.age import threshold_age, threshold_episode
 from kilimanjaro.op.series import OPS
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 _ALLOWED_NODES = (
     ast.Expression,
@@ -81,7 +82,7 @@ def validate_expr(expr: str) -> list[str]:
     columns: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, _ALLOWED_NODES):
-            raise TypeError(
+            raise ValueError(  # noqa: TRY004 - invalid syntax follows the public validation contract
                 f"disallowed syntax {type(node).__name__!r} in expression: {expr}"
             )
         if isinstance(node, ast.Call):
@@ -194,8 +195,9 @@ class ExpressionSignal:
         }
 
     def load_data(
-        self, start: str, end: str, data_root: Path = _DEFAULT_DATA_ROOT
+        self, start: str, end: str, data_root: Path | None = _DEFAULT_DATA_ROOT
     ) -> pd.DataFrame:
+        data_root = _resolve_data_root(data_root)
         return load_feature_frame(
             self._markets(), self.columns, start, end, data_root=data_root
         )

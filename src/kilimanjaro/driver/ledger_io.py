@@ -30,9 +30,11 @@ def scan_fingerprint(spec: dict, start: str, end: str) -> str:
 def already_processed(
     fingerprint: str, ledger_path: Path = DEFAULT_LEDGER_PATH
 ) -> bool:
-    """True if any recorded event carries this scan_fingerprint."""
+    """Only terminal outcomes suppress retry; scan-ready is an attempt."""
     for e in load_events(ledger_path):
-        if (e.get("details") or {}).get("scan_fingerprint") == fingerprint:
+        if (e.get("details") or {}).get("scan_fingerprint") == fingerprint and e.get(
+            "to_status"
+        ) in {"scan-passed", "scan-failed", "invalid-spec"}:
             return True
     return False
 
@@ -42,7 +44,9 @@ def current_status(hypothesis_id: str, ledger_path: Path = DEFAULT_LEDGER_PATH) 
     events = [
         e for e in load_events(ledger_path) if e["hypothesis_id"] == hypothesis_id
     ]
-    for e in sorted(events, key=lambda e: e["created_at"], reverse=True):
+    # Reverse after a stable sort so the last append wins a timestamp tie.
+    ordered = sorted(events, key=lambda e: e["created_at"])
+    for e in reversed(ordered):
         if e.get("to_status"):
             return e["to_status"]
     return "draft"

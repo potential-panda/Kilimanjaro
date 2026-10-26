@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Kilimanjaro research campaign v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "program",
+    "data_root",
+    "research_root",
+    "markets",
+    "target",
+    "features",
+    "windows",
+    "horizons",
+    "execution",
+    "budgets",
+    "seed",
+    "warmup_seconds",
+    "max_staleness_seconds",
+    "trial_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "name": {
+      "$ref": "#/$defs/id"
+    },
+    "program": {
+      "$ref": "#/$defs/id"
+    },
+    "description": {
+      "type": "string"
+    },
+    "hypothesis": {
+      "type": "string"
+    },
+    "falsification": {
+      "type": "string"
+    },
+    "data_root": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "research_root": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "target": {
+      "type": "string"
+    },
+    "markets": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exchange",
+          "symbol",
+          "execution_size"
+        ],
+        "properties": {
+          "exchange": {
+            "$ref": "#/$defs/id"
+          },
+          "symbol": {
+            "$ref": "#/$defs/id"
+          },
+          "execution_size": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        }
+      }
+    },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "expr"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/id"
+          },
+          "expr": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "windows": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "train",
+        "validation"
+      ],
+      "properties": {
+        "train": {
+          "$ref": "#/$defs/window"
+        },
+        "validation": {
+          "$ref": "#/$defs/window"
+        }
+      }
+    },
+    "horizons": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "threshold",
+        "round_trip_fee_bps",
+        "round_trip_slippage_bps",
+        "max_quote_delay_seconds"
+      ],
+      "properties": {
+        "threshold": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "round_trip_fee_bps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "round_trip_slippage_bps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_quote_delay_seconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_jobs",
+        "daily_jobs",
+        "memory_mb",
+        "disk_mb",
+        "job_timeout_seconds",
+        "max_attempts",
+        "max_variants"
+      ],
+      "properties": {
+        "max_jobs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "daily_jobs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "memory_mb": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "disk_mb": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "job_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_variants": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "warmup_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_staleness_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "trial_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "program_alpha",
+        "min_trades",
+        "min_days",
+        "bootstrap_samples",
+        "max_drawdown_bps",
+        "max_trades_per_day",
+        "max_profit_day_share"
+      ],
+      "properties": {
+        "program_alpha": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "min_trades": {
+          "type": "integer",
+          "minimum": 20
+        },
+        "min_days": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "bootstrap_samples": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "max_drawdown_bps": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_trades_per_day": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_profit_day_share": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "min_coverage": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "default": 0.95
+        }
+      }
+    },
+    "provider_params": {
+      "type": "object",
+      "maxProperties": 0
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,100}$"
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "string"
+        },
+        "end": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -31,13 +31,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import duckdb
 import numpy as np
 import pandas as pd
 
-from kilimanjaro.data.root import data_root as _hase_data_root
+from kilimanjaro.data.root import data_root as _resolve_data_root
 
-_DEFAULT_DATA_ROOT = _hase_data_root()
+_DEFAULT_DATA_ROOT = None
 _DEFAULT_FFILL_LIMIT_S = 300
 
 _OBI_RAW_RE = re.compile(r"^obi_k(\d+)$")
@@ -144,7 +143,9 @@ def _bc_glob(exchange: str, symbol: str, data_root: Path) -> str:
 
 def _query(sql: str) -> pd.DataFrame:
     # Hold the connection until .df() materializes (premature-GC bug otherwise)
-    con = duckdb.connect()
+    from kilimanjaro.data.connection import connect
+
+    con = connect()
     try:
         return con.sql(sql).df()
     finally:
@@ -287,8 +288,9 @@ def load_feature_frame(
     columns: list[str],
     start: str,
     end: str,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
     ffill_limit_s: int = _DEFAULT_FFILL_LIMIT_S,
+    availability_shift_seconds: int = 0,
 ) -> pd.DataFrame:
     """Build the aligned multi-market frame.
 
@@ -305,6 +307,9 @@ def load_feature_frame(
     DataFrame with a float "ts" column plus the requested columns, on a
     contiguous 1s grid covering the intersection of the markets' spans.
     """
+    data_root = _resolve_data_root(data_root)
+    if availability_shift_seconds < 0 or ffill_limit_s < 0:
+        raise ValueError("Availability cannot precede the observation bucket")
     per_alias: dict[str, list[str]] = {}
     for col in columns:
         alias, _, feature = col.partition("_")
@@ -326,6 +331,7 @@ def load_feature_frame(
             end,
             data_root,
         )
+        loaded[alias].index += availability_shift_seconds
 
     grid_start = max(df.index.min() for df in loaded.values())
     grid_end = min(df.index.max() for df in loaded.values())
@@ -335,7 +341,9 @@ def load_feature_frame(
 
     out = pd.DataFrame(index=grid)
     for alias, df in loaded.items():
-        aligned = df.reindex(grid).ffill(limit=ffill_limit_s)
+        aligned = df.reindex(grid)
+        if ffill_limit_s:
+            aligned = aligned.ffill(limit=ffill_limit_s)
         for feature in df.columns:
             out[f"{alias}_{feature}"] = aligned[feature]
 
@@ -346,9 +354,10 @@ def load_feature_frame(
 def available_features(
     exchange: str,
     symbol: str,
-    data_root: Path = _DEFAULT_DATA_ROOT,
+    data_root: Path | None = _DEFAULT_DATA_ROOT,
 ) -> dict[str, dict]:
     """What features (and date coverage) does this market actually have?"""
+    data_root = _resolve_data_root(data_root)
     out: dict[str, dict] = {}
 
     mp_root = (

@@ -37,10 +37,11 @@ import numpy as np
 import pandas as pd
 
 from kilimanjaro.data.price_cache import load_target_prices
+from kilimanjaro.data.root import data_root as _resolve_data_root
 from kilimanjaro.framework.protocol import MarketConfig
 from kilimanjaro.framework.schedule import add_jst_columns
 
-_DEFAULT_DATA_ROOT = Path("/panda/makalu-data")
+_DEFAULT_DATA_ROOT = None
 
 # One 1s grid step: the episode clears one second after its last active second.
 _GRID_STEP_S = 1.0
@@ -81,7 +82,7 @@ class EpisodeReturn:
         target: MarketConfig,
         start_date: str,
         end_date: str,
-        data_root: Path = _DEFAULT_DATA_ROOT,
+        data_root: Path | None = _DEFAULT_DATA_ROOT,
     ) -> pd.DataFrame:
         """Collapse episodes and compute per-episode bid/ask returns.
 
@@ -90,6 +91,7 @@ class EpisodeReturn:
                  exit_ts, exit_exec_ts, exit_price, return_bps, holding_seconds,
                  jst_hour, jst_weekday, jst_date] — one row per episode.
         """
+        data_root = _resolve_data_root(data_root)
         if "episode" not in signals.columns:
             raise ValueError(
                 "EpisodeReturn needs an 'episode' column; use a signal that "

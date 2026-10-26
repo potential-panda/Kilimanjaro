@@ -27,6 +27,14 @@ logging.basicConfig(
 
 
 def main() -> int:
+    # Operational research commands must not load optional replay/ML integrations.
+    if len(sys.argv) > 1 and sys.argv[1] == "research":
+        from command import research
+
+        parser = argparse.ArgumentParser(prog="cli")
+        research.register(parser.add_subparsers(dest="command", required=True))
+        args = parser.parse_args()
+        return args.func(args)
     from command import (
         blend,
         blend_corr,
@@ -41,6 +49,7 @@ def main() -> int:
         meta,
         op_sweep,
         populate,
+        research,
         return_eval,
         signal_corr,
         verify,
@@ -51,6 +60,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     populate.register(sub)
+    research.register(sub)
     return_eval.register(sub)
     verify.register(sub)
     verify_scan.register(sub)
