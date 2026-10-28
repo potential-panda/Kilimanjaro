@@ -1,7 +1,7 @@
 """Calibration factor: aggcount_10.
 
 offline (Kilimanjaro): eval `zscore(a_ta_imbalance_count_10s, 1800)` over the Makalu feature frame.
-online  (Himalaya):    InfluxDB measurement TRADING, field "aggcount_10".
+online  (Enoshima):    InfluxDB measurement TRADING, field "aggcount_10".
 note: aggressor count imbalance 10s
 """
 

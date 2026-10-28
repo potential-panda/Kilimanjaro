@@ -182,7 +182,7 @@ def test_trade_calibration_catches_equal_pnl_with_wrong_timing(tmp_path):
 
     with Store(tmp_path / "state.sqlite") as store:
         run, _spec = ready_candidate(store, tmp_path)
-        scope = scope_for(store, run, {"horizon": 5}, "himalaya-fixture-v1")
+        scope = scope_for(store, run, {"horizon": 5}, "enoshima-fixture-v1")
         off = pd.DataFrame(
             {
                 "entry_exec_ts": [100.0, 200.0],

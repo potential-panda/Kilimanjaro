@@ -86,7 +86,7 @@ Test cases:
 - handoff cannot be generated from any status other than `backtest-approved`;
 - handoff requires a prior human approval event;
 - handoff includes potential-panda-core mapping notes;
-- handoff includes Himalaya train/test/forward split windows;
+- handoff includes Enoshima train/test/forward split windows;
 - handoff includes execution assumptions and expected result fields;
 - handoff does not create strategy code.
 
@@ -122,7 +122,7 @@ Formula-backed expected outputs:
 
 ## Integration Tests
 
-Run against local Makalu/Himalaya paths when available:
+Run against local Makalu/Enoshima paths when available:
 
 - inventory refresh reads Makalu catalog and executes safe list/probe queries;
 - scanner can query a small real Makalu window for `BookState` or `Feature_Mid`;
@@ -135,7 +135,7 @@ Integration tests must not:
 
 - modify Makalu datasets;
 - submit live/paper trades;
-- auto-submit Himalaya backtests unless explicitly run in a controlled test environment.
+- auto-submit Enoshima backtests unless explicitly run in a controlled test environment.
 
 ## Manual Review Tests
 

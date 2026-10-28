@@ -1,7 +1,7 @@
 """Calibration factor: imb_qty_30.
 
 offline (Kilimanjaro): eval `zscore(a_ta_imbalance_qty_30s, 1800)` over the Makalu feature frame.
-online  (Himalaya):    InfluxDB measurement TRADING, field "imb_qty_30".
+online  (Enoshima):    InfluxDB measurement TRADING, field "imb_qty_30".
 note: trade imbalance qty 30s
 """
 

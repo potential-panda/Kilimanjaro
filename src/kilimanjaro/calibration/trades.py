@@ -2,15 +2,15 @@
 
 Once the signal (composite_z) matches (see factors/), the next question is whether
 the SCAN, fed that signal, fires the SAME orders and books the SAME return as
-Himalaya. This module answers it with the same [match, fix] loop the factors use:
+Enoshima. This module answers it with the same [match, fix] loop the factors use:
 
   offline (Kilimanjaro): run the promoted spec through the scan exactly as a grid run
                          would — ExpressionSignal -> TripleBarrierReturn(fill_delay=1)
                          -> US-session schedule -> rolling-drawdown gate. One row/trade
                          [entry_exec_ts, entry_price, exit_exec_ts, exit_price, return_bps].
-  online  (Himalaya):    the ORDER stream the aquila backtest wrote to InfluxDB
+  online  (Enoshima):    the ORDER stream the aquila backtest wrote to InfluxDB
                          (OPEN/CLOSE fills, EXEC_PRICE) paired into round-trips, plus
-                         the PNL.return per close. One row per Himalaya round-trip.
+                         the PNL.return per close. One row per Enoshima round-trip.
 
 The scan config MUST mirror the aquila run that produced the bucket (aquila config.py:
 threshold 3.5, barrier 10, cap 300, jst_hours {22,23,0,1,2}, dd 200bps/6h/1h cooldown),
@@ -19,9 +19,9 @@ or the orders diverge for config reasons, not fidelity reasons. Those defaults l
 
 Trades are sequential (one position at a time), so a single divergence desyncs the whole
 tail — align on entry ts with a small window, then report the funnel:
-  (1) counts (scan vs Himalaya)   (2) matched pairs   (3) side match
+  (1) counts (scan vs Enoshima)   (2) matched pairs   (3) side match
   (4) entry-ts / exit-ts exact    (5) entry/exit price match (within tol)
-  (6) per-trade + total return (gross price move; scan vs Himalaya EXEC_PRICE)
+  (6) per-trade + total return (gross price move; scan vs Enoshima EXEC_PRICE)
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ class ScanConfig:
 @dataclass
 class TradeCalibResult:
     n_scan: int
-    n_hima: int
+    n_eno: int
     n_matched: int
     side_match: int
     entry_ts_exact: int
@@ -87,9 +87,9 @@ class TradeCalibResult:
     entry_px_match: int
     exit_px_match: int
     scan_total_bps: float
-    hima_total_bps: float
+    eno_total_bps: float
     scan_mean_bps: float
-    hima_mean_bps: float
+    eno_mean_bps: float
     ret_corr: float
     ret_match: int
     px_tol: float
@@ -103,7 +103,7 @@ class TradeCalibResult:
     def summary(self) -> str:
         m = self.n_matched
         return (
-            f"trades: scan {self.n_scan}  Himalaya {self.n_hima}  matched {m}\n"
+            f"trades: scan {self.n_scan}  Enoshima {self.n_eno}  matched {m}\n"
             f"  (1) side match      {self.side_match}/{m} ({self._pct(self.side_match):.1f}%)\n"
             f"  (2) entry ts exact  {self.entry_ts_exact}/{m} ({self._pct(self.entry_ts_exact):.1f}%)   "
             f"exit ts exact {self.exit_ts_exact}/{m} ({self._pct(self.exit_ts_exact):.1f}%)\n"
@@ -111,14 +111,14 @@ class TradeCalibResult:
             f"exit px match {self.exit_px_match}/{m} ({self._pct(self.exit_px_match):.1f}%)  [tol {self.px_tol}]\n"
             f"  (4) return: per-trade match {self.ret_match}/{m} ({self._pct(self.ret_match):.1f}%)  "
             f"corr {self.ret_corr:.4f}  [tol {self.ret_tol} bps]\n"
-            f"      total bps  scan {self.scan_total_bps:+.1f}   Himalaya {self.hima_total_bps:+.1f}   "
-            f"diff {self.scan_total_bps - self.hima_total_bps:+.1f}\n"
-            f"      per-trade  scan {self.scan_mean_bps:+.2f}   Himalaya {self.hima_mean_bps:+.2f}"
+            f"      total bps  scan {self.scan_total_bps:+.1f}   Enoshima {self.eno_total_bps:+.1f}   "
+            f"diff {self.scan_total_bps - self.eno_total_bps:+.1f}\n"
+            f"      per-trade  scan {self.scan_mean_bps:+.2f}   Enoshima {self.eno_mean_bps:+.2f}"
         )
 
 
 class TradeCalib:
-    """Runs the scan, pulls the Himalaya orders, aligns them, reports the funnel."""
+    """Runs the scan, pulls the Enoshima orders, aligns them, reports the funnel."""
 
     def __init__(self, spec: dict, markets: dict, cfg: ScanConfig):
         self.spec = spec
@@ -147,7 +147,7 @@ class TradeCalib:
         )
         # Load from start-warmup so the composite's rolling windows converge to the same
         # state aquila has at the window start (else the first ~hour under-warms); the
-        # extra early trades are dropped by the Himalaya-window restriction in calibrate().
+        # extra early trades are dropped by the Enoshima-window restriction in calibrate().
         load_start = _shift_date(start, _WARMUP_DAYS)
         data = sig.load_data(load_start, end, data_root)
         t = self.spec["target"]
@@ -192,7 +192,7 @@ class TradeCalib:
         trades = trades.dropna(subset=["return_bps"]).sort_values("entry_exec_ts")
         return trades.reset_index(drop=True)
 
-    # ---- online: Himalaya's orders --------------------------------------------
+    # ---- online: Enoshima's orders --------------------------------------------
     def online_trades(self, bucket: str, start: str, end: str) -> pd.DataFrame:
         import warnings
 
@@ -271,7 +271,7 @@ class TradeCalib:
 
 def compare_trade_frames(sc, ht, *, px_tol=1.0, ts_tol=0.001, ret_tol=0.5, max_div=15):
     """Compare existing offline/online trade artifacts without starting a replay."""
-    # restrict scan to Himalaya's covered window (first open .. last close)
+    # restrict scan to Enoshima's covered window (first open .. last close)
     if not ht.empty:
         sc = sc[
             (sc.entry_exec_ts >= ht.e_ts.min() - 5)
@@ -287,7 +287,7 @@ def compare_trade_frames(sc, ht, *, px_tol=1.0, ts_tol=0.001, ret_tol=0.5, max_d
 
     side_m = ets_m = xts_m = epx_m = xpx_m = ret_m = matched = 0
     scan_g: list[float] = []
-    hima_g: list[float] = []
+    eno_g: list[float] = []
     divs: list = []
     for k in range(len(ht)):
         if not len(s_e):
@@ -297,7 +297,7 @@ def compare_trade_frames(sc, ht, *, px_tol=1.0, ts_tol=0.001, ret_tol=0.5, max_d
         if j is None or abs(s_e[j] - ht["e_ts"][k]) > 3:
             if len(divs) < max_div:
                 divs.append(
-                    f"no scan trade near hima open {ht['e_ts'][k]:.0f} "
+                    f"no scan trade near enoshima open {ht['e_ts'][k]:.0f} "
                     f"side {ht['side'][k]:+d}"
                 )
             continue
@@ -316,7 +316,7 @@ def compare_trade_frames(sc, ht, *, px_tol=1.0, ts_tol=0.001, ret_tol=0.5, max_d
         xpx_m += xp
         ret_m += rm
         scan_g.append(sr["return_bps"])
-        hima_g.append(ht["gross_bps"][k])
+        eno_g.append(ht["gross_bps"][k])
         if (not (es and xs and sd and ep and xp and rm)) and len(divs) < max_div:
             divs.append(
                 f"e {sr['entry_exec_ts']:.0f}/{ht['e_ts'][k]:.0f} "
@@ -326,7 +326,7 @@ def compare_trade_frames(sc, ht, *, px_tol=1.0, ts_tol=0.001, ret_tol=0.5, max_d
                 f"g {sr['return_bps']:+.1f}/{ht['gross_bps'][k]:+.1f}"
             )
     sg = np.array(scan_g)
-    hg = np.array(hima_g)
+    hg = np.array(eno_g)
     corr = (
         float(np.corrcoef(sg, hg)[0, 1])
         if len(sg) > 1 and sg.std() > 0 and hg.std() > 0
@@ -334,7 +334,7 @@ def compare_trade_frames(sc, ht, *, px_tol=1.0, ts_tol=0.001, ret_tol=0.5, max_d
     )
     return TradeCalibResult(
         n_scan=len(sc),
-        n_hima=len(ht),
+        n_eno=len(ht),
         n_matched=matched,
         side_match=side_m,
         entry_ts_exact=ets_m,
@@ -342,9 +342,9 @@ def compare_trade_frames(sc, ht, *, px_tol=1.0, ts_tol=0.001, ret_tol=0.5, max_d
         entry_px_match=epx_m,
         exit_px_match=xpx_m,
         scan_total_bps=float(sg.sum()),
-        hima_total_bps=float(hg.sum()),
+        eno_total_bps=float(hg.sum()),
         scan_mean_bps=float(sg.mean()) if len(sg) else 0.0,
-        hima_mean_bps=float(hg.mean()) if len(hg) else 0.0,
+        eno_mean_bps=float(hg.mean()) if len(hg) else 0.0,
         ret_corr=corr,
         ret_match=ret_m,
         px_tol=px_tol,

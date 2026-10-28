@@ -1,7 +1,7 @@
 """Draft a human review packet for a scan-passed hypothesis.
 
 Per doc/requirements/agent-loop-design.md, a scan-to-backtest packet is what a
-human reads to decide whether to spend a Himalaya backtest. The driver never
+human reads to decide whether to spend an Enoshima backtest. The driver never
 promotes; it parks survivors here at the human gate. The packet is written into
 the scan's own output folder so evidence and review travel together.
 """
@@ -122,7 +122,7 @@ def write_review_packet(
         cal_block = (
             f"- mechanism: `{cal.mechanism}` — status: **CALIBRATED**\n"
             f"- {cal.evidence}\n"
-            "- The scan's net numbers are Himalaya-verified for this mechanism; "
+            "- The scan's net numbers are Enoshima-verified for this mechanism; "
             "trust the magnitudes, subject to the usual residual model risk."
         )
     else:
@@ -130,17 +130,17 @@ def write_review_packet(
             f"- mechanism: `{cal.mechanism}` — status: **⚠️ TREND-ONLY**\n"
             f"- {cal.evidence}\n"
             "- **Do NOT promote on the scan's absolute PnL/Sharpe.** They are not "
-            "Himalaya-verified for this mechanism — treat direction, magnitude-order "
-            "and param-ranking as indicative only. Himalaya calibration here is "
+            "Enoshima-verified for this mechanism — treat direction, magnitude-order "
+            "and param-ranking as indicative only. Enoshima calibration here is "
             "pending an independent replay implementation for this mechanism."
         )
 
     md = f"""# Review packet — {hyp} (scan-passed)
 
-**Recommended decision:** human review for Himalaya backtest approval.
+**Recommended decision:** human review for Enoshima backtest approval.
 This is a scan survivor, NOT an approval — promotion is your call.
 
-## Calibration (scan↔Himalaya trust)
+## Calibration (scan↔Enoshima trust)
 {cal_block}
 
 ## Hypothesis
@@ -172,14 +172,14 @@ This is a scan survivor, NOT an approval — promotion is your call.
 {chr(10).join("- " + f for f in flags) if flags else "- none"}
 
 ## What a human decides here
-1. Approve for Himalaya backtest -> record human_approval (scan-passed -> backtest-approved),
+1. Approve for Enoshima backtest -> record human_approval (scan-passed -> backtest-approved),
    then a handoff YAML is drafted.
 2. Reject -> retire with a reason.
 3. Request a variant (changed horizon/threshold/regime) -> new spec, new hypothesis id.
 
 Reminder: execution is bid/ask (spread paid) + flat latency cost on every
 mechanism. Trust in the *net numbers* is gated by the Calibration section above,
-not by the return calc — a trend-only mechanism needs Himalaya (or its step-5
+not by the return calc — a trend-only mechanism needs Enoshima (or its step-5
 strategy) before its absolute PnL/Sharpe can be believed.
 """
     path = out_dir / "REVIEW_PACKET.md"

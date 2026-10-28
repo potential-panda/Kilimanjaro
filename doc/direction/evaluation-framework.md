@@ -134,7 +134,7 @@ and a one-line natural-language verdict citing which threshold(s) passed or
 failed. This report is what gets attached to the ledger entry — see
 `../../cycle/01_schemas/ledger_event.schema.json` for the event schema.
 
-## 2. Backtest protocol (Himalaya)
+## 2. Backtest protocol (Enoshima)
 
 Only specs that passed the scan gate and received human sign-off reach this
 stage.
@@ -150,7 +150,7 @@ stage.
   spanning more than one volatility regime per family #5/#10 conditioning.
 
 ### Required result fields (beyond PnL)
-- Net PnL after fees, spread, slippage (Himalaya's simulator gateway
+- Net PnL after fees, spread, slippage (Enoshima's simulator gateway
   already models execution; the agent must confirm fee/slippage parameters
   were not left at idealized defaults).
 - Trade count and turnover.
@@ -158,7 +158,8 @@ stage.
 - Sharpe (or comparable risk-adjusted metric) per split.
 - Max drawdown.
 - Capacity/liquidity sensitivity: PnL at increasing order/execution size
-  (Himalaya's `execution_size` partitioning already supports this).
+  (Enoshima has no `execution_size` partitioning; `order_size` is in
+  `strategy_config.json`, so run one env per size).
 - Parameter sensitivity: PnL surface across the parameter grid, not just
   the best point — a sharp isolated peak is treated as a red flag.
 - Regime breakdown: performance split by the same spread/volatility buckets
@@ -173,7 +174,7 @@ stage.
 - Forward-test window is used once; re-running forward tests with new
   parameters after a failure is a new hypothesis (new ledger entry), not a
   retry of the old one.
-- Realistic fills required: confirm Himalaya's simulator costs (fees,
+- Realistic fills required: confirm Enoshima's simulator costs (fees,
   spread, slippage, latency) are configured, not defaulted to frictionless.
 - Post-hoc label construction is disallowed — target/label must be defined
   in the spec before the scan, not adjusted after seeing results.

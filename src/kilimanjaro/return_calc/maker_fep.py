@@ -4,7 +4,7 @@ Taker crosses the spread → fill is a lookup. A maker rests → the fill is con
 (the book must cross to you), delayed, and — in reality — queue-contended. This models it.
 
 FILL CONTRACT — mirrors qate's simulator (exchange/simulator/gateway.py::match_maker_order)
-so scan↔Himalaya calibration holds, exactly as `fill_delay` mirrored the taker fill:
+so scan↔Enoshima calibration holds, exactly as `fill_delay` mirrored the taker fill:
   BUY  limit@P fills when the ASK drops to  P - price_unit  → fill at that ask (price improve)
   SELL limit@P fills when the BID rises to  P + price_unit  → fill at that bid
 evaluated per tick on the target's bid/ask (price_cache). No queue model (qate has none) —
@@ -25,7 +25,7 @@ SELL signals. The break-even the whole maker thesis rests on is explicit in the 
   (spread captured + rebate) − adverse_selection − forced-exit tolls > 0 ?
 
 NOT YET CALIBRATED: like every mechanism, trust it only after an exact-match against a
-Himalaya maker run (a few param sets). Until then it is direction+magnitude, not gospel.
+Enoshima maker run (a few param sets). Until then it is direction+magnitude, not gospel.
 """
 
 from __future__ import annotations

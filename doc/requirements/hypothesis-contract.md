@@ -118,7 +118,7 @@ hypothesis:
     significance_method: block_bootstrap_by_day
   backtest_handoff_intent:
     potential_panda_core_strategy_pattern: ""
-    himalaya_config_notes: ""
+    enoshima_config_notes: ""
   decisions:
     - at: "2026-06-18T00:00:00Z"
       actor: agent|human

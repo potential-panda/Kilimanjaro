@@ -53,8 +53,8 @@ exactly "how much return do I get per unit of drawdown pain I must endure."
 Cost policy (framework/costs.py): the per-trade returns fed here are already
 bid/ask (spread paid) and net of the flat round-trip latency slippage. Do not
 re-charge spread or cost inside these metrics. The 0.5 bps/order is the realized
-1-year average (spikes included) and matches the flat cost Himalaya applies, so
-these path metrics are meant to track Himalaya's curve — not sit below it.
+1-year average (spikes included) and matches the flat cost Enoshima applies, so
+these path metrics are meant to track Enoshima's curve — not sit below it.
 """
 
 from __future__ import annotations
@@ -89,12 +89,12 @@ PATH_FIELDS = [
     "pct_time_underwater",
 ]
 
-# JPY per-fill variant (Himalaya-faithful): same ideas, but the equity curve is
+# JPY per-fill variant (Enoshima-faithful): same ideas, but the equity curve is
 # actual JPY PnL (net_bps × notional, notional = execution_size × entry_price)
 # cumulated at TRADE resolution, not equal-weight bps on a daily grid. This is
-# the curve Grafana/Himalaya draw, so its drawdown/Martin/Calmar track Himalaya
+# the curve Grafana/Enoshima draw, so its drawdown/Martin/Calmar track Enoshima
 # where the bps/daily curve does not (see doc/calibration.md). Use for scan↔
-# Himalaya fidelity and a survivor's real drawdown; keep bps for cross-market
+# Enoshima fidelity and a survivor's real drawdown; keep bps for cross-market
 # ranking (scale-free).
 JPY_FIELDS = [
     "jpy_total",
@@ -238,7 +238,7 @@ def compute_path_metrics_jpy(
     periods_per_year: int = 365,
     min_points: int = 5,
 ) -> dict:
-    """Himalaya-faithful path metrics on the JPY per-fill equity curve.
+    """Enoshima-faithful path metrics on the JPY per-fill equity curve.
 
     net_bps  : per-trade NET returns (bps), costs already applied.
     notional : per-trade JPY notional = execution_size × entry_price.

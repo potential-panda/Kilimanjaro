@@ -17,15 +17,15 @@ tick** framework — porting is a real reimplementation, and the edge lives in t
 > features, ops, grid, and parity harness is identical.
 
 > **Do the cheap thing first.** Don't port 19 features until the edge is confirmed.
-> Section 1 (precomputed-signal replay) validates the edge in Himalaya without any
+> Section 1 (precomputed-signal replay) validates the edge in Enoshima without any
 > feature port. Only if that passes do Section 2 (full streaming port for prod) and
 > Section 3 (parity harness). This mirrors the repo's calibrate-then-build order.
 
 ---
 
-## 1. Himalaya validation shortcut — precomputed-signal replay (do this first)
+## 1. Enoshima validation shortcut — precomputed-signal replay (do this first)
 
-Goal: confirm the edge in Himalaya **without** reimplementing features.
+Goal: confirm the edge in Enoshima **without** reimplementing features.
 
 1. In Kilimanjaro, evaluate the composite over the validation window and export a
    fired-signal table:
@@ -43,7 +43,7 @@ Goal: confirm the edge in Himalaya **without** reimplementing features.
    `{ts → direction}` table and, in `handle_order_book`, opens/closes per the
    triple-barrier rule (Section 2.4) when `now_ts` matches a fired entry. All the
    intelligence is precomputed; qate only executes.
-3. Run it through Himalaya on the holdout window. This measures the **edge** under
+3. Run it through Enoshima on the holdout window. This measures the **edge** under
    the real execution/backtest engine. If the sign / monthly consistency don't
    survive here, stop — no port needed.
 
@@ -147,7 +147,7 @@ Per 1s step, once features are computed:
   the previous exited, then re-enter on the **first fire after that exit** (sequential
   re-entry — the scan now matches this exactly; an early ±10 bps exit at +50 s frees a
   re-entry at +51 s, not after a fixed time_cap).
-- **Cost**: +0.5 bp/order latency slippage (matches Himalaya / the scan's 1 bp
+- **Cost**: +0.5 bp/order latency slippage (matches Enoshima / the scan's 1 bp
   round-trip). Bid/ask already carries the spread.
 
 ### 2.5 Filters & warmup

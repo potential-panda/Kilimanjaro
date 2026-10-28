@@ -282,7 +282,7 @@ def run_grid_scan(
 def gates_for_spec(spec: dict, return_calc: str | None = None) -> list:
     """Risk gates for a spec. The rolling-drawdown gate is ON by default — it is
     the live-trading risk rule (pause after an extreme loss), so the scan
-    measures the signal under the same overlay live/Himalaya run under.
+    measures the signal under the same overlay live/Enoshima run under.
 
     It applies ONLY to non-overlapping trades. The gate sums return_bps over a
     trailing window; on the overlapping per-second fixed_horizon grid that sum

@@ -1,7 +1,7 @@
 """Calibration factor: mom_30.
 
 offline (Kilimanjaro): eval `zscore(ret(a_mid, 30), 1800)` over the Makalu feature frame.
-online  (Himalaya):    InfluxDB measurement TRADING, field "mom_30".
+online  (Enoshima):    InfluxDB measurement TRADING, field "mom_30".
 note: 30s BINANCE momentum
 """
 

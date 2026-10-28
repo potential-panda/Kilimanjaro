@@ -25,7 +25,7 @@ return; the flat latency slippage is added upstream. The barrier test is on
 
 non_overlapping (default True): **one position at a time, re-entering on the first
 fire AFTER the previous trade's actual exit** — exactly how the live strategy /
-Himalaya behaves (a barrier that hits at +50 s frees a re-entry at +51 s, not after a
+Enoshima behaves (a barrier that hits at +50 s frees a re-entry at +51 s, not after a
 fixed time_cap). Fires that land inside a still-open trade are skipped. This replaced
 the old fixed time_cap decimation, which left the scanner idle for the rest of the cap
 after every early exit and so under-counted trades vs the live strategy. Trades are
@@ -122,7 +122,7 @@ class TripleBarrierReturn:
         mid = mp.mid  # materialize once (property recomputes each access)
 
         # Fill model: the strategy detects the signal, buffers the order, and the
-        # exchange fills at the NEXT available market price (Himalaya). For a signal
+        # exchange fills at the NEXT available market price (Enoshima). For a signal
         # on the 1s composite grid that price is the first tick at/after ts+fill_delay
         # (the 1s bar closes at ts+1). fill_delay=0 supports tick-known signals
         # (fires on a tick, so at-or-after is exact). The time cap is from the entry.

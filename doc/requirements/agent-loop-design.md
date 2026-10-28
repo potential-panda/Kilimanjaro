@@ -7,7 +7,7 @@ Kilimanjaro coordinates two loops:
 - scanner loop: cheap, frequent, mostly agent-autonomous stages 1-6;
 - backtest loop: expensive, human-gated stages 7-9.
 
-The agent may reject or park ideas autonomously, but cannot spend Himalaya backtest resources or promote strategies without human approval.
+The agent may reject or park ideas autonomously, but cannot spend Enoshima backtest resources or promote strategies without human approval.
 
 In one line (current state of the repo):
 
@@ -52,7 +52,7 @@ Responsibilities:
 Responsibilities:
 
 - convert approved handoff packages into potential-panda-core strategy variants;
-- create Himalaya run configs and parameter grids;
+- create Enoshima run configs and parameter grids;
 - run or supervise backtests;
 - provide result artifacts back to Kilimanjaro.
 
@@ -225,7 +225,7 @@ handoff:
     base_contract: "qate.trading.strategy"
     example_variant_reference: ""
     open_questions: []
-  himalaya_run_config:
+  enoshima_run_config:
     markets: []
     train_window: {}
     test_window: {}
@@ -296,6 +296,6 @@ Expected v1 surfaces:
 - CLI command or script for duplicate search;
 - CLI command or script for signal scan;
 - file-based registry/ledger under version control;
-- YAML handoff packet for Himalaya implementation, with optional generated Markdown review view.
+- YAML handoff packet for Enoshima implementation, with optional generated Markdown review view.
 
 No UI is required for v1.

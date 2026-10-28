@@ -16,7 +16,7 @@ So the single cost knob for any scan is a flat ``ROUND_TRIP_COST_BPS`` applied
 per completed trade, on top of spread-inclusive bid/ask returns. This is a
 central-estimate of the *mean* slippage; it does not model slippage *variance*
 (which spikes in volatile windows and deepens realized drawdowns) — for that,
-trust the Himalaya backtest, not the screen (see doc/calibration.md).
+trust the Enoshima backtest, not the screen (see doc/calibration.md).
 """
 
 from __future__ import annotations

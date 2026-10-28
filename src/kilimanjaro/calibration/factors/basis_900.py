@@ -1,7 +1,7 @@
 """Calibration factor: basis_900.
 
 offline (Kilimanjaro): eval `zscore(a_mid / b_mid, 900)` over the Makalu feature frame.
-online  (Himalaya):    InfluxDB measurement TRADING, field "basis_900".
+online  (Enoshima):    InfluxDB measurement TRADING, field "basis_900".
 note: BINANCE/COINCHECK basis; needs the 1s-ts tie-break (file_row_number) for b_mid
 """
 

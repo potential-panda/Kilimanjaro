@@ -99,7 +99,7 @@ hypothesis:
   backtest_handoff_intent:
     potential_panda_core_strategy_pattern: qate.trading.strategy variant, threshold
       entry, fixed_horizon exit
-    himalaya_config_notes: only if a rank-stable combo survives with meaningful absolute
+    enoshima_config_notes: only if a rank-stable combo survives with meaningful absolute
       holdout strength
   decisions:
   - at: '2026-07-22T06:04:49Z'

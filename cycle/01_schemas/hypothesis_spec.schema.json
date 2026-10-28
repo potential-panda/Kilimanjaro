@@ -175,7 +175,7 @@
           "type": "object",
           "properties": {
             "potential_panda_core_strategy_pattern": { "type": "string" },
-            "himalaya_config_notes": { "type": "string" }
+            "enoshima_config_notes": { "type": "string" }
           }
         },
         "decisions": {

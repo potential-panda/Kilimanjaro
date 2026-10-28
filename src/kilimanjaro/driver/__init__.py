@@ -7,7 +7,7 @@ sequences many of them unattended:
     generate/queue spec -> validate -> dedup -> scan -> verdict -> ledger
     -> park survivors for the human gate.
 
-steps 5-7 (build qate strategy, Himalaya backtest, prod) stay human-gated and
+steps 5-7 (build qate strategy, Enoshima backtest, prod) stay human-gated and
 live outside this loop. The driver never promotes a hypothesis; it only attaches
 evidence and moves a hypothesis to scan-passed / scan-failed, drafting a review
 packet for a human when something survives.

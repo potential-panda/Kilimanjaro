@@ -223,6 +223,6 @@ Keep the reshaping in perspective. Widening the barrier ±10→±20 bps changed 
 net by ~+34% (COINCHECK holdout) — exit params **reshape** an existing edge, they
 do not create it (for a driftless path E[return]=0 by optional stopping; the barrier
 only harvests the signal's drift — `triple_barrier.py`). The far larger unknown is
-the **uncalibrated → Himalaya** gap. So: do the *small principled study* (exit-mode
+the **uncalibrated → Enoshima** gap. So: do the *small principled study* (exit-mode
 diagnostic → vol-scaled barrier → robustness surface on train), not an open-ended
-grid search, and treat Himalaya as the real gate.
+grid search, and treat Enoshima as the real gate.

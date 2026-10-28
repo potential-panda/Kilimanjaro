@@ -157,7 +157,7 @@ correction. They compose.
 
 ## 4. How this maps onto the tiers
 
-The funnel (`user-research-philosophy`: expression scan -> grid scan -> Himalaya)
+The funnel (`user-research-philosophy`: expression scan -> grid scan -> Enoshima)
 already handles the asymmetry from §1 sensibly, and gets one concrete addition:
 
 - **Screening tier (expression scan).** Keep per-second sampling for speed — it
@@ -171,7 +171,7 @@ already handles the asymmetry from §1 sensibly, and gets one concrete addition:
 - **Candidate tier (anything that survives screening).** Build `EpisodeReturn`
   (§3.5) and re-measure. Non-overlapping returns + real bid/ask execution + a
   true holding-period distribution. This is where an acceptance actually earns
-  its confidence, and it feeds the grid scan / Himalaya decision.
+  its confidence, and it feeds the grid scan / Enoshima decision.
 
 This tier is now **automated** in the scanner loop (`driver/return_eval.py`,
 steps 9b/9c): the screening scan nominates its rank-stable combos, they are

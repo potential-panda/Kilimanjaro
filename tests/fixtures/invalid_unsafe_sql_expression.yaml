@@ -103,7 +103,7 @@ hypothesis:
   backtest_handoff_intent:
     potential_panda_core_strategy_pattern: qate.trading.strategy variant, imbalance-threshold
       entry
-    himalaya_config_notes: GMO/BTC_JPY, execution_size TBD from capacity scan
+    enoshima_config_notes: GMO/BTC_JPY, execution_size TBD from capacity scan
   decisions:
   - at: '2026-06-18T00:00:00Z'
     actor: agent

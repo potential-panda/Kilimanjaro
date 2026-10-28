@@ -4,7 +4,7 @@
 
 Give an AI agent a repeatable, auditable loop to turn a microstructure
 intuition into one of three end states — **rejected with a recorded reason**,
-**parked pending more data**, or **promoted to a Himalaya backtest candidate**
+**parked pending more data**, or **promoted to an Enoshima backtest candidate**
 — without ever trusting a single profitable backtest or a single PnL number
 as proof.
 
@@ -19,7 +19,7 @@ The product is the loop and its memory, not any strategy it finds.
 4. Signal scan            -> cheap statistical test of the feature alone
 5. Feasibility review     -> gate: scan strong enough? data sufficient?
 6. Ledger update           -> always, regardless of outcome
-7. Backtest handoff        -> spec -> Himalaya strategy variant
+7. Backtest handoff        -> spec -> Enoshima strategy variant
 8. Backtest & evaluation  -> train/test/forward, multi-regime
 9. Decision + iteration    -> promote / refine / retire, pick next experiment
 ```
@@ -53,13 +53,13 @@ that gets recorded in the ledger. No spec, no scan.
 The scanner (see `evaluation-framework.md`) computes the feature against a
 target return/label over the available bronze/silver data and reports IC,
 hit rate, decay, sample count, significance, and stability — without placing
-any orders or invoking Himalaya.
+any orders or invoking Enoshima.
 
 ### 5. Feasibility review
 Automated gate first (does the scan clear the documented thresholds; is
-the data sufficient), human review only at the **promotion-to-Himalaya**
+the data sufficient), human review only at the **promotion-to-Enoshima**
 boundary in v1. Agents can autonomously reject; only humans approve spending
-a Himalaya run.
+an Enoshima run.
 
 ### 6. Ledger update
 Every hypothesis that completes a spec gets a ledger row, regardless of
@@ -68,13 +68,13 @@ that makes the loop cumulative across sessions.
 
 ### 7. Backtest implementation handoff
 Only specs that passed the scan gate and got human sign-off become a
-Himalaya strategy variant / parameter grid. The agent drafts the
+Enoshima strategy variant / parameter grid. The agent drafts the
 implementation task (entry/exit rules, parameter ranges, cost model); a human
 or a separate engineering workflow (out of scope here) turns it into
 `potential-panda-core` strategy code.
 
 ### 8. Backtest & evaluation
-Himalaya runs train/test/forward splits across multiple periods/regimes.
+Enoshima runs train/test/forward splits across multiple periods/regimes.
 Results are evaluated against the full metric set in
 `evaluation-framework.md`, not PnL alone.
 
@@ -90,7 +90,7 @@ next suggested experiment, closing the loop.
 - Run the signal scanner and interpret output against documented thresholds.
 - Write ledger entries for every hypothesis, including rejections.
 - Search the ledger before proposing a hypothesis to avoid duplicate work.
-- Draft (not submit) the Himalaya backtest task for specs that pass the scan
+- Draft (not submit) the Enoshima backtest task for specs that pass the scan
   gate.
 - Summarize backtest diagnostics against the evaluation framework and
   propose promote/refine/retire.
@@ -99,7 +99,7 @@ next suggested experiment, closing the loop.
 
 | Gate | What the human checks | Why it isn't automated in v1 |
 |---|---|---|
-| Scan -> Backtest promotion | Spec quality, scan thresholds, whether a Himalaya run is worth the cost | Himalaya runs are the most expensive resource in the loop; a bad gate here burns compute and erodes trust fast |
+| Scan -> Backtest promotion | Spec quality, scan thresholds, whether an Enoshima run is worth the cost | Enoshima runs are the most expensive resource in the loop; a bad gate here burns compute and erodes trust fast |
 | Backtest -> Strategy library promotion | Full evaluation framework, regime robustness, capacity/liquidity realism | This is the point where false positives become live-trading risk |
 | Taxonomy/threshold changes | Any change to scan pass/fail thresholds or to the hypothesis taxonomy itself | Threshold tuning is a meta-decision about how skeptical the whole system is; should not drift silently |
 
@@ -122,5 +122,5 @@ issue could poison the ledger indefinitely before anyone notices.
   both remain human gates in v1.
 - No general-purpose ML feature search / auto-ML. Hypotheses come from the
   named taxonomy with an explicit mechanism, not from undirected search.
-- No replacement for Himalaya. The scanner is a pre-filter, not a backtest
+- No replacement for Enoshima. The scanner is a pre-filter, not a backtest
   engine.

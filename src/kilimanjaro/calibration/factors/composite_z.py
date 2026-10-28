@@ -2,7 +2,7 @@
 
 offline (Kilimanjaro): eval the full composite expression (from the promoted spec)
                        over the Makalu feature frame.
-online  (Himalaya):    InfluxDB measurement TRADING, field "composite_z" (the value
+online  (Enoshima):    InfluxDB measurement TRADING, field "composite_z" (the value
                        the aquila strategy fires on).
 This is the end-to-end signal: it matches only once every input factor does.
 """

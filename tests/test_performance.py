@@ -1,6 +1,6 @@
 """Path metrics: bps (equal-weight) and JPY per-fill. Guards the cost/curve work.
 
-The JPY per-fill curve (Himalaya-faithful) is what fixed the scan-vs-Himalaya
+The JPY per-fill curve (Enoshima-faithful) is what fixed the scan-vs-Enoshima
 ranking; these lock in its arithmetic and the bps↔jpy distinction.
 """
 
@@ -51,7 +51,7 @@ class TestJpyPerFill(unittest.TestCase):
         # bps nets to 0 (symmetric wins/losses), but every LOSS lands on a
         # bigger book -> notional weighting makes the JPY total negative. So the
         # JPY curve is NOT a scaled copy of the bps curve (the whole reason it
-        # tracks Himalaya where bps does not).
+        # tracks Enoshima where bps does not).
         net = np.array([10.0, -10.0, 10.0, -10.0, 10.0, -10.0], dtype=float)
         notional = np.array([1e5, 3e5, 1e5, 3e5, 1e5, 3e5])  # losses on big book
         mj = compute_path_metrics_jpy(net, _daily_ts(len(net)), notional)

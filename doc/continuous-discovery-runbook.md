@@ -131,7 +131,7 @@ database bypasses its exposure/accounting history and is not a fresh-data protoc
 
 `research calibrate` compares supplied Parquet exports using existing factor/trade
 comparators and stores an immutable, version-scoped certificate. A factor export
-has `ts,value`; trade exports use the existing scan and Himalaya column contracts.
+has `ts,value`; trade exports use the existing scan and Enoshima column contracts.
 Create the scope with `research.calibration.scope_for`, then pass its JSON through
 `--scope`, alongside `--offline`, `--online`, `--kind` and a declared `--tolerance`.
 Certificates include checksums, the exact feature/market/size/cost/implementation

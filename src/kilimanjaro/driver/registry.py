@@ -273,7 +273,7 @@ def build_entry(
                     "qate.trading.strategy variant, threshold entry, "
                     f"{spec.get('return_calc', 'fixed_horizon')} exit"
                 ),
-                "himalaya_config_notes": (
+                "enoshima_config_notes": (
                     "only if a rank-stable combo survives with meaningful "
                     "absolute holdout strength"
                 ),

@@ -134,7 +134,7 @@ regenerate it on demand from bronze `OrderBook` with
 - **[`doc/continuous-discovery-implementation-plan.md`](doc/continuous-discovery-implementation-plan.md)** — next-version implementation plan: data planning, durable jobs, connected research stages, fresh-data confirmation, adaptive search, and unattended operation; milestone acceptance gates for coding agents.
 - **[`CLAUDE.md`](CLAUDE.md)** — architecture, CLI, data paths, cost + verification policy (start here).
 - [`doc/scan-evaluation.md`](doc/scan-evaluation.md) — how every grid scan is judged: train/holdout split, rank-stability selection, verdict taxonomy.
-- [`doc/calibration.md`](doc/calibration.md) — calibrating the scan against Himalaya, per mechanism; the calibration registry (CALIBRATED / trend-only).
+- [`doc/calibration.md`](doc/calibration.md) — calibrating the scan against Enoshima, per mechanism; the calibration registry (CALIBRATED / trend-only).
 - [`doc/overlapping-returns.md`](doc/overlapping-returns.md) — why overlapping-horizon returns inflate significance, the defenses, and how an episode is defined.
 - Design/contract reference: `doc/direction/{workflow-strategy,evaluation-framework,hypothesis-taxonomy}.md` and `doc/requirements/*`.
 

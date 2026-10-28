@@ -31,7 +31,7 @@ of time-dependent or external-integration gates.
 - Missing derived data should trigger a dependency plan. Missing raw observations,
   unsupported data resolution, and collector outages must remain explicit limitations.
 - Automatically execute configured research and derivation jobs within budgets.
-  Keep existing human approval for Himalaya backtest spend and promotion. An already
+  Keep existing human approval for Enoshima backtest spend and promotion. An already
   approved, matching backtest job can run without asking again. This plan adds no
   live-order or automatic production-deployment path.
 - An unknown feature may produce an engineering task. The daemon must not edit

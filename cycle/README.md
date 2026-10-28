@@ -25,7 +25,7 @@ verdict last (full design: `doc/research-pipeline.md`).
 | `13_signal_corr/` | signal scan   | correlation | per-factor predictive power: each factor's IC (signal ↔ forward return) + the cross-factor correlation matrix. Ranks factors; does **not** hard-filter (14 owns inclusion) |
 | `14_blend_corr/`  | blend scan    | correlation | weighted combinations of factors, ranked by blend IC. A strong single factor enters here as a **blend of one** |
 | `15_return_eval/` | return eval   | return / trades | episode re-test (non-overlapping) on the **top blends only** — the expensive verdict. Grid-scan outputs (`grid_scan/{flip,expr,horizon}/…`) land here; large regenerable diagnostics are git-ignored |
-| `16_calibration/` | calibrate     | scan↔Himalaya | fidelity of the fast scan vs the Himalaya backtest, per *mechanism* (cheap gate if the mechanism is already certified) |
+| `16_calibration/` | calibrate     | scan↔Enoshima | fidelity of the fast scan vs the Enoshima backtest, per *mechanism* (cheap gate if the mechanism is already certified) |
 | `17_ledger/`      | remember      | —           | append-only research memory (`events.jsonl`) joining to hypotheses by id |
 | `18_handoffs/`    | promote       | —           | human-approved backtest handoff packages (`hyp-*.yaml`/`.md`, composite specs) |
 

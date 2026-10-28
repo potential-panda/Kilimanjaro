@@ -9,13 +9,13 @@ Kilimanjaro owns:
 - scan configs and scan reports;
 - research ledger entries;
 - manual backtest handoff packages;
-- links or ingested summaries from Himalaya results.
+- links or ingested summaries from Enoshima results.
 
 Kilimanjaro does not own:
 
 - Makalu raw or derived market data;
 - Makalu feature pipelines;
-- Himalaya simulation/run infrastructure;
+- Enoshima simulation/run infrastructure;
 - potential-panda-core runtime abstractions or strategy implementations.
 
 ## Canonical v1 Artifact Formats

@@ -1,5 +1,5 @@
 """cli.py calibrate — exact-match a promoted signal's factors between Kilimanjaro
-(offline: Makalu parquet feature frame) and Himalaya (online: InfluxDB measurement
+(offline: Makalu parquet feature frame) and Enoshima (online: InfluxDB measurement
 TRADING, emitted by the qate strategy's add_metric per second).
 
     python src/cli.py calibrate --list
@@ -57,7 +57,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         "--trades",
         action="store_true",
         help="calibrate the TRADE layer (orders + return) instead of factors: "
-        "run the scan and match its round-trips against Himalaya's ORDER stream",
+        "run the scan and match its round-trips against Enoshima's ORDER stream",
     )
     p.add_argument(
         "--px-tol",
@@ -134,7 +134,7 @@ def _run(args) -> int:
 
 
 def _run_trades(args) -> int:
-    """Trade-layer calibration: scan round-trips vs Himalaya ORDER stream."""
+    """Trade-layer calibration: scan round-trips vs Enoshima ORDER stream."""
     from pathlib import Path
 
     import yaml

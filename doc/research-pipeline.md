@@ -16,7 +16,7 @@ verdict last. Each stage answers one question and only passes survivors down.
 13 signal_corr  does the single signal predict?    CORRELATION (IC + cross-factor corr)   cheap, wide
 14 blend_corr   does a weighted combo predict?     CORRELATION (blend IC)                 medium
 15 return_eval  does trading the top blends pay?   RETURN / trades (non-overlapping)      expensive, narrow
-16 calibration  can we trust the fast scan?        scan ↔ Himalaya fidelity               cheap if mechanism certified
+16 calibration  can we trust the fast scan?        scan ↔ Enoshima fidelity               cheap if mechanism certified
 17 ledger       remember                           (append-only events.jsonl)
 18 handoffs     promote                            (human-approved packages)
 ```
@@ -38,7 +38,7 @@ unit of edge — and the expensive tiers must operate on blends, not on every fa
   **top blends only**.
 - **15 → 16**: calibrate the survivor. Fidelity lives in the **mechanism** (entry style +
   return calc + execution), not the formula (see `doc/calibration.md`), so this is a cheap
-  "is this survivor's mechanism already certified?" gate — a full scan↔Himalaya run only
+  "is this survivor's mechanism already certified?" gate — a full scan↔Enoshima run only
   when the mechanism is new.
 
 ## Screen by correlation, evaluate by return

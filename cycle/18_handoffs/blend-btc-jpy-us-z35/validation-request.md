@@ -1,4 +1,4 @@
-# Himalaya validation request — COINCHECK BTC_SPOT blend composite (US hours, z≥3.5)
+# Enoshima validation request — COINCHECK BTC_SPOT blend composite (US hours, z≥3.5)
 
 **Status: DRAFT / not yet human-approved.** This is a *validation request*, not an
 approved flip handoff. The mechanism is novel (IC-weighted composite expression +
@@ -27,7 +27,7 @@ the secondary/comparison venue only.
 | Entry rule | fire when **\|composite z\| ≥ 3.5**; direction = sign(composite) |
 | Exit rule | **triple-barrier (v1)**: first of +10 bps / −10 bps (on mid) / **300 s** cap. Secondary candidate: **trailing stop (v3)** — moving stop ratcheted on each same-side fire, cap 300 s. Both are anchored to the 300 s (X-sec) horizon. **Episode exit (v2) is retired** — it exits when \|z\| falls back under threshold (~2 s), measuring signal *persistence*, not the X-sec prediction this setup tests. |
 | Time filter | **JST hours 22, 23, 0, 1, 2 only** (US session); block all other hours. **No GMO Saturday-maintenance block applies — confirm COINCHECK's own maintenance windows** and block those. |
-| Execution | entry aggressive (ask BUY / bid SELL), exit passive; **+1.0 bp round-trip** latency slippage (0.5 bp/order) — matches Himalaya. **0 fee.** |
+| Execution | entry aggressive (ask BUY / bid SELL), exit passive; **+1.0 bp round-trip** latency slippage (0.5 bp/order) — matches Enoshima. **0 fee.** |
 | Windows | train 2025-07-01 … 2026-02-28, **holdout 2026-03-01 … 2026-06-30** (2/3 split) |
 
 Weights are **GMO-fit** (each factor's weight = its GMO-BTC_JPY train IC) — proved
@@ -48,10 +48,10 @@ COINCHECK_mid).
 Holdout, **COINCHECK/BTC_SPOT**, US hours, with the drawdown gate. **Indicative, not
 promotion-grade** — expression + triple_barrier/trailing_stop is uncalibrated
 (`doc/calibration.md`); only flip + between-signal (ETH) is calibrated today. What
-Himalaya is asked to confirm is the **sign, the magnitude order, and the monthly
+Enoshima is asked to confirm is the **sign, the magnitude order, and the monthly
 consistency** — not the third decimal.
 
-Numbers below are the **Himalaya-faithful sequential re-entry** figures (one position
+Numbers below are the **Enoshima-faithful sequential re-entry** figures (one position
 at a time, re-enter on the first fire after the previous exit) — this replaced an
 earlier fixed-time-cap decimation that under-counted trades and *over-stated*
 per-trade net (old v1 X=10 read +3.19; the honest re-entry value is +2.72).
@@ -73,7 +73,7 @@ robustness — at **z=4.5 (the most selective tier) v3 collapses** (+2.48 / +0.7
 v1 is strongest (+3.89 / +4.96), because the no-cap trailing needs frequent same-side
 fires to ratchet and a rare threshold supplies none. Read: this signal's edge is in the
 *immediate* predicted move (v1's tight ±barrier + timeout captures it cleanly and
-often), not in sustained trends. Himalaya should confirm v1 first; v3 is the
+often), not in sustained trends. Enoshima should confirm v1 first; v3 is the
 lower-priority variant.
 
 Trade frequency: z=3.5 ≈ 4/day; z=4.5 ≈ 2–3/day. For reference, the original **GMO
@@ -89,7 +89,7 @@ direct confirmation the tail edge is consistent, not one-window.
 
 ## Honest limitations (please read before acting on the number)
 
-1. **Uncalibrated** — the magnitude may move materially under Himalaya. Trust the
+1. **Uncalibrated** — the magnitude may move materially under Enoshima. Trust the
    sign and the ordering, calibrate the size.
 2. **Thin frequency** — ~2–10 trades/day in the US session only. Real but small
    absolute PnL; capacity-limited.
@@ -100,7 +100,7 @@ direct confirmation the tail edge is consistent, not one-window.
    triple-barrier width + a vol-scaled barrier, and LGBM (both meta-labeling and as
    a primary signal) were all tried; none *robustly* beat the settled config at the
    tradeable tail (LGBM's value is broad capacity, not the tail — parked as an
-   optional future frequency lever). Himalaya is the gate, not more scanning.
+   optional future frequency lever). Enoshima is the gate, not more scanning.
 
 ---
 
@@ -173,16 +173,16 @@ through `run_spec` with the drawdown gate); results in
 
 ---
 
-## What a clean Himalaya result looks like
+## What a clean Enoshima result looks like
 
 - **Sign holds**: net positive at z≥3.5 in the holdout window, both exits.
 - **Monthly consistency holds**: the majority of holdout months positive (scan: 12/12
   on COINCHECK).
-- **Magnitude is within order**: Himalaya net within ~±1 bp of the scan's per-trade
+- **Magnitude is within order**: Enoshima net within ~±1 bp of the scan's per-trade
   figure (episode +3.03 / TB +3.19 at z=3.5) would confirm the mechanism is
   trustworthy for this signal class — and would also validate expression+triple_barrier
   as a calibrated mechanism (`doc/calibration.md`) for future ideas.
 
-If the sign or monthly consistency does **not** survive Himalaya, the conclusion is
+If the sign or monthly consistency does **not** survive Enoshima, the conclusion is
 that this signal class cannot fund a taker at COINCHECK BTC_SPOT spreads — a
 legitimate, valuable negative result that closes the current direction.

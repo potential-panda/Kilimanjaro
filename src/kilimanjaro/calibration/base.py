@@ -3,7 +3,7 @@ sources over one window and exact-matches them:
 
   offline (Kilimanjaro): eval the factor's expression over the Makalu feature frame
                          (parquet) — exactly what the scan feeds the composite.
-  online  (Himalaya):    the factor value the qate strategy emitted each second via
+  online  (Enoshima):    the factor value the qate strategy emitted each second via
                          add_metric(), stored in InfluxDB (measurement TRADING).
 
 Each factor lives in its own module under calibration/factors/ holding a FactorCalib;
@@ -26,7 +26,7 @@ from kilimanjaro.data.root import data_root as _resolve_data_root
 _DEFAULT_DATA_ROOT = None
 _TRADING_MEASUREMENT = "TRADING"  # qate create_trading_metric -> Measurement.TRADING
 
-# Warmup the offline rolling windows to the SAME converged state Himalaya has at the
+# Warmup the offline rolling windows to the SAME converged state Enoshima has at the
 # window start. The composite's slowest ops are the 3600 s basis + 1800 s z-scores;
 # without prior history the scan's first ~hour is under-converged and diverges from
 # aquila (which warms its engine from the data loaded before the run's from-dt). 2 days
@@ -87,7 +87,7 @@ class FactorCalib:
         s = pd.Series(vals, index=np.floor(ts).astype(np.int64))
         return s.groupby(level=0).last()
 
-    # ---- online: Himalaya / InfluxDB ------------------------------------------
+    # ---- online: Enoshima / InfluxDB ------------------------------------------
     def online_series(self, bucket: str, start: str, end: str) -> pd.Series:
         """Per-second factor series from InfluxDB (measurement TRADING, field=self.field)."""
         from kilimanjaro.framework.verify import (

@@ -153,7 +153,7 @@ def replay_readiness(store, run_id, scope, ledger_path, hypothesis_id):
         "scope_id": scope_id,
         "scope": scope,
         "approval_event": approvals[-1]["event_id"] if approvals else None,
-        "implementation_task": "Register a Himalaya adapter for the frozen EpisodeReturn recipe, bucket-end availability and exact venue/size/cost scope; export factors and trade fills for comparison.",
+        "implementation_task": "Register an Enoshima adapter for the frozen EpisodeReturn recipe, bucket-end availability and exact venue/size/cost scope; export factors and trade fills for comparison.",
     }
     with store.transaction() as db:
         store._event(db, run_id, "replay_readiness", task)

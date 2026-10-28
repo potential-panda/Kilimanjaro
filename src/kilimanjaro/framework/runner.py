@@ -194,7 +194,7 @@ def run_grid(
                 ts_arr = valid["ts"].to_numpy()
                 path = compute_path_metrics(net, ts_arr)
                 row = {**base, "n_trades": len(trades), **stats, **path, "status": "ok"}
-                # JPY per-fill curve (Himalaya-faithful) when we know the fill
+                # JPY per-fill curve (Enoshima-faithful) when we know the fill
                 # price and execution size — notional = size × entry_price.
                 if "entry_price" in valid.columns:
                     try:

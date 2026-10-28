@@ -1,5 +1,5 @@
 """Exact-match comparison of one factor's per-second series: Kilimanjaro (offline,
-Makalu parquet) vs Himalaya (online, InfluxDB). The calibration goal is pct_match ≈ 100%.
+Makalu parquet) vs Enoshima (online, InfluxDB). The calibration goal is pct_match ≈ 100%.
 
 A "match" is agreement within `tol` on the overlapping seconds. tol is a small absolute
 value on the factor (default 1e-4) — the two engines compute the same formula but in

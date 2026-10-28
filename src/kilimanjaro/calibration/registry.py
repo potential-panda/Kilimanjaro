@@ -7,7 +7,7 @@ calibration/factors/<name>.py (offline expr, online field, status, note).
 
 Sources:
   offline (Kilimanjaro): Makalu parquet feature frame, markets = MARKETS below.
-  online  (Himalaya):    InfluxDB measurement TRADING (emitted by aquila add_metric),
+  online  (Enoshima):    InfluxDB measurement TRADING (emitted by aquila add_metric),
                          bucket = the backtest bucket (DEFAULT_BUCKET or --bucket).
 
 Calibration loop for a coding agent: for each factor, run its match; while pct_match is

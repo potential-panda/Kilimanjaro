@@ -115,7 +115,7 @@ jst_hour_bucket, min_viable_horizon_seconds, vol_at_min_h_bps, spread_bps, cost_
 
 The scanner sweeps a parameter grid for a given hypothesis family and outputs
 a metric heatmap, not just a single pass/fail. This is the signal-level
-analogue of Himalaya's param grid, but cheap (SQL, no simulation).
+analogue of Enoshima's param grid, but cheap (SQL, no simulation).
 
 ```
 hypothesis spec (style + param_grid)
@@ -131,13 +131,13 @@ heatmap: (param_a × param_b × horizon?) → metrics
     ↓
 gate: any region of the heatmap clears thresholds?
     no  → ledger: scan-failed with heatmap artifact
-    yes → surviving combos → human review → Himalaya with narrow grid
+    yes → surviving combos → human review → Enoshima with narrow grid
 ```
 
 ### Anti-overfitting guard — the neighborhood rule
 A combo that clears thresholds but is surrounded by failing neighbors is noise.
 A combo at the center of a region where multiple neighbors also pass is signal
-worth escalating. The heatmap makes this visible before touching Himalaya.
+worth escalating. The heatmap makes this visible before touching Enoshima.
 The scanner should flag isolated winners explicitly in its output.
 
 ---

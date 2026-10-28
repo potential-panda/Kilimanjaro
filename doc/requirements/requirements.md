@@ -6,7 +6,7 @@ Kilimanjaro v1 is an orchestration workspace for AI-assisted strategy discovery.
 
 - rejected with a recorded reason;
 - parked because required data/tooling is missing;
-- promoted to a human-approved Himalaya backtest task.
+- promoted to a human-approved Enoshima backtest task.
 
 The product is the repeatable loop and its memory, not autonomous live strategy deployment or automatic code generation.
 
@@ -27,17 +27,17 @@ v1 must implement the smallest useful strategy discovery loop:
 3. persistent research ledger with duplicate/rejection memory;
 4. signal-scan requirements and report format;
 5. evaluation decision protocol;
-6. manual backtest handoff package for Himalaya/potential-panda-core implementation.
+6. manual backtest handoff package for Enoshima/potential-panda-core implementation.
 
 ## Non-Goals
 
 Kilimanjaro v1 must not:
 
 - build a parallel/competing data system, exchange connector, or query engine outside Makalu;
-- duplicate Himalaya backtest simulation;
+- duplicate Enoshima backtest simulation;
 - duplicate potential-panda-core strategy/runtime abstractions;
 - generate strategy implementation code automatically;
-- submit or schedule Himalaya runs without human approval;
+- submit or schedule Enoshima runs without human approval;
 - promote to paper or live trading;
 - treat one profitable backtest or one PnL value as proof;
 - accept mechanism-free feature mining or AutoML search;
@@ -99,7 +99,7 @@ Acceptance criteria:
 
 ### 4. Signal Scan
 
-The scanner evaluates a feature expression against a target without order simulation or Himalaya.
+The scanner evaluates a feature expression against a target without order simulation or Enoshima.
 
 Acceptance criteria:
 
@@ -111,7 +111,7 @@ Acceptance criteria:
 
 ### 5. Feasibility Review
 
-Automated checks apply the scan thresholds; human review gates promotion from scan to Himalaya.
+Automated checks apply the scan thresholds; human review gates promotion from scan to Enoshima.
 
 Acceptance criteria:
 
@@ -135,7 +135,7 @@ Acceptance criteria:
 
 ### 7. Backtest Review And Handoff
 
-A `scan-passed` hypothesis produces a human review packet. Only after a human approval event transitions it to `backtest-approved` may Kilimanjaro generate the manual implementation handoff package for Himalaya/potential-panda-core.
+A `scan-passed` hypothesis produces a human review packet. Only after a human approval event transitions it to `backtest-approved` may Kilimanjaro generate the manual implementation handoff package for Enoshima/potential-panda-core.
 
 Acceptance criteria:
 
@@ -149,7 +149,7 @@ Acceptance criteria:
 
 ### 8. Backtest Evaluation
 
-Himalaya results are ingested or linked and evaluated against the approved protocol.
+Enoshima results are ingested or linked and evaluated against the approved protocol.
 
 Acceptance criteria:
 
@@ -204,7 +204,7 @@ Acceptance criteria:
 
 ### Human Reviewer
 
-As a human reviewer, I want scan-passed ideas to arrive with full diagnostics and assumptions, so that I can decide whether a Himalaya run is worth the cost.
+As a human reviewer, I want scan-passed ideas to arrive with full diagnostics and assumptions, so that I can decide whether an Enoshima run is worth the cost.
 
 Acceptance criteria:
 
@@ -214,7 +214,7 @@ Acceptance criteria:
 
 ### Engineering Implementer
 
-As an implementer, I want a handoff package that maps a human-approved `backtest-approved` hypothesis to potential-panda-core and Himalaya, so that implementation does not require guessing the research intent.
+As an implementer, I want a handoff package that maps a human-approved `backtest-approved` hypothesis to potential-panda-core and Enoshima, so that implementation does not require guessing the research intent.
 
 Acceptance criteria:
 
@@ -357,7 +357,7 @@ v1 threshold defaults:
 - `scan-failed`: scan completed but failed thresholds.
 - `scan-passed`: scan passed automated thresholds, has no blocking metadata gaps, and awaits human review.
 - `backtest-approved`: human approved manual implementation/handoff.
-- `backtest-running`: Himalaya evaluation is in progress or linked externally.
+- `backtest-running`: Enoshima evaluation is in progress or linked externally.
 - `backtest-passed`: backtest protocol passed and awaits promotion review.
 - `awaiting-promotion-decision`: backtest passed but library promotion is not decided.
 - `promoted`: human approved promotion.

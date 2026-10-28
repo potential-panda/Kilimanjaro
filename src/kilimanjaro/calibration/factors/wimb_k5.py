@@ -1,7 +1,7 @@
 """Calibration factor: wimb_k5.
 
 offline (Kilimanjaro): eval `zscore(a_bs_weighted_imb_k5, 1800)` over the Makalu feature frame.
-online  (Himalaya):    InfluxDB measurement TRADING, field "wimb_k5".
+online  (Enoshima):    InfluxDB measurement TRADING, field "wimb_k5".
 note: BookState weighted imbalance k5 (top weight)
 """
 
