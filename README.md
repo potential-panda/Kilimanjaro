@@ -131,6 +131,7 @@ regenerate it on demand from bronze `OrderBook` with
 
 ## Docs
 
+- **[`doc/expression-language.md`](doc/expression-language.md)** — supported formula syntax, causal operator reference, and examples.
 - **[`doc/continuous-discovery-implementation-plan.md`](doc/continuous-discovery-implementation-plan.md)** — next-version implementation plan: data planning, durable jobs, connected research stages, fresh-data confirmation, adaptive search, and unattended operation; milestone acceptance gates for coding agents.
 - **[`CLAUDE.md`](CLAUDE.md)** — architecture, CLI, data paths, cost + verification policy (start here).
 - [`doc/scan-evaluation.md`](doc/scan-evaluation.md) — how every grid scan is judged: train/holdout split, rank-stability selection, verdict taxonomy.

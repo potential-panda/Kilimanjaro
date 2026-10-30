@@ -116,6 +116,30 @@ def decay_linear(x: pd.Series, window: int) -> pd.Series:
     )
 
 
+def bar_open(x: pd.Series, window: int) -> pd.Series:
+    """Open of the trailing ``window``-step rolling bar."""
+    window = int(window)
+    return x.shift(window - 1).where(x.rolling(window).count() >= window)
+
+
+def bar_high(x: pd.Series, window: int) -> pd.Series:
+    """High of the trailing ``window``-step rolling bar."""
+    window = int(window)
+    return x.rolling(window, min_periods=window).max()
+
+
+def bar_low(x: pd.Series, window: int) -> pd.Series:
+    """Low of the trailing ``window``-step rolling bar."""
+    window = int(window)
+    return x.rolling(window, min_periods=window).min()
+
+
+def bar_close(x: pd.Series, window: int) -> pd.Series:
+    """Close of the trailing ``window``-step rolling bar."""
+    window = int(window)
+    return x.where(x.rolling(window).count() >= window)
+
+
 def zscore(x: pd.Series, window: int) -> pd.Series:
     """(x - rolling mean) / rolling std over a trailing window."""
     m = roll_mean(x, window)
@@ -257,6 +281,112 @@ def bollinger_position(
     return (x - roll_mean(x, window)) / width.replace(0.0, np.nan)
 
 
+def true_range(high: pd.Series, low: pd.Series, close: pd.Series) -> pd.Series:
+    """Wilder true range from aligned high, low, and close observations."""
+    previous_close = lag(close, 1)
+    ranges = pd.concat(
+        [high - low, abs_(high - previous_close), abs_(low - previous_close)],
+        axis=1,
+    )
+    return ranges.max(axis=1, skipna=True).where(high.notna() & low.notna())
+
+
+def atr(
+    high: pd.Series, low: pd.Series, close: pd.Series, window: int
+) -> pd.Series:
+    """Average True Range using Wilder's recursive smoothing."""
+    window = int(window)
+    return true_range(high, low, close).ewm(
+        alpha=1.0 / window,
+        adjust=False,
+        min_periods=window,
+    ).mean()
+
+
+def _psar_segment(
+    high: np.ndarray,
+    low: np.ndarray,
+    step: float,
+    max_step: float,
+) -> np.ndarray:
+    """Parabolic SAR for one finite, valid contiguous segment."""
+    n = len(high)
+    out = np.full(n, np.nan, dtype=float)
+    if n == 0:
+        return out
+    if n == 1:
+        out[0] = low[0]
+        return out
+
+    bullish = bool(high[1] >= high[0])
+    sar = low[0] if bullish else high[0]
+    extreme = high[0] if bullish else low[0]
+    acceleration = step
+    out[0] = sar
+
+    for i in range(1, n):
+        candidate = sar + acceleration * (extreme - sar)
+        if bullish:
+            candidate = min(candidate, low[i - 1])
+            if i > 1:
+                candidate = min(candidate, low[i - 2])
+            if low[i] < candidate:
+                bullish = False
+                sar = extreme
+                extreme = low[i]
+                acceleration = step
+            else:
+                sar = candidate
+                if high[i] > extreme:
+                    extreme = high[i]
+                    acceleration = min(acceleration + step, max_step)
+        else:
+            candidate = max(candidate, high[i - 1])
+            if i > 1:
+                candidate = max(candidate, high[i - 2])
+            if high[i] > candidate:
+                bullish = True
+                sar = extreme
+                extreme = high[i]
+                acceleration = step
+            else:
+                sar = candidate
+                if low[i] < extreme:
+                    extreme = low[i]
+                    acceleration = min(acceleration + step, max_step)
+        out[i] = sar
+    return out
+
+
+def psar(
+    high: pd.Series,
+    low: pd.Series,
+    step: float = 0.02,
+    max_step: float = 0.2,
+) -> pd.Series:
+    """Causal Parabolic SAR, resetting state across missing or invalid bars."""
+    step = float(step)
+    max_step = float(max_step)
+    if step <= 0 or max_step < step:
+        raise ValueError("psar: require 0 < step <= max_step")
+
+    h = high.to_numpy(dtype=float)
+    lo = low.to_numpy(dtype=float)
+    valid = np.isfinite(h) & np.isfinite(lo) & (h >= lo)
+    out = np.full(len(high), np.nan, dtype=float)
+    start = 0
+    while start < len(out):
+        while start < len(out) and not valid[start]:
+            start += 1
+        end = start
+        while end < len(out) and valid[end]:
+            end += 1
+        if start < end:
+            out[start:end] = _psar_segment(h[start:end], lo[start:end], step, max_step)
+        start = end + 1
+    return pd.Series(out, index=high.index)
+
+
 # Whitelist namespace for expression evaluation. Keys are the callable names
 # usable inside a formula; "abs" maps to abs_ so formulas read naturally.
 OPS: dict[str, object] = {
@@ -275,6 +405,10 @@ OPS: dict[str, object] = {
     "percentile_rank": percentile_rank,
     "roll_slope": roll_slope,
     "decay_linear": decay_linear,
+    "bar_open": bar_open,
+    "bar_high": bar_high,
+    "bar_low": bar_low,
+    "bar_close": bar_close,
     "zscore": zscore,
     "lag": lag,
     "diff": diff,
@@ -296,4 +430,7 @@ OPS: dict[str, object] = {
     "macd": macd,
     "macd_hist": macd_hist,
     "bollinger_position": bollinger_position,
+    "true_range": true_range,
+    "atr": atr,
+    "psar": psar,
 }

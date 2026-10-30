@@ -22,6 +22,7 @@ from kilimanjaro.signal.expression import (
 _B_SERIES = pd.Series(
     np.exp(np.random.default_rng(4).normal(0, 0.01, 400).cumsum()) + 1.0
 )
+_LOW_SERIES = _B_SERIES * 0.8
 
 # One sample invocation per registered op (op name → args after the series).
 # A pd.Series arg is truncated alongside the primary series in the causality test.
@@ -41,6 +42,10 @@ _OP_SAMPLE_ARGS = {
     "percentile_rank": (20,),
     "roll_slope": (20,),
     "decay_linear": (20,),
+    "bar_open": (20,),
+    "bar_high": (20,),
+    "bar_low": (20,),
+    "bar_close": (20,),
     "zscore": (50,),
     "lag": (5,),
     "diff": (3,),
@@ -62,6 +67,9 @@ _OP_SAMPLE_ARGS = {
     "macd": (12, 26),
     "macd_hist": (12, 26, 9),
     "bollinger_position": (20, 2.0),
+    "true_range": (_LOW_SERIES, _B_SERIES),
+    "atr": (_LOW_SERIES, _B_SERIES, 14),
+    "psar": (_LOW_SERIES, 0.02, 0.2),
 }
 
 
@@ -232,6 +240,53 @@ class TestOpCausality(unittest.TestCase):
         )
         rising = pd.DataFrame({"x": np.arange(40, dtype=float)})
         self.assertAlmostEqual(eval_expr("rsi(x, 14)", rising).iloc[-1], 100.0)
+
+    def test_rolling_ohlc_operators(self):
+        frame = pd.DataFrame({"price": [1.0, 3.0, 2.0, 5.0, 4.0]})
+        expected = {
+            "bar_open": [np.nan, np.nan, 1.0, 3.0, 2.0],
+            "bar_high": [np.nan, np.nan, 3.0, 5.0, 5.0],
+            "bar_low": [np.nan, np.nan, 1.0, 2.0, 2.0],
+            "bar_close": [np.nan, np.nan, 2.0, 5.0, 4.0],
+        }
+        for op, values in expected.items():
+            with self.subTest(op=op):
+                pd.testing.assert_series_equal(
+                    eval_expr(f"{op}(price, 3)", frame),
+                    pd.Series(values),
+                    check_names=False,
+                )
+
+    def test_true_range_atr_and_psar(self):
+        frame = pd.DataFrame({
+            "high": [10.0, 12.0, 13.0, 14.0, 15.0],
+            "low": [8.0, 9.0, 10.0, 11.0, 12.0],
+            "close": [9.0, 11.0, 12.0, 13.0, 14.0],
+        })
+        tr = eval_expr("true_range(high, low, close)", frame)
+        pd.testing.assert_series_equal(
+            tr, pd.Series([2.0, 3.0, 3.0, 3.0, 3.0]), check_names=False
+        )
+        expected_atr = tr.ewm(alpha=1 / 3, adjust=False, min_periods=3).mean()
+        pd.testing.assert_series_equal(
+            eval_expr("atr(high, low, close, 3)", frame),
+            expected_atr,
+            check_names=False,
+        )
+        sar = eval_expr("psar(high, low, 0.02, 0.2)", frame)
+        self.assertEqual(len(sar), len(frame))
+        self.assertTrue(np.all(sar.to_numpy() <= frame["low"].to_numpy()))
+
+    def test_psar_resets_after_missing_bar_and_validates_parameters(self):
+        frame = pd.DataFrame({
+            "high": [3.0, 4.0, np.nan, 8.0, 9.0],
+            "low": [1.0, 2.0, np.nan, 6.0, 7.0],
+        })
+        sar = eval_expr("psar(high, low, 0.02, 0.2)", frame)
+        self.assertTrue(np.isnan(sar.iloc[2]))
+        self.assertEqual(sar.iloc[3], 6.0)
+        with self.assertRaises(ValueError):
+            eval_expr("psar(high, low, 0.3, 0.2)", frame)
 
 
 class TestValidateExpr(unittest.TestCase):
