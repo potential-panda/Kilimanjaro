@@ -58,6 +58,10 @@ _OP_SAMPLE_ARGS = {
     "or_": (_B_SERIES,),
     "not_": (),
     "imbalance": (_B_SERIES,),
+    "rsi": (14,),
+    "macd": (12, 26),
+    "macd_hist": (12, 26, 9),
+    "bollinger_position": (20, 2.0),
 }
 
 
@@ -201,6 +205,33 @@ class TestOpCausality(unittest.TestCase):
         np.testing.assert_allclose(slope.iloc[1:], 2.0)
         decay = eval_expr("decay_linear(x, 3)", frame)
         self.assertAlmostEqual(decay.iloc[-1], (5 + 2 * 7 + 3 * 9) / 6)
+
+    def test_named_technical_indicators(self):
+        x = pd.Series(np.linspace(100.0, 120.0, 60) + np.sin(np.arange(60)))
+        frame = pd.DataFrame({"x": x})
+        expected_macd = eval_expr("ema_span(x, 12) - ema_span(x, 26)", frame)
+        pd.testing.assert_series_equal(
+            eval_expr("macd(x, 12, 26)", frame),
+            expected_macd,
+            check_names=False,
+        )
+        expected_hist = expected_macd - expected_macd.ewm(
+            span=9, min_periods=1
+        ).mean()
+        pd.testing.assert_series_equal(
+            eval_expr("macd_hist(x, 12, 26, 9)", frame),
+            expected_hist,
+            check_names=False,
+        )
+        position = eval_expr("bollinger_position(x, 20, 2)", frame)
+        expected_position = (
+            x - x.rolling(20, min_periods=10).mean()
+        ) / (2 * x.rolling(20, min_periods=10).std())
+        pd.testing.assert_series_equal(
+            position, expected_position, check_names=False
+        )
+        rising = pd.DataFrame({"x": np.arange(40, dtype=float)})
+        self.assertAlmostEqual(eval_expr("rsi(x, 14)", rising).iloc[-1], 100.0)
 
 
 class TestValidateExpr(unittest.TestCase):

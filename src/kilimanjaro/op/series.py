@@ -224,6 +224,39 @@ def imbalance(a: pd.Series, b: pd.Series) -> pd.Series:
     return (a - b) / (a + b + _EPS)
 
 
+def rsi(x: pd.Series, window: int) -> pd.Series:
+    """Relative Strength Index using Wilder smoothing over ``window`` steps."""
+    window = int(window)
+    change = diff(x, 1)
+    gain = max_(change, 0.0)
+    loss = max_(-change, 0.0)
+    avg_gain = gain.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean()
+    avg_loss = loss.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean()
+    relative_strength = avg_gain / avg_loss
+    return 100.0 - 100.0 / (1.0 + relative_strength)
+
+
+def macd(x: pd.Series, fast: float, slow: float) -> pd.Series:
+    """Moving Average Convergence Divergence line using EMA spans."""
+    return ema_span(x, fast) - ema_span(x, slow)
+
+
+def macd_hist(
+    x: pd.Series, fast: float, slow: float, signal: float
+) -> pd.Series:
+    """MACD line minus its span-based EMA signal line."""
+    line = macd(x, fast, slow)
+    return line - ema_span(line, signal)
+
+
+def bollinger_position(
+    x: pd.Series, window: int, deviations: float
+) -> pd.Series:
+    """Position relative to Bollinger bands: +1 upper, -1 lower, 0 mean."""
+    width = deviations * roll_std(x, window)
+    return (x - roll_mean(x, window)) / width.replace(0.0, np.nan)
+
+
 # Whitelist namespace for expression evaluation. Keys are the callable names
 # usable inside a formula; "abs" maps to abs_ so formulas read naturally.
 OPS: dict[str, object] = {
@@ -259,4 +292,8 @@ OPS: dict[str, object] = {
     "or_": or_,
     "not_": not_,
     "imbalance": imbalance,
+    "rsi": rsi,
+    "macd": macd,
+    "macd_hist": macd_hist,
+    "bollinger_position": bollinger_position,
 }
