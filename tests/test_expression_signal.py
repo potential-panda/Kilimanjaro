@@ -38,6 +38,9 @@ _OP_SAMPLE_ARGS = {
     "zscore": (50,),
     "lag": (5,),
     "diff": (3,),
+    "cross": (_B_SERIES,),
+    "cross_up": (_B_SERIES,),
+    "cross_down": (_B_SERIES,),
     "ret": (10,),
     "sign": (),
     "abs": (),
@@ -136,6 +139,27 @@ class TestOpCausality(unittest.TestCase):
         pd.testing.assert_series_equal(
             eval_expr("ema(x, 3)", frame),
             eval_expr("ema_halflife(x, 3)", frame),
+            check_names=False,
+        )
+
+    def test_crossing_operators_emit_one_step_pulses(self):
+        frame = pd.DataFrame({
+            "fast": [0.0, -1.0, 1.0, 2.0, 0.0, -1.0, np.nan, 1.0],
+            "slow": [0.0] * 8,
+        })
+        pd.testing.assert_series_equal(
+            eval_expr("cross(fast, slow)", frame),
+            pd.Series([0.0, -1.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0]),
+            check_names=False,
+        )
+        pd.testing.assert_series_equal(
+            eval_expr("cross_up(fast, slow)", frame),
+            pd.Series([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            check_names=False,
+        )
+        pd.testing.assert_series_equal(
+            eval_expr("cross_down(fast, slow)", frame),
+            pd.Series([0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
             check_names=False,
         )
 

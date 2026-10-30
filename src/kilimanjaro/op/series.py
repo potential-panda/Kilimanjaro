@@ -78,6 +78,27 @@ def diff(x: pd.Series, n: int = 1) -> pd.Series:
     return x - lag(x, n)
 
 
+def cross_up(x: pd.Series, y) -> pd.Series:
+    """One on an upward crossing of ``x`` through ``y``, otherwise zero."""
+    delta = x - y
+    previous = lag(delta, 1)
+    event = delta.notna() & previous.notna() & (delta > 0) & (previous <= 0)
+    return event.astype(float)
+
+
+def cross_down(x: pd.Series, y) -> pd.Series:
+    """One on a downward crossing of ``x`` through ``y``, otherwise zero."""
+    delta = x - y
+    previous = lag(delta, 1)
+    event = delta.notna() & previous.notna() & (delta < 0) & (previous >= 0)
+    return event.astype(float)
+
+
+def cross(x: pd.Series, y) -> pd.Series:
+    """Signed crossing pulse: +1 upward, -1 downward, and zero otherwise."""
+    return cross_up(x, y) - cross_down(x, y)
+
+
 def ret(x: pd.Series, n: int) -> pd.Series:
     """Log return of x over the trailing n steps."""
     return np.log(x) - np.log(lag(x, n))
@@ -161,6 +182,9 @@ OPS: dict[str, object] = {
     "zscore": zscore,
     "lag": lag,
     "diff": diff,
+    "cross": cross,
+    "cross_up": cross_up,
+    "cross_down": cross_down,
     "ret": ret,
     "sign": sign,
     "abs": abs_,
