@@ -39,6 +39,10 @@ _OP_SAMPLE_ARGS = {
     "sign": (),
     "abs": (),
     "clip": (-1.0, 1.0),
+    "where": (_B_SERIES, 0.0),
+    "and_": (_B_SERIES,),
+    "or_": (_B_SERIES,),
+    "not_": (),
     "imbalance": (_B_SERIES,),
 }
 
@@ -74,6 +78,24 @@ class TestOpCausality(unittest.TestCase):
     def test_zscore_zero_std_is_nan_not_inf(self):
         z = zscore(pd.Series(np.ones(100)), 20)
         self.assertTrue(np.isnan(z.iloc[-1]))
+
+    def test_elementwise_conditionals(self):
+        frame = pd.DataFrame({
+            "a": [1.0, -1.0, np.nan, 2.0],
+            "b": [2.0, 2.0, 2.0, -2.0],
+        })
+        selected = eval_expr("where(a > 0, a, b)", frame)
+        pd.testing.assert_series_equal(
+            selected, pd.Series([1.0, 2.0, 2.0, 2.0]), check_names=False
+        )
+        combined = eval_expr("and_(a > 0, b > 0)", frame)
+        pd.testing.assert_series_equal(
+            combined, pd.Series([True, False, False, False]), check_names=False
+        )
+        inverted = eval_expr("not_(or_(a > 0, b < 0))", frame)
+        pd.testing.assert_series_equal(
+            inverted, pd.Series([False, True, True, False]), check_names=False
+        )
 
 
 class TestValidateExpr(unittest.TestCase):

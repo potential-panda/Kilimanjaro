@@ -80,6 +80,35 @@ def clip(x: pd.Series, lo: float, hi: float) -> pd.Series:
     return x.clip(lo, hi)
 
 
+def _truth(x: pd.Series) -> pd.Series:
+    """Element-wise truth value with missing observations treated as false."""
+    return x.fillna(False).astype(bool)
+
+
+def where(condition: pd.Series, when_true, when_false) -> pd.Series:
+    """Element-wise conditional selection; unlike Python ``if``, works on series."""
+    condition = _truth(condition)
+    return pd.Series(
+        np.where(condition, when_true, when_false),
+        index=condition.index,
+    )
+
+
+def and_(a: pd.Series, b: pd.Series) -> pd.Series:
+    """Element-wise logical AND. Missing observations are false."""
+    return _truth(a) & _truth(b)
+
+
+def or_(a: pd.Series, b: pd.Series) -> pd.Series:
+    """Element-wise logical OR. Missing observations are false."""
+    return _truth(a) | _truth(b)
+
+
+def not_(x: pd.Series) -> pd.Series:
+    """Element-wise logical NOT. Missing observations are false before negation."""
+    return ~_truth(x)
+
+
 _EPS = 1e-9
 
 
@@ -108,5 +137,9 @@ OPS: dict[str, object] = {
     "sign": sign,
     "abs": abs_,
     "clip": clip,
+    "where": where,
+    "and_": and_,
+    "or_": or_,
+    "not_": not_,
     "imbalance": imbalance,
 }
