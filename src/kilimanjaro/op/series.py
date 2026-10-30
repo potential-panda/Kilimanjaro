@@ -80,6 +80,16 @@ def clip(x: pd.Series, lo: float, hi: float) -> pd.Series:
     return x.clip(lo, hi)
 
 
+def min_(a: pd.Series, b) -> pd.Series:
+    """Element-wise minimum of a series and another series or scalar."""
+    return np.minimum(a, b)
+
+
+def max_(a: pd.Series, b) -> pd.Series:
+    """Element-wise maximum of a series and another series or scalar."""
+    return np.maximum(a, b)
+
+
 def _truth(x: pd.Series) -> pd.Series:
     """Element-wise truth value with missing observations treated as false."""
     return x.fillna(False).astype(bool)
@@ -137,6 +147,8 @@ OPS: dict[str, object] = {
     "sign": sign,
     "abs": abs_,
     "clip": clip,
+    "min_": min_,
+    "max_": max_,
     "where": where,
     "and_": and_,
     "or_": or_,

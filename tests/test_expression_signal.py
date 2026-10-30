@@ -39,6 +39,8 @@ _OP_SAMPLE_ARGS = {
     "sign": (),
     "abs": (),
     "clip": (-1.0, 1.0),
+    "min_": (_B_SERIES,),
+    "max_": (_B_SERIES,),
     "where": (_B_SERIES, 0.0),
     "and_": (_B_SERIES,),
     "or_": (_B_SERIES,),
@@ -95,6 +97,19 @@ class TestOpCausality(unittest.TestCase):
         inverted = eval_expr("not_(or_(a > 0, b < 0))", frame)
         pd.testing.assert_series_equal(
             inverted, pd.Series([False, True, True, False]), check_names=False
+        )
+
+    def test_pointwise_minimum_and_maximum(self):
+        frame = pd.DataFrame({"a": [-2.0, 1.0, np.nan], "b": [-1.0, 3.0, 2.0]})
+        pd.testing.assert_series_equal(
+            eval_expr("max_(a, 0)", frame),
+            pd.Series([0.0, 1.0, np.nan]),
+            check_names=False,
+        )
+        pd.testing.assert_series_equal(
+            eval_expr("min_(a, b)", frame),
+            pd.Series([-2.0, 1.0, np.nan]),
+            check_names=False,
         )
 
 
