@@ -30,6 +30,7 @@ _OP_SAMPLE_ARGS = {
     "ema_halflife": (30,),
     "ema_span": (30,),
     "ema_alpha": (0.2,),
+    "ewm_std": (30,),
     "roll_mean": (20,),
     "roll_std": (20,),
     "roll_sum": (20,),
@@ -38,6 +39,8 @@ _OP_SAMPLE_ARGS = {
     "roll_quantile": (20, 0.75),
     "roll_rank": (20,),
     "percentile_rank": (20,),
+    "roll_slope": (20,),
+    "decay_linear": (20,),
     "zscore": (50,),
     "lag": (5,),
     "diff": (3,),
@@ -184,6 +187,20 @@ class TestOpCausality(unittest.TestCase):
             expected_rank,
             check_names=False,
         )
+
+    def test_volatility_slope_and_linear_decay(self):
+        x = pd.Series([1.0, 3.0, 5.0, 7.0, 9.0])
+        frame = pd.DataFrame({"x": x})
+        pd.testing.assert_series_equal(
+            eval_expr("ewm_std(x, 3)", frame),
+            x.ewm(halflife=3, min_periods=2).std(),
+            check_names=False,
+        )
+        slope = eval_expr("roll_slope(x, 4)", frame)
+        self.assertTrue(np.isnan(slope.iloc[0]))
+        np.testing.assert_allclose(slope.iloc[1:], 2.0)
+        decay = eval_expr("decay_linear(x, 3)", frame)
+        self.assertAlmostEqual(decay.iloc[-1], (5 + 2 * 7 + 3 * 9) / 6)
 
 
 class TestValidateExpr(unittest.TestCase):

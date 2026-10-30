@@ -34,6 +34,11 @@ def ema_alpha(x: pd.Series, alpha: float) -> pd.Series:
     return x.ewm(alpha=alpha, min_periods=1).mean()
 
 
+def ewm_std(x: pd.Series, halflife: float) -> pd.Series:
+    """Exponentially weighted sample standard deviation by halflife."""
+    return x.ewm(halflife=halflife, min_periods=2).std()
+
+
 def ema(x: pd.Series, halflife: float) -> pd.Series:
     """Backward-compatible alias for :func:`ema_halflife`."""
     return ema_halflife(x, halflife)
@@ -74,6 +79,41 @@ def roll_rank(x: pd.Series, window: int) -> pd.Series:
 def percentile_rank(x: pd.Series, window: int) -> pd.Series:
     """Descriptive alias for :func:`roll_rank`."""
     return roll_rank(x, window)
+
+
+def _window_slope(values: np.ndarray) -> float:
+    valid = np.isfinite(values)
+    if valid.sum() < 2:
+        return float("nan")
+    y = values[valid]
+    x = np.arange(len(values), dtype=float)[valid]
+    x = x - x.mean()
+    denominator = float(x @ x)
+    return float((x @ (y - y.mean())) / denominator) if denominator else 0.0
+
+
+def roll_slope(x: pd.Series, window: int) -> pd.Series:
+    """Trailing ordinary-least-squares slope per grid step."""
+    window = int(window)
+    return x.rolling(window, min_periods=max(2, window // 2)).apply(
+        _window_slope, raw=True
+    )
+
+
+def _linear_decay(values: np.ndarray) -> float:
+    valid = np.isfinite(values)
+    if not valid.any():
+        return float("nan")
+    weights = np.arange(1, len(values) + 1, dtype=float)[valid]
+    return float(np.average(values[valid], weights=weights))
+
+
+def decay_linear(x: pd.Series, window: int) -> pd.Series:
+    """Trailing weighted mean with linearly increasing weight toward the present."""
+    window = int(window)
+    return x.rolling(window, min_periods=max(2, window // 2)).apply(
+        _linear_decay, raw=True
+    )
 
 
 def zscore(x: pd.Series, window: int) -> pd.Series:
@@ -191,6 +231,7 @@ OPS: dict[str, object] = {
     "ema_halflife": ema_halflife,
     "ema_span": ema_span,
     "ema_alpha": ema_alpha,
+    "ewm_std": ewm_std,
     "roll_mean": roll_mean,
     "roll_std": roll_std,
     "roll_sum": roll_sum,
@@ -199,6 +240,8 @@ OPS: dict[str, object] = {
     "roll_quantile": roll_quantile,
     "roll_rank": roll_rank,
     "percentile_rank": percentile_rank,
+    "roll_slope": roll_slope,
+    "decay_linear": decay_linear,
     "zscore": zscore,
     "lag": lag,
     "diff": diff,
