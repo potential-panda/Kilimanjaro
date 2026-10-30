@@ -27,6 +27,9 @@ _B_SERIES = pd.Series(
 # A pd.Series arg is truncated alongside the primary series in the causality test.
 _OP_SAMPLE_ARGS = {
     "ema": (30,),
+    "ema_halflife": (30,),
+    "ema_span": (30,),
+    "ema_alpha": (0.2,),
     "roll_mean": (20,),
     "roll_std": (20,),
     "roll_sum": (20,),
@@ -109,6 +112,30 @@ class TestOpCausality(unittest.TestCase):
         pd.testing.assert_series_equal(
             eval_expr("min_(a, b)", frame),
             pd.Series([-2.0, 1.0, np.nan]),
+            check_names=False,
+        )
+
+    def test_explicit_ema_parameterizations(self):
+        x = pd.Series([1.0, 2.0, 4.0, 8.0])
+        frame = pd.DataFrame({"x": x})
+        pd.testing.assert_series_equal(
+            eval_expr("ema_halflife(x, 3)", frame),
+            x.ewm(halflife=3, min_periods=1).mean(),
+            check_names=False,
+        )
+        pd.testing.assert_series_equal(
+            eval_expr("ema_span(x, 3)", frame),
+            x.ewm(span=3, min_periods=1).mean(),
+            check_names=False,
+        )
+        pd.testing.assert_series_equal(
+            eval_expr("ema_alpha(x, 0.25)", frame),
+            x.ewm(alpha=0.25, min_periods=1).mean(),
+            check_names=False,
+        )
+        pd.testing.assert_series_equal(
+            eval_expr("ema(x, 3)", frame),
+            eval_expr("ema_halflife(x, 3)", frame),
             check_names=False,
         )
 

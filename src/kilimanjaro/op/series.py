@@ -19,9 +19,24 @@ import numpy as np
 import pandas as pd
 
 
-def ema(x: pd.Series, halflife: float) -> pd.Series:
-    """Exponential moving average, halflife in seconds (grid steps)."""
+def ema_halflife(x: pd.Series, halflife: float) -> pd.Series:
+    """Exponential moving average parameterized by halflife in grid steps."""
     return x.ewm(halflife=halflife, min_periods=1).mean()
+
+
+def ema_span(x: pd.Series, span: float) -> pd.Series:
+    """Exponential moving average using the conventional span parameter."""
+    return x.ewm(span=span, min_periods=1).mean()
+
+
+def ema_alpha(x: pd.Series, alpha: float) -> pd.Series:
+    """Exponential moving average using a direct smoothing factor."""
+    return x.ewm(alpha=alpha, min_periods=1).mean()
+
+
+def ema(x: pd.Series, halflife: float) -> pd.Series:
+    """Backward-compatible alias for :func:`ema_halflife`."""
+    return ema_halflife(x, halflife)
 
 
 def roll_mean(x: pd.Series, window: int) -> pd.Series:
@@ -135,6 +150,9 @@ def imbalance(a: pd.Series, b: pd.Series) -> pd.Series:
 # usable inside a formula; "abs" maps to abs_ so formulas read naturally.
 OPS: dict[str, object] = {
     "ema": ema,
+    "ema_halflife": ema_halflife,
+    "ema_span": ema_span,
+    "ema_alpha": ema_alpha,
     "roll_mean": roll_mean,
     "roll_std": roll_std,
     "roll_sum": roll_sum,
