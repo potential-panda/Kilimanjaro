@@ -35,6 +35,9 @@ _OP_SAMPLE_ARGS = {
     "roll_sum": (20,),
     "roll_max": (20,),
     "roll_min": (20,),
+    "roll_quantile": (20, 0.75),
+    "roll_rank": (20,),
+    "percentile_rank": (20,),
     "zscore": (50,),
     "lag": (5,),
     "diff": (3,),
@@ -160,6 +163,25 @@ class TestOpCausality(unittest.TestCase):
         pd.testing.assert_series_equal(
             eval_expr("cross_down(fast, slow)", frame),
             pd.Series([0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            check_names=False,
+        )
+
+    def test_rolling_quantile_and_current_percentile_rank(self):
+        x = pd.Series([1.0, 4.0, 2.0, 3.0, 5.0])
+        frame = pd.DataFrame({"x": x})
+        expected_quantile = x.rolling(4, min_periods=2).quantile(0.5)
+        pd.testing.assert_series_equal(
+            eval_expr("roll_quantile(x, 4, 0.5)", frame),
+            expected_quantile,
+            check_names=False,
+        )
+        expected_rank = x.rolling(4, min_periods=2).rank(pct=True)
+        pd.testing.assert_series_equal(
+            eval_expr("roll_rank(x, 4)", frame), expected_rank, check_names=False
+        )
+        pd.testing.assert_series_equal(
+            eval_expr("percentile_rank(x, 4)", frame),
+            expected_rank,
             check_names=False,
         )
 

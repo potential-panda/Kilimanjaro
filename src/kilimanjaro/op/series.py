@@ -59,6 +59,23 @@ def roll_min(x: pd.Series, window: int) -> pd.Series:
     return x.rolling(int(window), min_periods=max(2, int(window) // 2)).min()
 
 
+def roll_quantile(x: pd.Series, window: int, quantile: float) -> pd.Series:
+    """Trailing quantile with the standard rolling-operator warm-up policy."""
+    window = int(window)
+    return x.rolling(window, min_periods=max(2, window // 2)).quantile(quantile)
+
+
+def roll_rank(x: pd.Series, window: int) -> pd.Series:
+    """Percentile rank in [0, 1] of the current value in its trailing window."""
+    window = int(window)
+    return x.rolling(window, min_periods=max(2, window // 2)).rank(pct=True)
+
+
+def percentile_rank(x: pd.Series, window: int) -> pd.Series:
+    """Descriptive alias for :func:`roll_rank`."""
+    return roll_rank(x, window)
+
+
 def zscore(x: pd.Series, window: int) -> pd.Series:
     """(x - rolling mean) / rolling std over a trailing window."""
     m = roll_mean(x, window)
@@ -179,6 +196,9 @@ OPS: dict[str, object] = {
     "roll_sum": roll_sum,
     "roll_max": roll_max,
     "roll_min": roll_min,
+    "roll_quantile": roll_quantile,
+    "roll_rank": roll_rank,
+    "percentile_rank": percentile_rank,
     "zscore": zscore,
     "lag": lag,
     "diff": diff,
